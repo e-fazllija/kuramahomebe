@@ -24,6 +24,14 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ILocationServices, LocationServices>();
             builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
             builder.Services.AddTransient<CityServices, CityServices>();
+            
+            // Billing & Subscription Services
+            builder.Services.AddTransient<IStripeService, StripeService>();
+            builder.Services.AddTransient<IPaymentServices, PaymentServices>();
+            builder.Services.AddTransient<IUserSubscriptionServices, UserSubscriptionServices>();
+            builder.Services.AddTransient<ISubscriptionPlanServices, SubscriptionPlanServices>();
+            builder.Services.AddTransient<ISubscriptionFeatureServices, SubscriptionFeatureServices>();
+            builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
         }
     }
 }
