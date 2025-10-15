@@ -84,8 +84,8 @@ namespace BackEnd.Services
                         { 
                             Name = locationName, 
                             CityId = city.Id, 
-                            CreationDate = DateTime.Now, 
-                            UpdateDate = DateTime.Now 
+                            CreationDate = DateTime.UtcNow, 
+                            UpdateDate = DateTime.UtcNow
                         };
                         context.Locations.Add(location);
                         locations.Add(location);

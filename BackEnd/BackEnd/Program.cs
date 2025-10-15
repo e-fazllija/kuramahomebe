@@ -16,13 +16,6 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = null;
     });
 
-// Configurazione DbContext
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    options.UseNpgsql(connectionString);
-});
-
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -39,9 +32,12 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddDefaultTokenProviders();
 
 // CONFIGURA JWT SOLO SE KEYVAULT È PRESENTE
+
 var keyVaultUrl = builder.Configuration.GetSection("KeyVault:Url").Value;
 var authKeySecret = builder.Configuration.GetSection("KeyVault:Secrets:AuthKey").Value;
+var dbSecret = builder.Configuration.GetSection("KeyVault:Secrets:DbConnectionString").Value;
 
+builder.ConfigureDatabase(keyVaultUrl, dbSecret);
 if (!string.IsNullOrEmpty(keyVaultUrl) && !string.IsNullOrEmpty(authKeySecret))
 {
     builder.ConfigureJwt(keyVaultUrl, authKeySecret);

@@ -22,8 +22,6 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ICalendarServices, CalendarServices>();
             builder.Services.AddTransient<IDocumentsTabServices, DocumentsTabServices>();
             builder.Services.AddTransient<ILocationServices, LocationServices>();
-            builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
-            builder.Services.AddTransient<CityServices, CityServices>();
             
             // Billing & Subscription Services
             builder.Services.AddTransient<IStripeService, StripeService>();
@@ -32,6 +30,9 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ISubscriptionPlanServices, SubscriptionPlanServices>();
             builder.Services.AddTransient<ISubscriptionFeatureServices, SubscriptionFeatureServices>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
+
+            builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
+            builder.Services.AddTransient<CityServices, CityServices>();
         }
     }
 }

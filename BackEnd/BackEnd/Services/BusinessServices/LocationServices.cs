@@ -34,8 +34,8 @@ namespace BackEnd.Services.BusinessServices
                 {
                     Name = dto.Name,
                     CityId = dto.CityId,
-                    CreationDate = DateTime.Now,
-                    UpdateDate = DateTime.Now
+                    CreationDate = DateTime.UtcNow,
+                    UpdateDate = DateTime.UtcNow
                 };
 
                 _context.Locations.Add(location);
@@ -75,7 +75,7 @@ namespace BackEnd.Services.BusinessServices
 
                 location.Name = dto.Name;
                 location.CityId = dto.CityId;
-                location.UpdateDate = DateTime.Now;
+                location.UpdateDate = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
@@ -262,7 +262,7 @@ namespace BackEnd.Services.BusinessServices
                 if (location == null)
                     throw new Exception("Location not found");
 
-                location.UpdateDate = DateTime.Now;
+                location.UpdateDate = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
             }
@@ -282,7 +282,7 @@ namespace BackEnd.Services.BusinessServices
                     var location = await _context.Locations.FindAsync(locationDto.Id);
                     if (location != null)
                     {
-                        location.UpdateDate = DateTime.Now;
+                        location.UpdateDate = DateTime.UtcNow;
                     }
                 }
 
