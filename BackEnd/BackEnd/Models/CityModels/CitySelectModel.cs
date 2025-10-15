@@ -7,4 +7,4 @@ namespace BackEnd.Models.CityModels
         public int ProvinceId { get; set; }
         public string ProvinceName { get; set; } = string.Empty;
     }
-} 
+}

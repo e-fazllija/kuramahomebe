@@ -19,7 +19,7 @@
         public string Box { get; set; } = string.Empty;
         public string Price { get; set; } = string.Empty;
         public string Information { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string FromEmail { get; set; } = string.Empty;
         public string Subject { get; set; } = string.Empty;

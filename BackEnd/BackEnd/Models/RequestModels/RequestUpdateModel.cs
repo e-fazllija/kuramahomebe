@@ -14,9 +14,9 @@ namespace BackEnd.Models.RequestModels
         [Required]
         public string PropertyType { get; set; } = string.Empty;
         [Required]
-        public string province { get; set; } = string.Empty;
+        public string Province { get; set; } = string.Empty;
         [Required]
-        public string Town { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
         public string? Location { get; set; }
         public string? RoomsNumber { get; set; }
         public int MQFrom { get; set; }
@@ -32,7 +32,7 @@ namespace BackEnd.Models.RequestModels
         public string? Notes { get; set; }
         public bool Archived { get; set; }
         public bool MortgageAdviceRequired { get; set; }
-        public DateTime UpdateDate { get; set; } = DateTime.Now;
+        public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
         public string AgencyId { get; set; } = string.Empty;
     }
 }

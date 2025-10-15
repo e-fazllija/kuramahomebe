@@ -191,18 +191,18 @@ namespace BackEnd.Services.BusinessServices
                     if (!string.IsNullOrEmpty(location) && location != "Qualsiasi")
                     {
                         // Se abbiamo sia city che location, cerchiamo per location specifica nella città
-                        query = query.Where(x => x.Town.ToLower() == city.ToLower() && x.Location.ToLower().Contains(location.ToLower()));
+                        query = query.Where(x => x.City.ToLower() == city.ToLower() && x.Location.ToLower().Contains(location.ToLower()));
                     }
                     else
                     {
                         // Se abbiamo solo city, cerchiamo per città
-                        query = query.Where(x => x.Town.ToLower() == city.ToLower());
+                        query = query.Where(x => x.City.ToLower() == city.ToLower());
                     }
                 }
                 else if (!string.IsNullOrEmpty(location) && location != "Qualsiasi")
                 {
                     // Se abbiamo solo location senza city, cerchiamo per località generica
-                    query = query.Where(x => x.Town.ToLower()!.Contains(location.ToLower()) || x.Location.ToLower().Contains(location.ToLower()));
+                    query = query.Where(x => x.City.ToLower()!.Contains(location.ToLower()) || x.Location.ToLower().Contains(location.ToLower()));
                 }
 
                 if (code > 0)
@@ -247,7 +247,7 @@ namespace BackEnd.Services.BusinessServices
         }
 
         public async Task<ListViewModel<RealEstatePropertySelectModel>> Get(
-            int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? town)
+            int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city)
         {
             try
             {
@@ -287,13 +287,13 @@ namespace BackEnd.Services.BusinessServices
                 if (!string.IsNullOrEmpty(typologie))
                     query = query.Where(x => x.Typology == typologie);
 
-                if (!string.IsNullOrEmpty(town))
+                if (!string.IsNullOrEmpty(city))
                 {
-                    var townList = town.Split(",", StringSplitOptions.RemoveEmptyEntries)
+                    var cityList = city.Split(",", StringSplitOptions.RemoveEmptyEntries)
                        .Select(t => t.Trim().ToLower())
                        .ToList();
 
-                    query = query.Where(x => townList.Contains(x.Town.ToLower()));
+                    query = query.Where(x => cityList.Contains(x.City.ToLower()));
                 }
 
                 ListViewModel<RealEstatePropertySelectModel> result = new ListViewModel<RealEstatePropertySelectModel>();
@@ -343,7 +343,7 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<RealEstatePropertyListModel>> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? town, bool? sold)
+        public async Task<ListViewModel<RealEstatePropertyListModel>> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold)
         {
             try
             {
@@ -384,13 +384,13 @@ namespace BackEnd.Services.BusinessServices
                 if (!string.IsNullOrEmpty(typologie))
                     query = query.Where(x => x.Typology == typologie);
 
-                if (!string.IsNullOrEmpty(town))
+                if (!string.IsNullOrEmpty(city))
                 {
-                    var townList = town.Split(",", StringSplitOptions.RemoveEmptyEntries)
+                    var cityList = city.Split(",", StringSplitOptions.RemoveEmptyEntries)
                        .Select(t => t.Trim().ToLower())
                        .ToList();
 
-                    query = query.Where(x => townList.Contains(x.Town.ToLower()));
+                    query = query.Where(x => cityList.Contains(x.City.ToLower()));
                 }
 
                 // Filtro per immobili venduti
@@ -419,7 +419,7 @@ namespace BackEnd.Services.BusinessServices
                         AssignmentEnd = x.AssignmentEnd,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
-                        Town = x.Town,
+                        City = x.City,
                         Region = x.State,
                         Price = x.Price,
                         Category = x.Category,

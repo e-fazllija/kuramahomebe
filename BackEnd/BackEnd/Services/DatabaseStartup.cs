@@ -15,30 +15,35 @@ namespace BackEnd.Services
         /// </summary>
         /// <param name="builder"></param>
         /// <param name="configuration"></param>
-        public static void ConfigureDatabase(this WebApplicationBuilder builder, string keyVaultUrl, string secretName)
+        public static void ConfigureDatabase(this WebApplicationBuilder builder, string? keyVaultUrl, string? secretName)
         {
-            SecretClient client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
-            KeyVaultSecret secret = client.GetSecret(secretName);
-
-            builder.Services.AddDbContext<AppDbContext>(options =>
+            // For development or when KeyVault parameters are null, use connection string from appsettings
+            if (builder.Environment.IsDevelopment() || string.IsNullOrEmpty(keyVaultUrl) || string.IsNullOrEmpty(secretName))
             {
-                options.UseSqlServer(
-                    secret.Value,
-                    sqlServerOptionsAction: sqlOptions =>
-                    {
-                        sqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: 5,
-                            maxRetryDelay: TimeSpan.FromSeconds(30),
-                            errorNumbersToAdd: null);
+                var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+                if (string.IsNullOrEmpty(connectionString))
+                {
+                    throw new InvalidOperationException("Connection string 'DefaultConnection' not found in appsettings.");
+                }
 
-                    });
-                #if DEBUG
-                options.UseLoggerFactory(ConsoleLogFactory);
-                options.EnableSensitiveDataLogging();
-                #endif
+                builder.Services.AddDbContext<AppDbContext>(options =>
+                {
+                    options.UseNpgsql(connectionString);
+                });
             }
+            else
+            {
+                // For production, use KeyVault
+                SecretClient client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
+                KeyVaultSecret secret = client.GetSecret(secretName);
 
-        );
+                builder.Services.AddDbContext<AppDbContext>(options =>
+                {
+                    options.UseNpgsql(
+                        secret.Value);                          
+
+                });
+            }
         }
     }
 }

@@ -24,7 +24,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         [Required]
         public string AddressLine { get; set; } = string.Empty;
         [Required]
-        public string Town { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
         public string? Location { get; set; }
         [Required]
         public string State { get; set; } = string.Empty;
@@ -60,7 +60,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string Description { get; set; } = string.Empty;
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
-        public int StornoProvvigione { get; set; }
+        public int CommissionReversal { get; set; }
         public string? TypeOfAssignment { get; set; }
 
         public string? VideoUrl { get; set; }

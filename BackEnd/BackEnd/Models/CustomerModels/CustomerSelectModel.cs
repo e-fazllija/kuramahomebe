@@ -14,7 +14,7 @@ namespace BackEnd.Models.CustomerModels
         public bool Other { get; set; }
         public bool GoldCustomer { get; set; }
         [Required]
-        public string Name { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
         [Required]
         public string LastName { get; set; } = string.Empty;
         [Required]
@@ -23,7 +23,7 @@ namespace BackEnd.Models.CustomerModels
         public long Phone { get; set; }
         public string? Description { get; set; }
         public string? AdressLine { get; set; }
-        public string? Town { get; set; }
+        public string? City { get; set; }
         public string? State { get; set; }
         public bool AcquisitionDone { get; set; }
         public bool OngoingAssignment { get; set; }

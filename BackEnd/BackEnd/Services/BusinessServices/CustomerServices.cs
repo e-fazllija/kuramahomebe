@@ -95,18 +95,18 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.AgencyId == agencyId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
-                    query = query.Where(x => x.Name.Contains(filterRequest));
+                    query = query.Where(x => x.FirstName.Contains(filterRequest));
 
                 if (fromName != null)
                 {
                     string fromNameString = fromName.ToString();
-                    query = query.Where(x => string.Compare(x.Name.Substring(0, 1), fromNameString) >= 0);
+                    query = query.Where(x => string.Compare(x.FirstName.Substring(0, 1), fromNameString) >= 0);
                 }
 
                 if (toName != null)
                 {
                     string toNameString = toName.ToString();
-                    query = query.Where(x => string.Compare(x.Name.Substring(0, 1), toNameString) <= 0);
+                    query = query.Where(x => string.Compare(x.FirstName.Substring(0, 1), toNameString) <= 0);
                 }
 
                 ListViewModel<CustomerSelectModel> result = new ListViewModel<CustomerSelectModel>();

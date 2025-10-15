@@ -20,6 +20,13 @@ namespace BackEnd.Services
             RequestRepository = new RequestRepository(this._context);
             CalendarRepository = new CalendarRepository(this._context);
             DocumentsTabRepository = new DocumentsTabRepository(this._context);
+            
+            // Subscription System
+            SubscriptionPlanRepository = new SubscriptionPlanRepository(this._context);
+            SubscriptionFeatureRepository = new SubscriptionFeatureRepository(this._context);
+            UserSubscriptionRepository = new UserSubscriptionRepository(this._context);
+            PaymentRepository = new PaymentRepository(this._context);
+            StripeWebhookEventRepository = new StripeWebhookEventRepository(this._context);
         }
 
       
@@ -49,6 +56,33 @@ namespace BackEnd.Services
             private set;
         }
         public IDocumentsTabRepository DocumentsTabRepository
+        {
+            get;
+            private set;
+        }
+        
+        // Subscription System
+        public ISubscriptionPlanRepository SubscriptionPlanRepository
+        {
+            get;
+            private set;
+        }
+        public ISubscriptionFeatureRepository SubscriptionFeatureRepository
+        {
+            get;
+            private set;
+        }
+        public IUserSubscriptionRepository UserSubscriptionRepository
+        {
+            get;
+            private set;
+        }
+        public IPaymentRepository PaymentRepository
+        {
+            get;
+            private set;
+        }
+        public IStripeWebhookEventRepository StripeWebhookEventRepository
         {
             get;
             private set;

@@ -22,15 +22,19 @@ namespace BackEnd.Data
         public DbSet<City> Cities { get; set; }
         public DbSet<Location> Locations { get; set; }
         
+        // Subscription System
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<SubscriptionFeature> SubscriptionFeatures { get; set; }
+        public DbSet<UserSubscription> UserSubscriptions { get; set; }
+        public DbSet<Payment> Payments { get; set; }
+        public DbSet<StripeWebhookEvent> StripeWebhookEvents { get; set; }
+        
 
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
         {
 
         }
-
-
-
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

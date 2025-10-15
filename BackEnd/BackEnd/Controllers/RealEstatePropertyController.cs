@@ -119,12 +119,12 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? town)
+        public async Task<IActionResult> Get(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city)
         {
             try
             {
                 ListViewModel<RealEstatePropertySelectModel> res = await _realEstatePropertyServices.Get(
-                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, town);
+                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, city);
 
                 return Ok(res);
             }
@@ -137,12 +137,12 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(GetList))]
-        public async Task<IActionResult> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? town, bool? sold)
+        public async Task<IActionResult> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold)
         {
             try
             {
                 ListViewModel<RealEstatePropertyListModel> res = await _realEstatePropertyServices.GetList(
-                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, town, sold);
+                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, city, sold);
 
                 return Ok(res);
             }

@@ -20,8 +20,8 @@ namespace BackEnd.Models.OutputModels
         public IDictionary<string, int> TotalCreatedPerMonth { get; set; } = new Dictionary<string, int>();
         public int MaxAnnual { get; set; }
         public int MinAnnual { get; set; }
-        public IDictionary<string, int> DistinctByTownSale { get; set; } = new Dictionary<string, int>();
-        public IDictionary<string, int> DistinctByTownRent { get; set; } = new Dictionary<string, int>();
+        public IDictionary<string, int> DistinctByCitySale { get; set; } = new Dictionary<string, int>();
+        public IDictionary<string, int> DistinctByCityRent { get; set; } = new Dictionary<string, int>();
         public IDictionary<string, int> DistinctByTypeSale { get; set; } = new Dictionary<string, int>();
         public IDictionary<string, int> DistinctByTypeRent { get; set; } = new Dictionary<string, int>();
     }
@@ -39,8 +39,8 @@ namespace BackEnd.Models.OutputModels
         public IDictionary<string, int> TotalCreatedPerMonth { get; set; } = new Dictionary<string, int>();
         public int MaxAnnual { get; set; }
         public int MinAnnual { get; set; }
-        public IDictionary<string, int> DistinctByTownSale { get; set; } = new Dictionary<string, int>();
-        public IDictionary<string, int> DistinctByTownRent { get; set; } = new Dictionary<string, int>();
+        public IDictionary<string, int> DistinctByCitySale { get; set; } = new Dictionary<string, int>();
+        public IDictionary<string, int> DistinctByCityRent { get; set; } = new Dictionary<string, int>();
         public IDictionary<string, int> DistinctByTypeSale { get; set; } = new Dictionary<string, int>();
         public IDictionary<string, int> DistinctByTypeRent { get; set; } = new Dictionary<string, int>();
     }

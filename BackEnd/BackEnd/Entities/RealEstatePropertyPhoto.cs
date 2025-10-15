@@ -7,8 +7,10 @@ namespace BackEnd.Entities
         public int RealEstatePropertyId { get; set; }
         public RealEstateProperty RealEstateProperty { get; set; }
         [Required]
+        [MaxLength(255, ErrorMessage = "Il nome del file non può superare i 255 caratteri")]
         public string FileName { get; set; } = string.Empty;
         [Required]
+        [MaxLength(500, ErrorMessage = "L'URL non può superare i 500 caratteri")]
         public string Url { get; set; } = string.Empty;
         [Required]
         public int Type { get; set; }

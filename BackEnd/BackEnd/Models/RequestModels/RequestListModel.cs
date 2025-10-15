@@ -12,7 +12,7 @@ namespace BackEnd.Models.RequestModels
         public string Contract { get; set; } = string.Empty;
         public DateTime CreationDate { get; set; }
         public string? Location { get; set; }
-        public string Town { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
         public double PriceTo { get; set; }
         public double PriceFrom { get; set; }
         public string PropertyType { get; set; } = string.Empty;

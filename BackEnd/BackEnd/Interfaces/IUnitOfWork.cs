@@ -14,6 +14,13 @@ namespace BackEnd.Interfaces
         ICalendarRepository CalendarRepository { get; }
         IDocumentsTabRepository DocumentsTabRepository { get; }
         
+        // Subscription System
+        ISubscriptionPlanRepository SubscriptionPlanRepository { get; }
+        ISubscriptionFeatureRepository SubscriptionFeatureRepository { get; }
+        IUserSubscriptionRepository UserSubscriptionRepository { get; }
+        IPaymentRepository PaymentRepository { get; }
+        IStripeWebhookEventRepository StripeWebhookEventRepository { get; }
+        
         Task<int> SaveAsync();
         int Save();
 

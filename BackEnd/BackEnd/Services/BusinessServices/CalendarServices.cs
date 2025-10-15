@@ -50,7 +50,7 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         CalendarId = result.Entity.Id,
                         RequestId = entityClass.RequestId ?? 0,
-                        Text = $"<strong>Nota di</strong>: {user.Name} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
 
                     await _unitOfWork.dbContext.RequestNotes.AddAsync(note);
@@ -64,7 +64,7 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         CalendarId = result.Entity.Id,
                         RealEstatePropertyId = entityClass.RealEstatePropertyId ?? 0,
-                        Text = $"<strong>Nota di</strong>: {user.Name} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.RealEstatePropertyNotes.AddAsync(note);
                     _unitOfWork.Save();
@@ -77,7 +77,7 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         CalendarId = result.Entity.Id,
                         CustomerId = entityClass.CustomerId ?? 0,
-                        Text = $"<strong>Nota di</strong>: {user.Name} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
 
                     await _unitOfWork.dbContext.CustomerNotes.AddAsync(note);
@@ -174,7 +174,7 @@ namespace BackEnd.Services.BusinessServices
                 // Query base: tutti gli appuntamenti ordinati per data
                 IQueryable<Calendar> query = _unitOfWork.dbContext.Calendars
                     .Include(x => x.ApplicationUser)
-                    .OrderByDescending(x => x.DataInizioEvento);
+                    .OrderByDescending(x => x.EventStartDate);
                 
                 // Filtra per ApplicationUserId (agente) se specificato
                 if(!string.IsNullOrEmpty(agentId))
@@ -190,13 +190,13 @@ namespace BackEnd.Services.BusinessServices
                 if (fromName != null)
                 {
                     string fromNameString = fromName.ToString();
-                    query = query.Where(x => string.Compare(x.NomeEvento.Substring(0, 1), fromNameString) >= 0);
+                    query = query.Where(x => string.Compare(x.EventName.Substring(0, 1), fromNameString) >= 0);
                 }
 
                 if (toName != null)
                 {
                     string toNameString = toName.ToString();
-                    query = query.Where(x => string.Compare(x.NomeEvento.Substring(0, 1), toNameString) <= 0);
+                    query = query.Where(x => string.Compare(x.EventName.Substring(0, 1), toNameString) <= 0);
                 }
 
                 ListViewModel<CalendarSelectModel> result = new ListViewModel<CalendarSelectModel>();
@@ -319,14 +319,14 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         CalendarId = entityClass.Id,
                         RequestId = requestId.Value,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.RequestNotes.AddAsync(existingRequestNote);
                 }
                 else
                 {
                     existingRequestNote.RequestId = requestId.Value;
-                    existingRequestNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}";
+                    existingRequestNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.RequestNotes.Update(existingRequestNote);
                 }
             }
@@ -348,13 +348,13 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         RealEstatePropertyId = realEstatePropertyId ?? 0,
                         CalendarId = entityClass.Id,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.RealEstatePropertyNotes.AddAsync(existingPropertyNote);
                 }
                 else
                 {
-                    existingPropertyNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}";
+                    existingPropertyNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.RealEstatePropertyNotes.Update(existingPropertyNote);
                 }
             }
@@ -376,13 +376,13 @@ namespace BackEnd.Services.BusinessServices
                         ApplicationUserId = entityClass.ApplicationUserId,
                         CustomerId = customerId ?? 0,
                         CalendarId = entityClass.Id,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.CustomerNotes.AddAsync(existingCustomerNote);
                 }
                 else
                 {
-                    existingCustomerNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.Name} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.NomeEvento}";
+                    existingCustomerNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.CustomerNotes.Update(existingCustomerNote);
                 }
             }

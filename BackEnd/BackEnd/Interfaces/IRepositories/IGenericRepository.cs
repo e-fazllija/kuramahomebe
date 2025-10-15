@@ -30,5 +30,11 @@ namespace BackEnd.Interfaces.IRepositories
         void Update(T entity);
         void UpdateRange(IEnumerable<T> entities);
         void Delete(T entity);
+        
+        // CRUD Methods
+        Task<T?> GetByIdAsync(int id);
+        Task<T> CreateAsync(T entity);
+        Task<T> UpdateAsync(T entity);
+        Task<bool> DeleteAsync(int id);
     }
 }

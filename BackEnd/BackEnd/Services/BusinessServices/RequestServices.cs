@@ -96,7 +96,7 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.AgencyId == agencyId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
-                    query = query.Where(x => x.Customer.Name.Contains(filterRequest));
+                    query = query.Where(x => x.Customer.FirstName.Contains(filterRequest));
 
                 //if (fromName != null)
                 //{
@@ -153,7 +153,7 @@ namespace BackEnd.Services.BusinessServices
 
                 foreach (var item in requests)
                 {
-                    var towns = item.Town.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    var citys = item.City.Split(',', StringSplitOptions.RemoveEmptyEntries)
                                          .Select(t => t.Trim().ToLower())
                                          .ToList();
 
@@ -163,7 +163,7 @@ namespace BackEnd.Services.BusinessServices
                             x.Status == item.Contract &&
                             x.Price <= item.PriceTo &&
                             x.Price >= item.PriceFrom &&
-                            towns.Any(t => x.Town.ToLower().Contains(t)));
+                            citys.Any(t => x.City.ToLower().Contains(t)));
 
 
                     if (!string.IsNullOrEmpty(item.PropertyType))
@@ -221,7 +221,7 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.AgencyId == agencyId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
-                    query = query.Where(x => x.Customer.Name.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
+                    query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
 
                 ListViewModel<RequestListModel> result = new ListViewModel<RequestListModel>();
 
@@ -239,14 +239,14 @@ namespace BackEnd.Services.BusinessServices
                     .Select(x => new RequestListModel
                     {
                         Id = x.Id,
-                        CustomerName = x.Customer.Name,
+                        CustomerName = x.Customer.FirstName,
                         CustomerLastName = x.Customer.LastName,
                         CustomerEmail = x.Customer.Email,
                         CustomerPhone = x.Customer.Phone.ToString(),
                         Contract = x.Contract,
                         CreationDate = x.CreationDate,
                         Location = x.Location,
-                        Town = x.Town,
+                        City = x.City,
                         PriceTo = x.PriceTo,
                         PriceFrom = x.PriceFrom,
                         PropertyType = x.PropertyType,
@@ -279,7 +279,7 @@ namespace BackEnd.Services.BusinessServices
                     //.Include(x => x.RequestType)
                     .FirstOrDefaultAsync(x => x.Id == id);
 
-                var towns = request.Town.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                var citys = request.City.Split(',', StringSplitOptions.RemoveEmptyEntries)
                          .Select(t => t.Trim().ToLower())
                          .ToList();
 
@@ -289,7 +289,7 @@ namespace BackEnd.Services.BusinessServices
                         x.Status == request.Contract &&
                         x.Price <= request.PriceTo &&
                         x.Price >= request.PriceFrom &&
-                        towns.Any(t => x.Town.ToLower().Contains(t)));
+                        citys.Any(t => x.City.ToLower().Contains(t)));
 
 
                 if (!string.IsNullOrEmpty(request.PropertyType))

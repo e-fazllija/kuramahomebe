@@ -151,7 +151,7 @@ namespace BackEnd.Controllers
                 {
                     Id = user.Id,
                     AgencyId = user.AgencyId ?? string.Empty,
-                    Name = user.Name,
+                    FirstName = user.FirstName,
                     LastName = user.LastName,
                     Email = user.Email,
                     Password = "",
@@ -199,7 +199,7 @@ namespace BackEnd.Controllers
                     {
                         Id = user.Id,
                         AgencyId = user.AgencyId ?? string.Empty,
-                        Name = user.Name,
+                        FirstName = user.FirstName,
                         LastName = user.LastName,
                         Email = user.Email,
                         Password = "",

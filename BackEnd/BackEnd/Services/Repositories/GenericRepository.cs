@@ -122,5 +122,35 @@ namespace BackEnd.Services.Repositories
         {
             _dbSet.Remove(entity);
         }
+
+        // CRUD Methods
+        public async Task<T?> GetByIdAsync(int id)
+        {
+            return await _dbSet.FindAsync(id);
+        }
+
+        public async Task<T> CreateAsync(T entity)
+        {
+            var entry = await _dbSet.AddAsync(entity);
+            await _context.SaveChangesAsync();
+            return entry.Entity;
+        }
+
+        public async Task<T> UpdateAsync(T entity)
+        {
+            _dbSet.Update(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var entity = await _dbSet.FindAsync(id);
+            if (entity == null) return false;
+            
+            _dbSet.Remove(entity);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }

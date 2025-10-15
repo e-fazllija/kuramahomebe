@@ -134,5 +134,47 @@ namespace BackEnd.Controllers
                 return StatusCode(500, new { message = "Errore interno del server" });
             }
         }
+
+        [HttpGet("GetList")]
+        public async Task<IActionResult> GetList([FromQuery] string? filterRequest, [FromQuery] int? provinceId)
+        {
+            try
+            {
+                var cities = await _cityServices.GetList(filterRequest, provinceId);
+                return Ok(cities);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Errore interno del server" });
+            }
+        }
+
+        [HttpGet("GetGroupedByProvince")]
+        public async Task<IActionResult> GetGroupedByProvince()
+        {
+            try
+            {
+                var cities = await _cityServices.GetGroupedByProvince();
+                return Ok(cities);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Errore interno del server" });
+            }
+        }
+
+        [HttpGet("Exists")]
+        public async Task<IActionResult> Exists([FromQuery] string name, [FromQuery] int provinceId, [FromQuery] int? excludeId)
+        {
+            try
+            {
+                var exists = await _cityServices.Exists(name, provinceId, excludeId);
+                return Ok(new { exists });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Errore interno del server" });
+            }
+        }
     }
-} 
+}

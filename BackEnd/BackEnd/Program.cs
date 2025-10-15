@@ -19,7 +19,15 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.ConfigureDatabase(builder.Configuration.GetSection("KeyVault:Url").Value!, builder.Configuration.GetSection("KeyVault:Secrets:DbConnectionString").Value!);
+// Configure database - use KeyVault for production, local connection string for development
+if (builder.Environment.IsDevelopment())
+{
+    builder.ConfigureDatabase(null!, null!); // Will use local connection string
+}
+else
+{
+    builder.ConfigureDatabase(builder.Configuration.GetSection("KeyVault:Url").Value!, builder.Configuration.GetSection("KeyVault:Secrets:DbConnectionString").Value!);
+}
 builder.ConfigureServices();
 builder.Services.Configure<PaginationOptions>(builder.Configuration.GetSection("PaginationOptions"));
 builder.Services.Configure<MailOptions>(builder.Configuration.GetSection("MailOptions"));

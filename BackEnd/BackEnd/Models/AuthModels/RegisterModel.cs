@@ -7,7 +7,7 @@ namespace BackEnd.Models.AuthModels
         [Required(ErrorMessage = "Username is required")]
         public string UserName { get; set; }
         [Required(ErrorMessage = "Name is required")]
-        public string Name { get; set; }
+        public string FirstName { get; set; }
         [Required(ErrorMessage = "Lastname is required")]
         public string LastName { get; set; }
         [EmailAddress]
@@ -23,8 +23,8 @@ namespace BackEnd.Models.AuthModels
         public string? Referent { get; set; } = string.Empty;
         [Required(ErrorMessage = "Address is required")]
         public string Address { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Town is required")]
-        public string Town { get; set; } = string.Empty;
+        [Required(ErrorMessage = "City is required")]
+        public string City { get; set; } = string.Empty;
         public string? Region { get; set; }
         public string? AgencyId { get; set; }
         public string Color { get; set; } = "#ffffff";

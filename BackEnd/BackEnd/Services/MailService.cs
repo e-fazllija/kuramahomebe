@@ -67,10 +67,10 @@ public class MailService : IMailService
             email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
             email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
 
-            email.Subject = $"Richiesta di valutazione, richiesta di {mailRequest.Name} {mailRequest.LastName}";
+            email.Subject = $"Richiesta di valutazione, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
 
-            string body = $"<strong>Nome:</strong> {mailRequest.Name}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
+            string body = $"<strong>Nome:</strong> {mailRequest.FirstName}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
                 $"<strong>Dati immobile:</strong> <br>" +
                 $"<strong>Contratto:</strong> {mailRequest.RequestType}<br>" +
                 $"<strong>Tipologia:</strong> {mailRequest.PropertyType}<br>" +
@@ -114,11 +114,11 @@ public class MailService : IMailService
             email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
             email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
 
-            email.Subject = $"Lavora con noi, richiesta di {mailRequest.Name} {mailRequest.LastName}";
+            email.Subject = $"Lavora con noi, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
 
             string body =
-                $"<strong>Nome:</strong> {mailRequest.Name}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
+                $"<strong>Nome:</strong> {mailRequest.FirstName}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
                 $"<strong>Messaggio:</strong><br><br>";
             builder.HtmlBody = body += mailRequest.Body;
             email.Body = builder.ToMessageBody();
@@ -143,11 +143,11 @@ public class MailService : IMailService
             email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
             email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
 
-            email.Subject = $"Nuova richiesta di {mailRequest.Name} {mailRequest.LastName}";
+            email.Subject = $"Nuova richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
 
             string body = $"Invio di una richiesta di valutazione da:<br>" +
-                $"<strong>Nome:</strong> {mailRequest.Name}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
+                $"<strong>Nome:</strong> {mailRequest.FirstName}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
                 $"<strong>Dati immobile:</strong> <br>" +
                 $"<strong>Contratto:</strong> {mailRequest.RequestType}<br>" +
                 $"<strong>Tipologia:</strong> {mailRequest.PropertyType}<br>" +
@@ -190,11 +190,11 @@ public class MailService : IMailService
             email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
             email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
 
-            email.Subject = $"Informazioni per immobile Cod. 00{mailRequest.Information}, richiesta di {mailRequest.Name} {mailRequest.LastName}";
+            email.Subject = $"Informazioni per immobile Cod. 00{mailRequest.Information}, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
 
             string body =
-                $"<strong>Nome:</strong> {mailRequest.Name}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
+                $"<strong>Nome:</strong> {mailRequest.FirstName}, <strong>Cognome:</strong> {mailRequest.LastName}, <strong>Email:</strong> {mailRequest.FromEmail}, <strong>Tel - Cell:</strong> {mailRequest.Phone} - {mailRequest.MobilePhone} <br><br>" +
                 $"<strong>Messaggio:</strong><br><br>";
             builder.HtmlBody = body += mailRequest.Body;
             email.Body = builder.ToMessageBody();

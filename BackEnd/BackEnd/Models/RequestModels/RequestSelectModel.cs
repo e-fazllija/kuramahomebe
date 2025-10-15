@@ -13,7 +13,7 @@ namespace BackEnd.Models.RequestModels
         public string Contract { get; set; } = string.Empty;
         public string PropertyType { get; set; } = string.Empty;
         public string Province { get; set; } = string.Empty;
-        public string Town { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
         public string? Location { get; set; }
         public string? RoomsNumber { get; set; }
         public int MQFrom { get; set; }
