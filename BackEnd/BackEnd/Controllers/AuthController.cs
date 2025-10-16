@@ -28,7 +28,7 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
-        private string SecretForKey = "";
+        private string SecretForKey = "123";
         public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper)
         {
             this.userManager = userManager;
