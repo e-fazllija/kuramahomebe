@@ -31,7 +31,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// CONFIGURA JWT SOLO SE KEYVAULT È PRESENTE
+// CONFIGURA JWT SOLO SE KEYVAULT ï¿½ PRESENTE
 
 var keyVaultUrl = builder.Configuration.GetSection("KeyVault:Url").Value;
 var authKeySecret = builder.Configuration.GetSection("KeyVault:Secrets:AuthKey").Value;
@@ -45,7 +45,7 @@ if (!string.IsNullOrEmpty(keyVaultUrl) && !string.IsNullOrEmpty(authKeySecret))
 else
 {
     // Configurazione alternativa per sviluppo senza KeyVault
-    Console.WriteLine("KeyVault non configurato, JWT sarà configurato con valori di default");
+    Console.WriteLine("KeyVault non configurato, JWT sarï¿½ configurato con valori di default");
     // Se hai un metodo alternativo per configurare JWT, chiamalo qui
     // builder.ConfigureJwtForDevelopment();
 }
@@ -72,6 +72,31 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await LocationDataSeeder.SeedLocations(context);
+}
+
+// Seed roles data
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    
+    string[] roleNames = { "Admin", "Agency", "Agent", "User" };
+    
+    foreach (var roleName in roleNames)
+    {
+        var roleExist = await roleManager.RoleExistsAsync(roleName);
+        if (!roleExist)
+        {
+            var role = new IdentityRole(roleName);
+            await roleManager.CreateAsync(role);
+            Console.WriteLine($"Ruolo '{roleName}' creato con successo.");
+        }
+        else
+        {
+            Console.WriteLine($"Ruolo '{roleName}' giÃ  esistente, skip.");
+        }
+    }
+    
+    Console.WriteLine("Seed dei ruoli completato.");
 }
 
 app.Run();

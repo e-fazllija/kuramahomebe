@@ -28,7 +28,7 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
-        private string SecretForKey;
+        private string SecretForKey = "";
         public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper)
         {
             this.userManager = userManager;
@@ -36,9 +36,9 @@ namespace BackEnd.Controllers
             _mailService = mailService;
             _configuration = configuration;
             this._mapper = mapper;
-            secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
-            KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
-            SecretForKey = secret.Value;
+            //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
+            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
+            //SecretForKey = secret.Value;
         }
 
         [HttpPost]
@@ -79,15 +79,24 @@ namespace BackEnd.Controllers
             var roleResult = await userManager.AddToRoleAsync(user, model.Role);
 
             var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-            var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
-            //Url.Action("ConfirmEmail", "Email", new { token, email = user.Email }, Request.Scheme);
-            MailRequest mailRequest = new MailRequest()
-            {
-                ToEmail = user.Email,
-                Subject = "Conferma la tua email",
-                Body = $"Per attivare le tue credenziali <a href='{confirmationLink}'>clicca qui</a>"
-            };
-            await _mailService.SendEmailAsync(mailRequest);
+            
+            // ===== MODALITÀ TEST: Link per pricing invece di email =====
+            // Link che porta direttamente alla pagina pricing con email e token
+            var pricingLink = $"http://localhost:5173/#/pricing/{user.Email}/{token}";
+            Console.WriteLine("========================================");
+            Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
+            Console.WriteLine(pricingLink);
+            Console.WriteLine("========================================");
+            
+            // COMMENTATO PER TEST: Invio email di conferma
+            // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
+            // MailRequest mailRequest = new MailRequest()
+            // {
+            //     ToEmail = user.Email,
+            //     Subject = "Conferma la tua email",
+            //     Body = $"Per attivare le tue credenziali <a href='{confirmationLink}'>clicca qui</a>"
+            // };
+            // await _mailService.SendEmailAsync(mailRequest);
 
             return Ok(new AuthResponseModel { Status = "Success", Message = "User created successfully!" });
         }
