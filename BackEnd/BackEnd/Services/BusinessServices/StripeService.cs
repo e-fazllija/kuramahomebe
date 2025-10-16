@@ -114,7 +114,14 @@ namespace BackEnd.Services.BusinessServices
                 throw new InvalidOperationException("Webhook secret non configurato");
             }
 
-            return EventUtility.ConstructEvent(json, stripeSignature, _webhookSecret);
+            // Disabilita il controllo della versione API per evitare errori di mismatch
+            // tra la versione API di Stripe e quella della libreria Stripe.net
+            return EventUtility.ConstructEvent(
+                json, 
+                stripeSignature, 
+                _webhookSecret, 
+                throwOnApiVersionMismatch: false
+            );
         }
     }
 }

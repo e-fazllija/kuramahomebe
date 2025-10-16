@@ -28,7 +28,7 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
-        private string SecretForKey = "123";
+        private string SecretForKey = "gdfgdfhtvnyw7thfiwa893jr9j03cn3n823r9723r53242";
         public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper)
         {
             this.userManager = userManager;
@@ -45,60 +45,67 @@ namespace BackEnd.Controllers
         [Route(nameof(Register))]
         public async Task<IActionResult> Register([FromBody] RegisterModel model)
         {
-            var userEmailExists = await userManager.FindByEmailAsync(model.Email);
-            var userNameExists = await userManager.FindByNameAsync(model.UserName);
-            if (userEmailExists != null || userNameExists != null)
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente già registrato!" });
-
-
-            model.UserName = model.UserName.Replace(" ", "_");
-
-            ApplicationUser user = _mapper.Map<ApplicationUser>(model);
-            user.SecurityStamp = Guid.NewGuid().ToString();
-
-            var result = await userManager.CreateAsync(user, model.Password);
-
-            if(model.Role == "Agency")
+            try
             {
-                ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
-                newUser.AgencyId = newUser.Id;
-                await userManager.UpdateAsync(newUser);
+                var userEmailExists = await userManager.FindByEmailAsync(model.Email);
+                var userNameExists = await userManager.FindByNameAsync(model.UserName);
+                if (userEmailExists != null || userNameExists != null)
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente già registrato!" });
+
+
+                model.UserName = model.UserName.Replace(" ", "_");
+
+                ApplicationUser user = _mapper.Map<ApplicationUser>(model);
+                user.SecurityStamp = Guid.NewGuid().ToString();
+
+                var result = await userManager.CreateAsync(user, model.Password);
+
+                if(model.Role == "Agency")
+                {
+                    ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
+                    newUser.AgencyId = newUser.Id;
+                    await userManager.UpdateAsync(newUser);
+                }
+                if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresUpper")
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno una lettera maiuscola!" });
+                else if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresNonAlphanumeric")
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno un carattere speciale!" });
+                else if (!result.Succeeded && result.Errors.First().Code == "PasswordTooShort")
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno 8 caratteri!" });
+                else if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresDigit")
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno un numero!" });
+
+                if (!result.Succeeded)
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "Si è verificato un errore! Controllare i dati inseriti e provare nuovamente" });
+
+                var roleResult = await userManager.AddToRoleAsync(user, model.Role);
+
+                var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+                
+                // ===== MODALITÀ TEST: Link per pricing invece di email =====
+                // Link che porta direttamente alla pagina pricing con email e token
+                var pricingLink = $"http://localhost:5173/#/pricing/{user.Email}/{token}";
+                Console.WriteLine("========================================");
+                Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
+                Console.WriteLine(pricingLink);
+                Console.WriteLine("========================================");
+                
+                // COMMENTATO PER TEST: Invio email di conferma
+                // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
+                // MailRequest mailRequest = new MailRequest()
+                // {
+                //     ToEmail = user.Email,
+                //     Subject = "Conferma la tua email",
+                //     Body = $"Per attivare le tue credenziali <a href='{confirmationLink}'>clicca qui</a>"
+                // };
+                // await _mailService.SendEmailAsync(mailRequest);
+
+                return Ok(new AuthResponseModel { Status = "Success", Message = "User created successfully!" });
             }
-            if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresUpper")
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno una lettera maiuscola!" });
-            else if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresNonAlphanumeric")
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno un carattere speciale!" });
-            else if (!result.Succeeded && result.Errors.First().Code == "PasswordTooShort")
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno 8 caratteri!" });
-            else if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresDigit")
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno un numero!" });
-
-            if (!result.Succeeded)
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "Si è verificato un errore! Controllare i dati inseriti e provare nuovamente" });
-
-            var roleResult = await userManager.AddToRoleAsync(user, model.Role);
-
-            var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-            
-            // ===== MODALITÀ TEST: Link per pricing invece di email =====
-            // Link che porta direttamente alla pagina pricing con email e token
-            var pricingLink = $"http://localhost:5173/#/pricing/{user.Email}/{token}";
-            Console.WriteLine("========================================");
-            Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
-            Console.WriteLine(pricingLink);
-            Console.WriteLine("========================================");
-            
-            // COMMENTATO PER TEST: Invio email di conferma
-            // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
-            // MailRequest mailRequest = new MailRequest()
-            // {
-            //     ToEmail = user.Email,
-            //     Subject = "Conferma la tua email",
-            //     Body = $"Per attivare le tue credenziali <a href='{confirmationLink}'>clicca qui</a>"
-            // };
-            // await _mailService.SendEmailAsync(mailRequest);
-
-            return Ok(new AuthResponseModel { Status = "Success", Message = "User created successfully!" });
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore durante la registrazione: " + ex.Message });
+            }
         }
 
         //[HttpPost]
@@ -133,45 +140,52 @@ namespace BackEnd.Controllers
         [Route(nameof(Login))]
         public async Task<IActionResult> Login(LoginModel model)
         {
-            model.Email = model.Email.Replace(" ", "_");
-            var user = await userManager.FindByEmailAsync(model.Email);
-            var pass = await userManager.CheckPasswordAsync(user, model.Password);
-            if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
+            try
             {
-                var userRoles = await userManager.GetRolesAsync(user);
-                string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agenzia" : userRoles.Contains("Agent") ? "Agente" : userRoles.FirstOrDefault() ?? "";
-                var authClaims = new List<Claim>
+                model.Email = model.Email.Replace(" ", "_");
+                var user = await userManager.FindByEmailAsync(model.Email);
+                var pass = await userManager.CheckPasswordAsync(user, model.Password);
+                if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
                 {
-                    new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                    new Claim(ClaimTypes.Role, role),
-                };
-                
-                var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
-                var token = new JwtSecurityToken(
-                    issuer: _configuration["Authentication:Issuer"],
-                    audience: _configuration["Authentication:Audience"],
-                    expires: DateTime.Now.AddDays(1),
-                    claims: authClaims,
-                    signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
-                );
+                    var userRoles = await userManager.GetRolesAsync(user);
+                    string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agenzia" : userRoles.Contains("Agent") ? "Agente" : userRoles.FirstOrDefault() ?? "";
+                    var authClaims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.Email, user.Email),
+                        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, role),
+                    };
+                    
+                    var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
+                    var token = new JwtSecurityToken(
+                        issuer: _configuration["Authentication:Issuer"],
+                        audience: _configuration["Authentication:Audience"],
+                        expires: DateTime.Now.AddDays(1),
+                        claims: authClaims,
+                        signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+                    );
 
-                LoginResponse result = new LoginResponse()
-                {
-                    Id = user.Id,
-                    AgencyId = user.AgencyId ?? string.Empty,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Email = user.Email,
-                    Password = "",
-                    Role = role,
-                    Color = user.Color,
-                    Token = new JwtSecurityTokenHandler().WriteToken(token),
-                };
+                    LoginResponse result = new LoginResponse()
+                    {
+                        Id = user.Id,
+                        AgencyId = user.AgencyId ?? string.Empty,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,
+                        Email = user.Email,
+                        Password = "",
+                        Role = role,
+                        Color = user.Color,
+                        Token = new JwtSecurityTokenHandler().WriteToken(token),
+                    };
 
-                return Ok(result);
+                    return Ok(result);
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente non autorizzato" });
             }
-            return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente non autorizzato" });
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore durante il login: " + ex.Message });
+            }
         }
 
         [HttpPost]
@@ -232,39 +246,53 @@ namespace BackEnd.Controllers
         [Route(nameof(ConfirmCredentials))]
         public async Task<IActionResult> ConfirmCredentials(CredentialConfirmationModel credentials)
         {
-            var user = await userManager.FindByEmailAsync(credentials.Email);
-            if (user == null)
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "User not exists!" });
-
-            var result = await userManager.ConfirmEmailAsync(user, credentials.Token);
-
-            if (result.Succeeded)
+            try
             {
-                user.EmailConfirmed = true;
-                var updateResult = await userManager.UpdateAsync(user);
+                var user = await userManager.FindByEmailAsync(credentials.Email);
+                if (user == null)
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "User not exists!" });
 
-                if (updateResult.Succeeded)
-                    return Ok();
-                else
-                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Non è stato possibile confermare le credenziali" });
+                var result = await userManager.ConfirmEmailAsync(user, credentials.Token);
+
+                if (result.Succeeded)
+                {
+                    user.EmailConfirmed = true;
+                    var updateResult = await userManager.UpdateAsync(user);
+
+                    if (updateResult.Succeeded)
+                        return Ok();
+                    else
+                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Non è stato possibile confermare le credenziali" });
+                }
+
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Token non valido" });
             }
-
-            return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Token non valido" });
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore durante la conferma delle credenziali: " + ex.Message });
+            }
         }
 
         [HttpGet]
         [Route(nameof(KeyGen))]
         public async Task<IActionResult> KeyGen()
         {
-            byte[] keyBytes = new byte[32];
-
-            using (var rng = RandomNumberGenerator.Create())
+            try
             {
-                rng.GetBytes(keyBytes);
-            }
+                byte[] keyBytes = new byte[32];
 
-            string secretKey = Convert.ToBase64String(keyBytes);
-            return Ok(secretKey);
+                using (var rng = RandomNumberGenerator.Create())
+                {
+                    rng.GetBytes(keyBytes);
+                }
+
+                string secretKey = Convert.ToBase64String(keyBytes);
+                return Ok(secretKey);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore durante la generazione della chiave: " + ex.Message });
+            }
         }
 
         [HttpPost]
