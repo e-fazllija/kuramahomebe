@@ -99,4 +99,11 @@ using (var scope = app.Services.CreateScope())
     Console.WriteLine("Seed dei ruoli completato.");
 }
 
+// Seed subscription plans data
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
+}
+
 app.Run();
