@@ -7,6 +7,7 @@ using BackEnd.Models.AuthModels;
 using BackEnd.Models.MailModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -28,7 +29,7 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
-        private string SecretForKey = "gdfgdfhtvnyw7thfiwa893jr9j03cn3n823r9723r53242";
+        private string SecretForKey;
         public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper)
         {
             this.userManager = userManager;
@@ -38,7 +39,7 @@ namespace BackEnd.Controllers
             this._mapper = mapper;
             //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
             //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
-            //SecretForKey = secret.Value;
+            SecretForKey = _configuration.GetValue<string>("Authentication:DevelopmentKey");//secret.Value;
         }
 
         [HttpPost]
@@ -151,7 +152,8 @@ namespace BackEnd.Controllers
                     string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agenzia" : userRoles.Contains("Agent") ? "Agente" : userRoles.FirstOrDefault() ?? "";
                     var authClaims = new List<Claim>
                     {
-                        new Claim(ClaimTypes.Email, user.Email),
+                        new Claim(ClaimTypes.NameIdentifier, user.Id),
+                        new Claim(ClaimTypes.Email, user.Email!),
                         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                         new Claim(ClaimTypes.Role, role),
                     };
@@ -171,7 +173,7 @@ namespace BackEnd.Controllers
                         AgencyId = user.AgencyId ?? string.Empty,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
-                        Email = user.Email,
+                        Email = user.Email!,
                         Password = "",
                         Role = role,
                         Color = user.Color,
@@ -211,13 +213,30 @@ namespace BackEnd.Controllers
 
                 SecurityToken validatedToken;
                 var principal = tokenHandler.ValidateToken(api_token.api_token, validationParameters, out validatedToken);
-                string? email;
+                
                 if (principal.Identity.IsAuthenticated)
                 {
-                    email = principal.Claims.First().Value;
-                    string role = principal.Claims.ElementAt(2).Value;
+                    // Estrae l'email dal claim corretto (ClaimTypes.Email)
+                    var emailClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email);
+                    if (emailClaim == null)
+                    {
+                        return BadRequest("Email claim non trovata nel token");
+                    }
+                    
+                    string email = emailClaim.Value;
                     var user = await userManager.FindByEmailAsync(email);
+                    
+                    if (user == null)
+                    {
+                        return NotFound("Utente non trovato");
+                    }
+                    
                     var userRoles = await userManager.GetRolesAsync(user);
+                    string role = userRoles.Contains("Admin") ? "Admin" 
+                        : userRoles.Contains("Agency") ? "Agenzia" 
+                        : userRoles.Contains("Agent") ? "Agente" 
+                        : userRoles.FirstOrDefault() ?? "";
+                    
                     LoginResponse result = new LoginResponse()
                     {
                         Id = user.Id,

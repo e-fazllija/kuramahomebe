@@ -19,9 +19,9 @@ namespace BackEnd.Services
         public StorageServices(IConfiguration configuration)
         {
             _configuration = configuration;
-            secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
-            KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString"));
-            blobstorageconnection = secret.Value;
+            //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
+            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString"));
+            blobstorageconnection = _configuration.GetValue<string>("Storage:LocalConnectionString")!;//secret.Value;
             cloudStorageAccount = CloudStorageAccount.Parse(blobstorageconnection);
             blobClient = cloudStorageAccount.CreateCloudBlobClient();
             container = blobClient.GetContainerReference(_configuration.GetValue<string>("Storage:BlobContainerName"));
