@@ -26,12 +26,12 @@ builder.Services.Configure<MailOptions>(builder.Configuration.GetSection("MailOp
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 builder.Services.AddCors();
 
-// For Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-    .AddEntityFrameworkStores<AppDbContext>()
+// For Identity - DOPO JWT per non interferire
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.SignIn.RequireConfirmedAccount = false;
+}).AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
-
-// CONFIGURA JWT SOLO SE KEYVAULT � PRESENTE
 
 var keyVaultUrl = builder.Configuration.GetSection("KeyVault:Url").Value;
 var authKeySecret = builder.Configuration.GetSection("KeyVault:Secrets:AuthKey").Value;
@@ -41,14 +41,29 @@ builder.ConfigureDatabase(keyVaultUrl, dbSecret);
 if (!string.IsNullOrEmpty(keyVaultUrl) && !string.IsNullOrEmpty(authKeySecret))
 {
     builder.ConfigureJwt(keyVaultUrl, authKeySecret);
+    Console.WriteLine("JWT configurato con KeyVault");
 }
 else
-{
-    // Configurazione alternativa per sviluppo senza KeyVault
-    Console.WriteLine("KeyVault non configurato, JWT sar� configurato con valori di default");
-    // Se hai un metodo alternativo per configurare JWT, chiamalo qui
-    // builder.ConfigureJwtForDevelopment();
+{    
+    builder.ConfigureJwtForDevelopment();
+    Console.WriteLine("KeyVault non configurato, JWT configurato con chiave di sviluppo");
 }
+
+
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
 
 var app = builder.Build();
 
@@ -59,13 +74,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// CORS deve essere configurato PRIMA di Authentication e Authorization
+app.UseCors(options => options
+    .AllowAnyOrigin()
+    .AllowAnyMethod()
+    .AllowAnyHeader());
+
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-app.UseCors(options => options.WithOrigins("*").AllowAnyMethod().AllowAnyHeader());
 
 // Seed locations data
 using (var scope = app.Services.CreateScope())

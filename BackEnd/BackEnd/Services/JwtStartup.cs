@@ -33,24 +33,31 @@ namespace BackEnd.Services
                         Encoding.ASCII.GetBytes(secret.Value))
                 };
             });
+        }
 
-            //builder.Services.AddAuthentication("Bearer")
-            //    .AddJwtBearer(options =>
-            //        { 
-            //            options.SaveToken = true;
-            //            options.RequireHttpsMetadata = false;
-            //            options.TokenValidationParameters = new()
-            //            {
-            //                ValidateIssuer = true,
-            //                ValidateAudience = true,
-            //                ValidateIssuerSigningKey = true,
-            //                ValidIssuer = builder.Configuration["Authentication:Issuer"],
-            //                ValidAudience = builder.Configuration["Authentication:Audience"],
-            //                IssuerSigningKey = new SymmetricSecurityKey(
-            //                    Encoding.ASCII.GetBytes(secret.Value))
-            //            };
-            //        }
-            //    );
+        // Configurazione JWT per sviluppo locale (senza KeyVault)
+        public static void ConfigureJwtForDevelopment(this WebApplicationBuilder builder)
+        {
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.SaveToken = true;
+                options.RequireHttpsMetadata = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    //ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = builder.Configuration["Authentication:Issuer"],
+                    ValidAudience = builder.Configuration["Authentication:Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(builder.Configuration["Authentication:DevelopmentKey"]))
+                };
+            });            
         }
     }
 }
