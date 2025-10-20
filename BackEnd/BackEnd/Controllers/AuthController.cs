@@ -3,14 +3,17 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using BackEnd.Entities;
 using BackEnd.Interfaces;
+using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.AuthModels;
 using BackEnd.Models.MailModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
+using BackEnd.Services.BusinessServices;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using Stripe;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -29,14 +32,16 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
+        private readonly IUserSubscriptionServices _userSubscriptionServices;
         private string SecretForKey;
-        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper)
+        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper, IUserSubscriptionServices userSubscriptionServices)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
             _mailService = mailService;
             _configuration = configuration;
-            this._mapper = mapper;
+            _mapper = mapper;
+            _userSubscriptionServices = userSubscriptionServices;
             //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
             //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
             SecretForKey = _configuration.GetValue<string>("Authentication:DevelopmentKey");//secret.Value;
@@ -148,6 +153,9 @@ namespace BackEnd.Controllers
                 var pass = await userManager.CheckPasswordAsync(user, model.Password);
                 if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
                 {
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+
+                    var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     var userRoles = await userManager.GetRolesAsync(user);
                     string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agenzia" : userRoles.Contains("Agent") ? "Agente" : userRoles.FirstOrDefault() ?? "";
                     var authClaims = new List<Claim>
@@ -156,6 +164,8 @@ namespace BackEnd.Controllers
                         new Claim(ClaimTypes.Email, user.Email!),
                         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                         new Claim(ClaimTypes.Role, role),
+                        new Claim("subscription_expiry", subscriptionExpiry.ToString("o")),
+                        new Claim("plan", subscription?.SubscriptionPlan?.Name ?? "none")
                     };
                     
                     var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
@@ -177,7 +187,7 @@ namespace BackEnd.Controllers
                         Password = "",
                         Role = role,
                         Color = user.Color,
-                        Token = new JwtSecurityTokenHandler().WriteToken(token),
+                        Token = new JwtSecurityTokenHandler().WriteToken(token)
                     };
 
                     return Ok(result);
