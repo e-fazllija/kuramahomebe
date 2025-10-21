@@ -21,7 +21,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 2. **Inoltrare i webhook al backend locale**:
    ```bash
-   stripe listen --forward-to https://localhost:7138/api/StripeWebhookEvent/stripe
+   stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
    ```
    
    **Nota**: Sostituisci `7138` con la porta del tuo backend se diversa.
