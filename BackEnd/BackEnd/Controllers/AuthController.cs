@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Stripe;
+using Stripe.Issuing;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -195,6 +196,7 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var u = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var key = Encoding.UTF8.GetBytes(SecretForKey);
 
@@ -243,17 +245,17 @@ namespace BackEnd.Controllers
                         : userRoles.Contains("Agent") ? "Agente" 
                         : userRoles.FirstOrDefault() ?? "";
                     
-                    LoginResponse result = new LoginResponse()
+                    var result = new
                     {
                         Id = user.Id,
                         AgencyId = user.AgencyId ?? string.Empty,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
                         Email = user.Email,
-                        Password = "",
                         Role = role,
-                        Token = api_token.api_token,
-                        Color = user.Color
+                        Color = user.Color,
+                        SubscriptionExpiry = subscriptionExpiry,
+                        Token = api_token.api_token  // Restituisce la stringa del token, non l'oggetto
                     };
 
                     return Ok(result);
@@ -263,7 +265,7 @@ namespace BackEnd.Controllers
             }
             catch (SecurityTokenException ex)
             {
-                return BadRequest(ex.Message);
+                return StatusCode(401);
             }
         }
 
