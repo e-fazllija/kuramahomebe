@@ -88,12 +88,12 @@ namespace BackEnd.Controllers
 
                 var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
                 
-                // ===== MODALITÀ TEST: Link per pricing invece di email =====
-                // Link che porta direttamente alla pagina pricing con email e token
-                var pricingLink = $"http://localhost:5173/#/pricing/{user.Email}/{token}";
+                // ===== MODALITÀ TEST: Link di conferma email =====
+                // Link che porta alla pagina di conferma email
+                var confirmationLink = $"http://localhost:5173/#/email-confirmation/{user.Email}/{token}";
                 Console.WriteLine("========================================");
                 Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
-                Console.WriteLine(pricingLink);
+                Console.WriteLine(confirmationLink);
                 Console.WriteLine("========================================");
                 
                 // COMMENTATO PER TEST: Invio email di conferma

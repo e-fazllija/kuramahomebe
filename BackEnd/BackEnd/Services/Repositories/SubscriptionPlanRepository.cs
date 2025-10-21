@@ -14,6 +14,7 @@ namespace BackEnd.Services.Repositories
         public async Task<IEnumerable<SubscriptionPlan>> GetActivePlansAsync()
         {
             return await _context.Set<SubscriptionPlan>()
+                .Include(p => p.Features)
                 .Where(p => p.Active)
                 .OrderBy(p => p.Price)
                 .ToListAsync();

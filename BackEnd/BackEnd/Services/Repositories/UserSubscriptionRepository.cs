@@ -25,8 +25,9 @@ namespace BackEnd.Services.Repositories
         {
             return await _context.Set<UserSubscription>()
                 .Include(us => us.SubscriptionPlan)
+                    .ThenInclude(sp => sp.Features)
                 .Include(us => us.LastPayment)
-                .Where(us => us.UserId == userId && us.Status == "active")
+                .Where(us => us.UserId == userId && us.Status.ToLower() == "active")
                 .OrderByDescending(us => us.CreationDate)
                 .FirstOrDefaultAsync();
         }

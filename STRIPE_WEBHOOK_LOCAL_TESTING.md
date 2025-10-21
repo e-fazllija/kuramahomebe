@@ -43,7 +43,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 2. **In un terminale separato, avvia Stripe CLI**:
    ```bash
-   stripe listen --forward-to https://localhost:7138/api/StripeWebhookEvent/stripe
+   stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
    ```
 
 3. **Trigger eventi di test**:
@@ -82,7 +82,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 1. **Avvia ngrok**:
    ```bash
-   ngrok http https://localhost:7138
+   ngrok http https://localhost:7267
    ```
 
 2. **Copia l'URL pubblico** fornito da ngrok (es: `https://xxxx-xx-xxx.ngrok.io`)
