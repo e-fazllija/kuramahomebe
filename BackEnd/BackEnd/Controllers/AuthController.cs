@@ -234,12 +234,19 @@ namespace BackEnd.Controllers
                     }
                     
                     string email = emailClaim.Value;
+                    var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
+                    string userId = userIdClaim?.Value ?? "";
+                    
                     var user = await userManager.FindByEmailAsync(email);
                     
                     if (user == null)
                     {
                         return NotFound("Utente non trovato");
                     }
+                    
+                    // Recupera l'abbonamento aggiornato dell'utente
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+                    var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     
                     var userRoles = await userManager.GetRolesAsync(user);
                     string role = userRoles.Contains("Admin") ? "Admin" 
@@ -439,6 +446,117 @@ namespace BackEnd.Controllers
 
                 else
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore!" });
+            }
+        }
+
+        [HttpPost]
+        [Route(nameof(RefreshToken))]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenModel model)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(model.Token))
+                {
+                    return BadRequest(new AuthResponseModel { Status = "Error", Message = "Token non fornito" });
+                }
+
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var key = Encoding.UTF8.GetBytes(SecretForKey);
+
+                var validationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
+                    ValidIssuer = _configuration["Authentication:Issuer"],
+                    ValidAudience = _configuration["Authentication:Audience"],
+                    ClockSkew = TimeSpan.Zero
+                };
+
+                SecurityToken validatedToken;
+                var principal = tokenHandler.ValidateToken(model.Token, validationParameters, out validatedToken);
+
+                if (!principal.Identity.IsAuthenticated)
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Token non valido" });
+                }
+
+                // Estrae l'email dal claim corretto
+                var emailClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email);
+                var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
+                
+                if (emailClaim == null || userIdClaim == null)
+                {
+                    return BadRequest(new AuthResponseModel { Status = "Error", Message = "Claims non validi nel token" });
+                }
+
+                string email = emailClaim.Value;
+                string userId = userIdClaim.Value;
+
+                // Verifica che l'utente esista ancora
+                var user = await userManager.FindByEmailAsync(email);
+                if (user == null)
+                {
+                    return NotFound(new AuthResponseModel { Status = "Error", Message = "Utente non trovato" });
+                }
+
+                // Recupera l'abbonamento aggiornato dell'utente
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId);
+                var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
+
+                // Recupera i ruoli dell'utente
+                var userRoles = await userManager.GetRolesAsync(user);
+                string role = userRoles.Contains("Admin") ? "Admin" 
+                    : userRoles.Contains("Agency") ? "Agenzia" 
+                    : userRoles.Contains("Agent") ? "Agente" 
+                    : userRoles.FirstOrDefault() ?? "";
+
+                // Crea i nuovi claims con i dati aggiornati
+                var authClaims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.Id),
+                    new Claim(ClaimTypes.Email, user.Email!),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                    new Claim(ClaimTypes.Role, role),
+                    new Claim("subscription_expiry", subscriptionExpiry.ToString("o")),
+                    new Claim("plan", subscription?.SubscriptionPlan?.Name ?? "none")
+                };
+
+                // Genera il nuovo token
+                var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
+                var newToken = new JwtSecurityToken(
+                    issuer: _configuration["Authentication:Issuer"],
+                    audience: _configuration["Authentication:Audience"],
+                    expires: DateTime.Now.AddDays(1),
+                    claims: authClaims,
+                    signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+                );
+
+                // Prepara la risposta con il token aggiornato
+                var result = new LoginResponse()
+                {
+                    Id = user.Id,
+                    AgencyId = user.AgencyId ?? string.Empty,
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    Email = user.Email!,
+                    Password = "",
+                    Role = role,
+                    Color = user.Color,
+                    Token = new JwtSecurityTokenHandler().WriteToken(newToken)
+                };
+
+                return Ok(result);
+            }
+            catch (SecurityTokenException ex)
+            {
+                return Unauthorized(new AuthResponseModel { Status = "Error", Message = $"Token non valido: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = $"Errore durante l'aggiornamento del token: {ex.Message}" });
             }
         }
 
