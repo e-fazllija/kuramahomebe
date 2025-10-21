@@ -114,34 +114,6 @@ namespace BackEnd.Controllers
             }
         }
 
-        //[HttpPost]
-        //[Route(nameof(RegisterAdmin))]
-        //public async Task<IActionResult> RegisterAdmin(RegisterModel model)
-        //{
-        //    model.UserName = model.UserName.Replace(" ", "_");
-
-        //    var userExists = await userManager.FindByNameAsync(model.UserName);
-        //    if (userExists != null)
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "User already exists!" });
-
-        //    ApplicationUser user = _mapper.Map<ApplicationUser>(model);
-        //    user.SecurityStamp = Guid.NewGuid().ToString();
-
-        //    var result = await userManager.CreateAsync(user, model.Password);
-        //    if (!result.Succeeded)
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "User creation failed! Please check user details and try again." });
-        //    if (!await roleManager.RoleExistsAsync("Admin"))
-        //        await roleManager.CreateAsync(new IdentityRole("Admin"));
-        //    if (!await roleManager.RoleExistsAsync("User"))
-        //        await roleManager.CreateAsync(new IdentityRole("User"));
-        //    if (await roleManager.RoleExistsAsync("Admin"))
-        //    {
-        //        await userManager.AddToRoleAsync(user, "Admin");
-        //    }
-        //    return Ok(new AuthResponseModel { Status = "Success", Message = "User created successfully!" });
-        //}
-
-
         [HttpPost]
         [Route(nameof(Login))]
         public async Task<IActionResult> Login(LoginModel model)
@@ -172,8 +144,24 @@ namespace BackEnd.Controllers
                     var token = new JwtSecurityToken(
                         issuer: _configuration["Authentication:Issuer"],
                         audience: _configuration["Authentication:Audience"],
-                        expires: DateTime.Now.AddDays(1),
+                        expires: DateTime.Now.AddMinutes(1),
                         claims: authClaims,
+                        signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+                    );
+
+                    // Genera un refresh token con durata maggiore (30 giorni)
+                    var refreshClaims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, user.Id),
+                        new Claim(ClaimTypes.Email, user.Email!),
+                        new Claim("type", "refresh_token")
+                    };
+                    
+                    var refreshToken = new JwtSecurityToken(
+                        issuer: _configuration["Authentication:Issuer"],
+                        audience: _configuration["Authentication:Audience"],
+                        expires: DateTime.Now.AddDays(30),
+                        claims: refreshClaims,
                         signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                     );
 
@@ -187,7 +175,8 @@ namespace BackEnd.Controllers
                         Password = "",
                         Role = role,
                         Color = user.Color,
-                        Token = new JwtSecurityTokenHandler().WriteToken(token)
+                        Token = new JwtSecurityTokenHandler().WriteToken(token),
+                        RefreshToken = new JwtSecurityTokenHandler().WriteToken(refreshToken)
                     };
 
                     return Ok(result);
@@ -482,6 +471,13 @@ namespace BackEnd.Controllers
                     return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Token non valido" });
                 }
 
+                // Verifica che sia un refresh token
+                var tokenTypeClaim = principal.Claims.FirstOrDefault(c => c.Type == "type" && c.Value == "refresh_token");
+                if (tokenTypeClaim == null)
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Token non è un refresh token valido" });
+                }
+
                 // Estrae l'email dal claim corretto
                 var emailClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email);
                 var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
@@ -523,17 +519,33 @@ namespace BackEnd.Controllers
                     new Claim("plan", subscription?.SubscriptionPlan?.Name ?? "none")
                 };
 
-                // Genera il nuovo token
+                // Genera il nuovo access token
                 var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
                 var newToken = new JwtSecurityToken(
                     issuer: _configuration["Authentication:Issuer"],
                     audience: _configuration["Authentication:Audience"],
-                    expires: DateTime.Now.AddDays(1),
+                    expires: DateTime.Now.AddMinutes(1),
                     claims: authClaims,
                     signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                 );
 
-                // Prepara la risposta con il token aggiornato
+                // Genera un nuovo refresh token
+                var refreshClaims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.Id),
+                    new Claim(ClaimTypes.Email, user.Email!),
+                    new Claim("type", "refresh_token")
+                };
+                
+                var newRefreshToken = new JwtSecurityToken(
+                    issuer: _configuration["Authentication:Issuer"],
+                    audience: _configuration["Authentication:Audience"],
+                    expires: DateTime.Now.AddDays(30),
+                    claims: refreshClaims,
+                    signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+                );
+
+                // Prepara la risposta con i token aggiornati
                 var result = new LoginResponse()
                 {
                     Id = user.Id,
@@ -544,7 +556,8 @@ namespace BackEnd.Controllers
                     Password = "",
                     Role = role,
                     Color = user.Color,
-                    Token = new JwtSecurityTokenHandler().WriteToken(newToken)
+                    Token = new JwtSecurityTokenHandler().WriteToken(newToken),
+                    RefreshToken = new JwtSecurityTokenHandler().WriteToken(newRefreshToken)
                 };
 
                 return Ok(result);

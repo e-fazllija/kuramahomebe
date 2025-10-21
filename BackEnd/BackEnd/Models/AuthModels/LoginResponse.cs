@@ -12,6 +12,7 @@ namespace BackEnd.Models.AuthModels
         public string Role { get; set; }
         public string Password { get; set; }
         public string Token { get; set; }
+        public string RefreshToken { get; set; }
         public string Color { get; set; }
     }
 }
