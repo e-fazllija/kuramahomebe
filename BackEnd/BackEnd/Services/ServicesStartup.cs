@@ -33,6 +33,17 @@ namespace BackEnd.Services
 
             builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
             builder.Services.AddTransient<CityServices, CityServices>();
+
+            builder.Services.AddAuthorization(options =>
+            {
+                options.AddPolicy("ActiveSubscription", policy =>
+                    policy.RequireAssertion(context =>
+                    {
+                        var expiryClaim = context.User.FindFirst("subscription_expiry")?.Value;
+                        return DateTime.TryParse(expiryClaim, out var expiryDate) && expiryDate > DateTime.UtcNow;
+                    }));
+            });
+
         }
     }
 }

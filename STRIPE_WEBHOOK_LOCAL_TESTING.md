@@ -21,10 +21,10 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 2. **Inoltrare i webhook al backend locale**:
    ```bash
-   stripe listen --forward-to https://localhost:7138/api/StripeWebhookEvent/stripe
+   stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
    ```
    
-   **Nota**: Sostituisci `7138` con la porta del tuo backend se diversa.
+   **Nota**: La porta predefinita del backend è `7267`. Verifica in `Properties/launchSettings.json` se diversa.
 
 3. **Copia il webhook signing secret**:
    Stripe CLI mostrerà un segreto simile a: `whsec_xxxxx`
@@ -43,7 +43,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 2. **In un terminale separato, avvia Stripe CLI**:
    ```bash
-   stripe listen --forward-to https://localhost:7138/api/StripeWebhookEvent/stripe
+   stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
    ```
 
 3. **Trigger eventi di test**:
@@ -82,7 +82,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
 
 1. **Avvia ngrok**:
    ```bash
-   ngrok http https://localhost:7138
+   ngrok http https://localhost:7267
    ```
 
 2. **Copia l'URL pubblico** fornito da ngrok (es: `https://xxxx-xx-xxx.ngrok.io`)

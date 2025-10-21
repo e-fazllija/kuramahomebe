@@ -363,29 +363,100 @@ namespace BackEnd.Controllers
 
                     if (subscriptionPlan != null)
                     {
-                        // Crea o aggiorna l'abbonamento utente
+                        // Gestione abbonamento: upgrade, rinnovo o nuovo
                         var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
                         
                         if (activeSubscription != null)
                         {
-                            // Cancella l'abbonamento precedente
-                            await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
+                            // Calcola giorni rimanenti dell'abbonamento attuale
+                            var today = DateTime.UtcNow;
+                            var daysRemaining = 0;
+                            
+                            if (activeSubscription.EndDate.HasValue && activeSubscription.EndDate.Value > today)
+                            {
+                                daysRemaining = (int)(activeSubscription.EndDate.Value - today).TotalDays;
+                            }
+
+                            // Stesso piano = RINNOVO (estendi i giorni)
+                            if (activeSubscription.SubscriptionPlanId == subscriptionPlan.Id)
+                            {
+                                var newEndDate = activeSubscription.EndDate.HasValue 
+                                    ? activeSubscription.EndDate.Value.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12)
+                                    : DateTime.UtcNow.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12);
+
+                                var updateModel = new UserSubscriptionUpdateModel
+                                {
+                                    Id = activeSubscription.Id,
+                                    UserId = user.Id,
+                                    SubscriptionPlanId = subscriptionPlan.Id,
+                                    StartDate = activeSubscription.StartDate,
+                                    EndDate = newEndDate,
+                                    Status = "active",
+                                    AutoRenew = activeSubscription.AutoRenew,
+                                    LastPaymentId = payment.Id,
+                                    StripeSubscriptionId = activeSubscription.StripeSubscriptionId,
+                                    StripeCustomerId = activeSubscription.StripeCustomerId
+                                };
+
+                                await _userSubscriptionServices.UpdateAsync(updateModel);
+                                _logger.LogInformation($"Abbonamento rinnovato per {user.Email}. Piano: {subscriptionPlan.Name}, Nuova scadenza: {updateModel.EndDate}");
+                            }
+                            else
+                            {
+                                // Piano diverso = UPGRADE/DOWNGRADE
+                                // Calcola credito proporzionale dal piano precedente
+                                var oldPlanPrice = activeSubscription.SubscriptionPlan?.Price ?? 0;
+                                var newPlanPrice = subscriptionPlan.Price;
+                                var daysInMonth = 30;
+                                var creditDays = 0;
+
+                                if (daysRemaining > 0 && oldPlanPrice > 0)
+                                {
+                                    // Calcola il credito in giorni del nuovo piano
+                                    var creditAmount = (oldPlanPrice / daysInMonth) * daysRemaining;
+                                    creditDays = (int)(creditAmount / (newPlanPrice / daysInMonth));
+                                }
+
+                                // Cancella il vecchio abbonamento
+                                await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
+
+                                // Crea nuovo abbonamento con giorni bonus dal credito
+                                var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                var baseEndDate = DateTime.UtcNow.AddMonths(newMonths);
+                                var finalEndDate = baseEndDate.AddDays(creditDays);
+
+                                var subscriptionModel = new UserSubscriptionCreateModel
+                                {
+                                    UserId = user.Id,
+                                    SubscriptionPlanId = subscriptionPlan.Id,
+                                    StartDate = DateTime.UtcNow,
+                                    EndDate = finalEndDate,
+                                    Status = "active",
+                                    AutoRenew = false,
+                                    LastPaymentId = payment.Id
+                                };
+
+                                await _userSubscriptionServices.CreateAsync(subscriptionModel);
+                                _logger.LogInformation($"Upgrade completato per {user.Email}. Piano: {subscriptionPlan.Name}, Credito: {creditDays} giorni, Scadenza: {finalEndDate}");
+                            }
                         }
-
-                        // Crea nuovo abbonamento
-                        var subscriptionModel = new UserSubscriptionCreateModel
+                        else
                         {
-                            UserId = user.Id,
-                            SubscriptionPlanId = subscriptionPlan.Id,
-                            StartDate = DateTime.UtcNow,
-                            EndDate = DateTime.UtcNow.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12),
-                            Status = "active",
-                            AutoRenew = false,
-                            LastPaymentId = payment.Id
-                        };
+                            // Nuovo abbonamento (nessun abbonamento attivo)
+                            var subscriptionModel = new UserSubscriptionCreateModel
+                            {
+                                UserId = user.Id,
+                                SubscriptionPlanId = subscriptionPlan.Id,
+                                StartDate = DateTime.UtcNow,
+                                EndDate = DateTime.UtcNow.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12),
+                                Status = "active",
+                                AutoRenew = false,
+                                LastPaymentId = payment.Id
+                            };
 
-                        await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                        _logger.LogInformation($"Abbonamento creato per utente {user.Email} - Piano: {subscriptionPlan.Name}");
+                            await _userSubscriptionServices.CreateAsync(subscriptionModel);
+                            _logger.LogInformation($"Nuovo abbonamento creato per {user.Email} - Piano: {subscriptionPlan.Name}");
+                        }
                     }
                 }
                 else

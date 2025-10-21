@@ -9,7 +9,9 @@ namespace BackEnd.Profiles
         public UserSubscriptionProfile()
         {
             // Entity -> SelectModel
-            CreateMap<UserSubscription, UserSubscriptionSelectModel>();
+            CreateMap<UserSubscription, UserSubscriptionSelectModel>()
+                .ForMember(dest => dest.SubscriptionPlan, opt => opt.MapFrom(src => src.SubscriptionPlan))
+                .ForMember(dest => dest.LastPayment, opt => opt.MapFrom(src => src.LastPayment));
 
             // CreateModel -> Entity
             CreateMap<UserSubscriptionCreateModel, UserSubscription>();
