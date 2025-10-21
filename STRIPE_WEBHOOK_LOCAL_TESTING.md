@@ -24,7 +24,7 @@ In ambiente locale, Stripe non può inviare webhook direttamente perché l'endpo
    stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
    ```
    
-   **Nota**: La porta predefinita del backend è `7267`. Verifica in `Properties/launchSettings.json` se diversa.
+   **Nota**: Sostituisci `7267` con la porta del tuo backend se diversa.
 
 3. **Copia il webhook signing secret**:
    Stripe CLI mostrerà un segreto simile a: `whsec_xxxxx`
