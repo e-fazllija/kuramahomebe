@@ -16,6 +16,7 @@ namespace BackEnd.Controllers
     [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
+    [Authorize]
     public class BlobStorageController : ControllerBase
     {
         private readonly IStorageServices _storageServices;

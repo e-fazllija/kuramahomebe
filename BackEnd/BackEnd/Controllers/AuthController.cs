@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Stripe;
+using Stripe.Issuing;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -90,19 +91,20 @@ namespace BackEnd.Controllers
                 
                 // ===== MODALITÀ TEST: Link di conferma email =====
                 // Link che porta alla pagina di conferma email
-                var confirmationLink = $"http://localhost:5173/#/email-confirmation/{user.Email}/{token}";
+                var confirmationLink = $"http://localhost:5173/email-confirmation/{user.Email}/{token}";
                 Console.WriteLine("========================================");
                 Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
                 Console.WriteLine(confirmationLink);
                 Console.WriteLine("========================================");
                 
-                // COMMENTATO PER TEST: Invio email di conferma
+                // ===== MODALITÀ PRODUZIONE: Invio email di conferma =====
+                // Decommentare le righe seguenti per l'invio effettivo delle email in produzione
                 // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
                 // MailRequest mailRequest = new MailRequest()
                 // {
                 //     ToEmail = user.Email,
-                //     Subject = "Conferma la tua email",
-                //     Body = $"Per attivare le tue credenziali <a href='{confirmationLink}'>clicca qui</a>"
+                //     Subject = "Conferma la tua email - KuramaHome",
+                //     Body = $"<h2>Benvenuto in KuramaHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href='{confirmationLink}'>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p>{confirmationLink}</p><p>Il link scadrà tra 24 ore.</p>"
                 // };
                 // await _mailService.SendEmailAsync(mailRequest);
 
@@ -195,6 +197,7 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var u = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var key = Encoding.UTF8.GetBytes(SecretForKey);
 
@@ -243,17 +246,17 @@ namespace BackEnd.Controllers
                         : userRoles.Contains("Agent") ? "Agente" 
                         : userRoles.FirstOrDefault() ?? "";
                     
-                    LoginResponse result = new LoginResponse()
+                    var result = new
                     {
                         Id = user.Id,
                         AgencyId = user.AgencyId ?? string.Empty,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
                         Email = user.Email,
-                        Password = "",
                         Role = role,
-                        Token = api_token.api_token,
-                        Color = user.Color
+                        Color = user.Color,
+                        SubscriptionExpiry = subscriptionExpiry,
+                        Token = api_token.api_token  // Restituisce la stringa del token, non l'oggetto
                     };
 
                     return Ok(result);
@@ -263,7 +266,7 @@ namespace BackEnd.Controllers
             }
             catch (SecurityTokenException ex)
             {
-                return BadRequest(ex.Message);
+                return StatusCode(401);
             }
         }
 
@@ -273,9 +276,35 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Validate input parameters
+                if (string.IsNullOrEmpty(credentials.Email) || string.IsNullOrEmpty(credentials.Token))
+                {
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
+                    { 
+                        Status = "Error", 
+                        Message = "Email e token sono richiesti per la conferma delle credenziali." 
+                    });
+                }
+
                 var user = await userManager.FindByEmailAsync(credentials.Email);
                 if (user == null)
-                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "User not exists!" });
+                {
+                    return StatusCode(StatusCodes.Status404NotFound, new AuthResponseModel() 
+                    { 
+                        Status = "Error", 
+                        Message = "Utente non trovato. Verifica che l'email sia corretta." 
+                    });
+                }
+
+                // Check if email is already confirmed
+                if (user.EmailConfirmed)
+                {
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
+                    { 
+                        Status = "Error", 
+                        Message = "L'email è già stata confermata. Puoi procedere con l'accesso." 
+                    });
+                }
 
                 var result = await userManager.ConfirmEmailAsync(user, credentials.Token);
 
@@ -285,16 +314,46 @@ namespace BackEnd.Controllers
                     var updateResult = await userManager.UpdateAsync(user);
 
                     if (updateResult.Succeeded)
-                        return Ok();
+                    {
+                        return Ok(new AuthResponseModel() 
+                        { 
+                            Status = "Success", 
+                            Message = "Email confermata con successo! Ora puoi accedere al tuo account." 
+                        });
+                    }
                     else
-                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Non è stato possibile confermare le credenziali" });
+                    {
+                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = "Errore durante l'aggiornamento dell'utente. Riprova più tardi." 
+                        });
+                    }
                 }
 
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Token non valido" });
+                // Handle specific token errors
+                if (result.Errors.Any(e => e.Code == "InvalidToken"))
+                {
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
+                    { 
+                        Status = "Error", 
+                        Message = "Token non valido. Richiedi un nuovo link di conferma." 
+                    });
+                }
+
+                return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
+                { 
+                    Status = "Error", 
+                    Message = "Token non valido o scaduto. Richiedi un nuovo link di conferma." 
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore durante la conferma delle credenziali: " + ex.Message });
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() 
+                { 
+                    Status = "Error", 
+                    Message = "Si è verificato un errore durante la conferma delle credenziali. Riprova più tardi." 
+                });
             }
         }
 
