@@ -8,6 +8,7 @@ using BackEnd.Models.CalendarModels;
 
 namespace BackEnd.Controllers
 {
+    [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
     public class RealEstatePropertyController : ControllerBase

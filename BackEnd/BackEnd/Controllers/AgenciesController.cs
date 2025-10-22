@@ -11,7 +11,7 @@ using System.Data;
 
 namespace BackEnd.Controllers
 {
-    //[Authorize(Policy = "ActiveSubscription")]
+    [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
     public class AgenciesController : ControllerBase

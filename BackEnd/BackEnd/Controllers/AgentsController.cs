@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace BackEnd.Controllers
 {
+    [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
     public class AgentsController : ControllerBase
