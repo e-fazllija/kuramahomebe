@@ -22,10 +22,19 @@ namespace BackEnd.Models.UserModel
         public string Address { get; set; } = string.Empty;
         [Required(ErrorMessage = "City is required")]
         public string City { get; set; } = string.Empty;
+        public string? ZipCode { get; set; }
         public string? Region { get; set; }
         public string Color { get; set; } = "#ffffff";
         public string AgencyId { get; set; }
         public bool EmailConfirmed { get; set; }
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
+
+        // --- DATI FISCALI / FATTURAZIONE ---
+        // Nota: UserType non è modificabile dopo la registrazione, quindi non è incluso nell'update
+        public string? FiscalCode { get; set; }
+        public string? CompanyName { get; set; }
+        public string? VATNumber { get; set; }
+        public string? PEC { get; set; }
+        public string? SDICode { get; set; }
     }
 }

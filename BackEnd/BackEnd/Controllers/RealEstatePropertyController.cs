@@ -5,6 +5,7 @@ using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
 using BackEnd.Models.RealEstatePropertyPhotoModels;
 using BackEnd.Models.CalendarModels;
+using Microsoft.AspNetCore.Authorization;
 
 namespace BackEnd.Controllers
 {

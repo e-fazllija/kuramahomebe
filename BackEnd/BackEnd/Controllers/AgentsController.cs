@@ -9,6 +9,7 @@ using BackEnd.Models.OutputModels;
 using AutoMapper;
 using BackEnd.Models.UserModel;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace BackEnd.Controllers
 {
