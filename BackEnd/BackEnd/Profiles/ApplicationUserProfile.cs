@@ -30,7 +30,7 @@ namespace BackEnd.Profiles
             CreateMap<UserUpdateModel, ApplicationUser>()
                 .ForMember(dest => dest.UserType, opt => opt.Ignore()) // UserType non modificabile, non esiste in UpdateModel
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))
-                .ForMember(dest => dest.Region, opt => opt.MapFrom(src => src.Province)) // Mappa Province su Region
+                .ForMember(dest => dest.Region, opt => opt.MapFrom(src => src.Region)) // Mappa Province su Region
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
                 .ForMember(dest => dest.Agency, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.RealEstateProperties, opt => opt.Ignore()) // Navigation property
