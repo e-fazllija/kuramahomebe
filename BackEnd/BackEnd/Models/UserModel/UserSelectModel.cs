@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using BackEnd.Entities;
+using System.ComponentModel.DataAnnotations;
 
 namespace BackEnd.Models.UserModel
 {
@@ -14,6 +15,7 @@ namespace BackEnd.Models.UserModel
         public string? Referent { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
         public string City { get; set; } = string.Empty;
+        public string? ZipCode { get; set; }
         public string? Region { get; set; }
         public string? Role { get; set; }
         public string? AgencyId { get; set; }
@@ -21,5 +23,13 @@ namespace BackEnd.Models.UserModel
         public bool EmailConfirmed { get; set; }
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }
+
+        // --- DATI FISCALI / FATTURAZIONE ---
+        public UserType UserType { get; set; }
+        public string? FiscalCode { get; set; }
+        public string? CompanyName { get; set; }
+        public string? VATNumber { get; set; }
+        public string? PEC { get; set; }
+        public string? SDICode { get; set; }
     }
 }
