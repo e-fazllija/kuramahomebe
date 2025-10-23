@@ -57,7 +57,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? VideoUrl { get; set; }
         public DateTime AssignmentEnd { get; set; }
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
-        public List<IFormFile>? Files { get; set; }
         public int CustomerId { get; set; }
         public string AgentId { get; set; } = string.Empty;
         public string? TypeOfAssignment { get; set; }

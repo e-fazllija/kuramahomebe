@@ -38,7 +38,7 @@ namespace BackEnd.Controllers
             try
             {
                 RealEstatePropertySelectModel Result = await _realEstatePropertyServices.Create(request);
-                return Ok();
+                return Ok(Result);
             }
             catch (Exception ex)
             {

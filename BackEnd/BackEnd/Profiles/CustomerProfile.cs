@@ -9,7 +9,8 @@ namespace BackEnd.Profiles
         {
             CreateMap<Customer, CustomerCreateModel>();
             CreateMap<Customer, CustomerUpdateModel>();
-            CreateMap<Customer, CustomerSelectModel>();
+            CreateMap<Customer, CustomerSelectModel>()
+                .ForMember(dest => dest.Address, opt => opt.MapFrom(src => src.Address));
             CreateMap<CustomerSelectModel, CustomerUpdateModel>();
             CreateMap<CustomerUpdateModel, CustomerSelectModel>();
 

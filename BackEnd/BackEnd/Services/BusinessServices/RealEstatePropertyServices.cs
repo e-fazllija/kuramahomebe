@@ -46,30 +46,8 @@ namespace BackEnd.Services.BusinessServices
                 var propertyAdded = await _unitOfWork.RealEstatePropertyRepository.InsertAsync(entityClass);
                 _unitOfWork.Save();
 
-                if (dto.Files?.Count > 0)
-                {
-                    foreach (var file in dto.Files)
-                    {
-                        Stream stream = file.OpenReadStream();
-                        string fileName = $"RealEstatePropertyPhotos/{propertyAdded.Entity.Id}/{file.FileName.Replace(" ", "-")}";
-                        string fileUrl = await _storageServices.UploadFile(stream, fileName);
-
-                        RealEstatePropertyPhoto photo = new RealEstatePropertyPhoto()
-                        {
-                            RealEstatePropertyId = propertyAdded.Entity.Id,
-                            FileName = fileName,
-                            Url = fileUrl,
-                            Type = 1
-                        };
-
-                        await _unitOfWork.RealEstatePropertyPhotoRepository.InsertAsync(photo);
-                        _unitOfWork.Save();
-                    }
-
-                }
-
                 RealEstatePropertySelectModel response = new RealEstatePropertySelectModel();
-                _mapper.Map(entityClass, response);
+                _mapper.Map(propertyAdded.Entity, response);
 
                 _logger.LogInformation(nameof(Create));
                 return response;

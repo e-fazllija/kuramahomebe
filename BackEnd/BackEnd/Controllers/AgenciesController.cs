@@ -81,10 +81,12 @@ namespace BackEnd.Controllers
 
                 // Genera password random
                 string randomPassword = GenerateRandomPassword();
-
+               
                 // Crea l'utente
                 ApplicationUser user = _mapper.Map<ApplicationUser>(model);
                 user.SecurityStamp = Guid.NewGuid().ToString();
+                user.UserName = user.Email.Split("@")[0];
+                user.AgencyId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
                 var result = await userManager.CreateAsync(user, randomPassword);
 
@@ -104,11 +106,6 @@ namespace BackEnd.Controllers
                     await userManager.DeleteAsync(user); // Rollback se l'assegnazione del ruolo fallisce
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Errore durante l'assegnazione del ruolo" });
                 }
-
-                // Imposta AgencyId sull'ID dell'agenzia stessa
-                user.AgencyId = user.Id;
-                await userManager.UpdateAsync(user);
-
 
                 // Genera token per conferma email
                 var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
