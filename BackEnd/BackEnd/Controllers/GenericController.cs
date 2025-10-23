@@ -4,6 +4,7 @@ using BackEnd.Models.InputModels;
 using BackEnd.Models.MailModels;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -49,6 +50,7 @@ namespace BackEnd.Controllers
             }
         }
 
+        [Authorize(Policy = "ActiveSubscription")]
         [HttpGet]
         [Route(nameof(GetAdminHomeDetails))]
         public async Task<IActionResult> GetAdminHomeDetails(string? agencyId)
@@ -96,7 +98,7 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        
+
         [HttpPost]
         [Route(nameof(WorkWithUs))]
         public async Task<IActionResult> WorkWithUs([FromBody] SendRequestModel request)

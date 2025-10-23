@@ -6,6 +6,7 @@ using BackEnd.Models.OutputModels;
 
 namespace BackEnd.Controllers
 {
+    [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
     public class LocationController : ControllerBase
