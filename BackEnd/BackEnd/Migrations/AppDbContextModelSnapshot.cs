@@ -116,11 +116,11 @@ namespace BackEnd.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Referent")
+                    b.Property<string>("Province")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("Region")
+                    b.Property<string>("Referent")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -300,7 +300,7 @@ namespace BackEnd.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("AgencyId")
+                    b.Property<string>("ApplicationUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
@@ -313,11 +313,6 @@ namespace BackEnd.Migrations
                     b.Property<string>("City")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
@@ -365,16 +360,12 @@ namespace BackEnd.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Customer_Code");
-
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("IX_Customer_Email");
 
-                    b.HasIndex("AgencyId", "CreationDate")
-                        .HasDatabaseName("IX_Customer_AgencyId_CreationDate");
+                    b.HasIndex("ApplicationUserId", "CreationDate")
+                        .HasDatabaseName("IX_Customer_ApplicationUserId_CreationDate");
 
                     b.ToTable("Customers");
                 });
@@ -1036,8 +1027,7 @@ namespace BackEnd.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("VideoUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<int>("WarehouseRooms")
                         .HasColumnType("integer");
@@ -1160,7 +1150,7 @@ namespace BackEnd.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AgencyId")
+                    b.Property<string>("ApplicationUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
@@ -1245,7 +1235,7 @@ namespace BackEnd.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgencyId");
+                    b.HasIndex("ApplicationUserId");
 
                     b.HasIndex("Archived")
                         .HasDatabaseName("IX_Request_Archived");
@@ -1354,6 +1344,10 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("FeatureName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1398,12 +1392,6 @@ namespace BackEnd.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<int?>("MaxProperties")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MaxUsers")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1668,12 +1656,12 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.Customer", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agency")
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
                         .WithMany()
-                        .HasForeignKey("AgencyId")
+                        .HasForeignKey("ApplicationUserId")
                         .OnDelete(DeleteBehavior.NoAction);
 
-                    b.Navigation("Agency");
+                    b.Navigation("ApplicationUser");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.CustomerNotes", b =>
@@ -1773,9 +1761,9 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.Request", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agency")
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
                         .WithMany()
-                        .HasForeignKey("AgencyId")
+                        .HasForeignKey("ApplicationUserId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("BackEnd.Entities.Customer", "Customer")
@@ -1784,7 +1772,7 @@ namespace BackEnd.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Agency");
+                    b.Navigation("ApplicationUser");
 
                     b.Navigation("Customer");
                 });

@@ -74,7 +74,6 @@ namespace BackEnd.Entities
         [Required(ErrorMessage = "La descrizione è obbligatoria")]
         [MaxLength(5000, ErrorMessage = "La descrizione non può superare i 5000 caratteri")]
         public string Description { get; set; } = string.Empty;
-        [MaxLength(500, ErrorMessage = "L'URL del video non può superare i 500 caratteri")]
         public string? VideoUrl { get; set; }
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }

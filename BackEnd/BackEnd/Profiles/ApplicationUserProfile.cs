@@ -17,7 +17,7 @@ namespace BackEnd.Profiles
                 .ForMember(dest => dest.SecurityStamp, opt => opt.Ignore()) // Gestito manualmente nel controller
                 .ForMember(dest => dest.CreationDate, opt => opt.MapFrom(src => DateTime.UtcNow))
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))
-                .ForMember(dest => dest.Region, opt => opt.MapFrom(src => src.Province)) // Mappa Province su Region
+                .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
                 .ForMember(dest => dest.Agency, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.RealEstateProperties, opt => opt.Ignore()) // Navigation property
@@ -30,7 +30,7 @@ namespace BackEnd.Profiles
             CreateMap<UserUpdateModel, ApplicationUser>()
                 .ForMember(dest => dest.UserType, opt => opt.Ignore()) // UserType non modificabile, non esiste in UpdateModel
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))
-                .ForMember(dest => dest.Region, opt => opt.MapFrom(src => src.Region)) // Mappa Province su Region
+                .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
                 .ForMember(dest => dest.Agency, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.RealEstateProperties, opt => opt.Ignore()) // Navigation property
@@ -38,7 +38,7 @@ namespace BackEnd.Profiles
                 .ForMember(dest => dest.Payments, opt => opt.Ignore()); // Navigation property
 
             CreateMap<ApplicationUser, UserSelectModel>()
-                .ForMember(dest => dest.Region, opt => opt.MapFrom(src => src.Region)) // Mappa Region esplicitamente
+                .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province esplicitamente
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)); // Mappa Color esplicitamente
             CreateMap<UserSelectModel, ApplicationUser>();
         }

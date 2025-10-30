@@ -152,7 +152,7 @@ namespace BackEnd.Services
 
                 IQueryable<Request> request = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Requests 
-                    : _unitOfWork.dbContext.Requests.Where(x => x.AgencyId == agencyId);
+                    : _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId);
                 result.RequestHomeDetails.Total = request.Count();
                 result.RequestHomeDetails.TotalActive = request.Where(x => !x.Closed && !x.Archived).Count();
                 result.RequestHomeDetails.TotalArchived = request.Where(x => x.Archived).Count();
@@ -225,7 +225,7 @@ namespace BackEnd.Services
 
                 result.TotalCustomers = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Customers.Count() 
-                    : _unitOfWork.dbContext.Customers.Where(x => x.AgencyId == agencyId).Count();
+                    : _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId).Count();
                 result.TotalAgents = string.IsNullOrEmpty(agencyId) 
                     ? userManager.GetUsersInRoleAsync("Agent").Result.Count() 
                     : userManager.GetUsersInRoleAsync("Agent").Result.Where(x => x.AgencyId == agencyId).Count();

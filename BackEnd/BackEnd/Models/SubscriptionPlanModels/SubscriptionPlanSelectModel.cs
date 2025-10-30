@@ -9,8 +9,6 @@ namespace BackEnd.Models.SubscriptionPlanModels
         public string? Description { get; set; }
         public decimal Price { get; set; }
         public string BillingPeriod { get; set; } = null!;
-        public int? MaxUsers { get; set; }
-        public int? MaxProperties { get; set; }
         public bool Active { get; set; }
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }

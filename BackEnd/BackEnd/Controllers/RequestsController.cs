@@ -7,6 +7,9 @@ using System.Data;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
+using BackEnd.Interfaces.IBusinessServices;
 
 namespace BackEnd.Controllers
 {
@@ -18,15 +21,21 @@ namespace BackEnd.Controllers
         private readonly IConfiguration _configuration;
         private readonly IRequestServices _requestServices;
         private readonly ILogger<RequestsController> _logger;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public RequestsController(
            IConfiguration configuration,
            IRequestServices requestServices,
-            ILogger<RequestsController> logger)
+            ILogger<RequestsController> logger,
+            ISubscriptionLimitService subscriptionLimitService,
+            UserManager<ApplicationUser> userManager)
         {
             _configuration = configuration;
             _requestServices = requestServices;
             _logger = logger;
+            _subscriptionLimitService = subscriptionLimitService;
+            _userManager = userManager;
         }
         [HttpPost]
         [Route(nameof(Create))]
@@ -34,6 +43,15 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await _userManager.FindByIdAsync(userId);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_requests", currentUser?.AgencyId);
+                if (!limitCheck.CanProceed)
+                {
+                    return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+                }
+                // ownership
+                request.ApplicationUserId = userId;
                 RequestSelectModel Result = await _requestServices.Create(request);
                 return Ok();
             }

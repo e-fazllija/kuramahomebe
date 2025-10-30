@@ -30,10 +30,10 @@ namespace BackEnd.Services
                 .HasMany(c => c.CustomerNotes);
 
             builder.Entity<Customer>()
-                .HasOne(c => c.Agency).WithMany().OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.ApplicationUser).WithMany().HasForeignKey(c => c.ApplicationUserId).OnDelete(DeleteBehavior.NoAction);
 
             builder.Entity<Request>()
-                .HasOne(c => c.Agency).WithMany().OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.ApplicationUser).WithMany().HasForeignKey(c => c.ApplicationUserId).OnDelete(DeleteBehavior.NoAction);
 
             // ==================== INDICI ====================
 
@@ -43,14 +43,11 @@ namespace BackEnd.Services
                 .IsUnique()
                 .HasDatabaseName("IX_Customer_Email");
 
-            builder.Entity<Customer>()
-                .HasIndex(c => c.Code)
-                .IsUnique()
-                .HasDatabaseName("IX_Customer_Code");
+            // Rimosso indice unico su Code (campo eliminato)
 
             builder.Entity<Customer>()
-                .HasIndex(c => new { c.AgencyId, c.CreationDate })
-                .HasDatabaseName("IX_Customer_AgencyId_CreationDate");
+                .HasIndex(c => new { c.ApplicationUserId, c.CreationDate })
+                .HasDatabaseName("IX_Customer_ApplicationUserId_CreationDate");
 
             // RealEstateProperty - Indici per filtri e ricerche
             builder.Entity<RealEstateProperty>()

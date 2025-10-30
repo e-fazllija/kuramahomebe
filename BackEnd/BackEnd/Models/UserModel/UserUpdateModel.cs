@@ -23,7 +23,7 @@ namespace BackEnd.Models.UserModel
         [Required(ErrorMessage = "City is required")]
         public string City { get; set; } = string.Empty;
         public string? ZipCode { get; set; }
-        public string? Region { get; set; }
+        public string? Province { get; set; }
         public string Color { get; set; } = "#ffffff";
         public string AgencyId { get; set; }
         public bool EmailConfirmed { get; set; }

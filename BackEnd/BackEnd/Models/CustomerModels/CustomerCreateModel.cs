@@ -5,8 +5,7 @@ namespace BackEnd.Models.CustomerModels
 {
     public class CustomerCreateModel
     {
-        [Required]
-        public string Code { get; set; } = string.Empty;
+        // Code rimosso: generazione non più necessaria, usiamo Id
         public bool Buyer { get; set; }
         public bool Seller { get; set; }
         public bool Builder { get; set; }
@@ -26,6 +25,6 @@ namespace BackEnd.Models.CustomerModels
         public bool AcquisitionDone { get; set; }
         public bool OngoingAssignment { get; set; }
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
-        public string AgencyId { get; set; } = string.Empty;
+        public string? ApplicationUserId { get; set; }
     }
 }

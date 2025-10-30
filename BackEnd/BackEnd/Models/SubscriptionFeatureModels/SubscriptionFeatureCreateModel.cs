@@ -10,6 +10,8 @@ namespace BackEnd.Models.SubscriptionFeatureModels
         [Required(ErrorMessage = "Il nome della funzionalità è obbligatorio")]
         [MaxLength(200, ErrorMessage = "Il nome della funzionalità non può superare i 200 caratteri")]
         public string FeatureName { get; set; } = null!;
+        [MaxLength(200)]
+        public string? Description { get; set; }
 
         [MaxLength(200, ErrorMessage = "Il valore della funzionalità non può superare i 200 caratteri")]
         public string? FeatureValue { get; set; }

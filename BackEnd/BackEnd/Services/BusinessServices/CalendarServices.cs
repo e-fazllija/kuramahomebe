@@ -226,9 +226,9 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
-                List<Customer> customers = await _unitOfWork.dbContext.Customers.Where(x => x.AgencyId == agencyId).ToListAsync();
+                List<Customer> customers = await _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId).ToListAsync();
                 List<RealEstateProperty> properties = await _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Agent.AgencyId == agencyId).ToListAsync();
-                List<Request> requests = await _unitOfWork.dbContext.Requests.Where(x => x.AgencyId == agencyId).ToListAsync();
+                List<Request> requests = await _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId).ToListAsync();
 
                 CalendarCreateViewModel result = new CalendarCreateViewModel();
                 result.Customers = _mapper.Map<List<CustomerSelectModel>>(customers);

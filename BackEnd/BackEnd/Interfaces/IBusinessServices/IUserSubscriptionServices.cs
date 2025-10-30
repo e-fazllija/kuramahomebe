@@ -6,7 +6,7 @@ namespace BackEnd.Interfaces.IBusinessServices
     {
         Task<UserSubscriptionSelectModel?> GetByIdAsync(int id);
         Task<IEnumerable<UserSubscriptionSelectModel>> GetUserSubscriptionsAsync(string userId);
-        Task<UserSubscriptionSelectModel?> GetActiveUserSubscriptionAsync(string userId);
+        Task<UserSubscriptionSelectModel?> GetActiveUserSubscriptionAsync(string userId, string? agencyId = null);
         Task<UserSubscriptionSelectModel> CreateAsync(UserSubscriptionCreateModel model);
         Task<UserSubscriptionSelectModel?> UpdateAsync(UserSubscriptionUpdateModel model);
         Task<bool> DeleteAsync(int id);

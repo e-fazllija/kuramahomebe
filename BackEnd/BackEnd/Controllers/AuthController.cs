@@ -127,11 +127,11 @@ namespace BackEnd.Controllers
                 var pass = await userManager.CheckPasswordAsync(user, model.Password);
                 if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
                 {
-                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AgencyId);
 
                     var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     var userRoles = await userManager.GetRolesAsync(user);
-                    string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agenzia" : userRoles.Contains("Agent") ? "Agente" : userRoles.FirstOrDefault() ?? "";
+                    string role = userRoles.Contains("Admin") ? "Admin" : userRoles.Contains("Agency") ? "Agency" : userRoles.Contains("Agent") ? "Agent" : userRoles.FirstOrDefault() ?? "";
                     var authClaims = new List<Claim>
                     {
                         new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -236,14 +236,14 @@ namespace BackEnd.Controllers
                         return NotFound("Utente non trovato");
                     }
                     
-                    // Recupera l'abbonamento aggiornato dell'utente
-                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+                    // Recupera l'abbonamento aggiornato dell'utente (con ereditarietà)
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AgencyId);
                     var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     
                     var userRoles = await userManager.GetRolesAsync(user);
                     string role = userRoles.Contains("Admin") ? "Admin" 
-                        : userRoles.Contains("Agency") ? "Agenzia" 
-                        : userRoles.Contains("Agent") ? "Agente" 
+                        : userRoles.Contains("Agency") ? "Agency" 
+                        : userRoles.Contains("Agent") ? "Agent" 
                         : userRoles.FirstOrDefault() ?? "";
                     
                     var result = new
@@ -556,8 +556,8 @@ namespace BackEnd.Controllers
                     return NotFound(new AuthResponseModel { Status = "Error", Message = "Utente non trovato" });
                 }
 
-                // Recupera l'abbonamento aggiornato dell'utente
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId);
+                // Recupera l'abbonamento aggiornato dell'utente (con ereditarietà)
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
                 var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
 
                 // Recupera i ruoli dell'utente

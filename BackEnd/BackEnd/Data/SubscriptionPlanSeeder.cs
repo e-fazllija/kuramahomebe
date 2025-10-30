@@ -23,8 +23,6 @@ namespace BackEnd.Data
                     Description = "Perfetto per iniziare - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.",
                     Price = 19.00M,
                     BillingPeriod = "monthly",
-                    MaxUsers = null, // Illimitati
-                    MaxProperties = 10, // Fino a 10 immobili
                     Active = true
                 },
                 
@@ -35,8 +33,6 @@ namespace BackEnd.Data
                     Description = "La scelta migliore per professionisti - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.",
                     Price = 49.00M,
                     BillingPeriod = "monthly",
-                    MaxUsers = null, // Illimitati
-                    MaxProperties = null, // Immobili illimitati
                     Active = true
                 },
                 
@@ -47,8 +43,6 @@ namespace BackEnd.Data
                     Description = "Soluzioni aziendali complete - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.",
                     Price = 99.00M,
                     BillingPeriod = "monthly",
-                    MaxUsers = null, // Illimitati
-                    MaxProperties = null, // Immobili illimitati
                     Active = true
                 }
             };
@@ -57,9 +51,9 @@ namespace BackEnd.Data
             await context.SaveChangesAsync();
 
             Console.WriteLine($"Seed completato: {plans.Count} piani di sottoscrizione creati.");
-            Console.WriteLine("- Basic: €19/mese (fino a 10 immobili)");
-            Console.WriteLine("- Pro: €49/mese (immobili illimitati)");
-            Console.WriteLine("- Premium: €99/mese (tutto di Pro + funzionalità premium)");
+            Console.WriteLine("- Basic: €19/mese");
+            Console.WriteLine("- Pro: €49/mese");
+            Console.WriteLine("- Premium: €99/mese");
         }
     }
 }

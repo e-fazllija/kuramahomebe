@@ -21,15 +21,56 @@ namespace BackEnd.Services.Repositories
                 .ToListAsync();
         }
 
-        public async Task<UserSubscription?> GetActiveUserSubscriptionAsync(string userId)
+        public async Task<UserSubscription?> GetActiveUserSubscriptionAsync(string userId, string? agencyId = null)
         {
-            return await _context.Set<UserSubscription>()
+            // 1. Cerca prima l'abbonamento diretto dell'utente
+            var directSubscription = await _context.Set<UserSubscription>()
                 .Include(us => us.SubscriptionPlan)
                     .ThenInclude(sp => sp.Features)
                 .Include(us => us.LastPayment)
                 .Where(us => us.UserId == userId && us.Status.ToLower() == "active")
                 .OrderByDescending(us => us.CreationDate)
                 .FirstOrDefaultAsync();
+
+            // Se ha un abbonamento diretto, lo restituisce
+            if (directSubscription != null)
+                return directSubscription;
+
+            // 2. Se non ha abbonamento diretto ma ha AgencyId, cerca l'abbonamento dell'agenzia parent (prima risalita)
+            if (!string.IsNullOrEmpty(agencyId))
+            {
+                var agencySubscription = await _context.Set<UserSubscription>()
+                    .Include(us => us.SubscriptionPlan)
+                        .ThenInclude(sp => sp.Features)
+                    .Include(us => us.LastPayment)
+                    .Where(us => us.UserId == agencyId && us.Status.ToLower() == "active")
+                    .OrderByDescending(us => us.CreationDate)
+                    .FirstOrDefaultAsync();
+
+                // Se l'Agency ha un abbonamento, lo restituisce
+                if (agencySubscription != null)
+                    return agencySubscription;
+
+                // 3. Se l'Agency non ha abbonamento, verifica se ha un proprio AgencyId (seconda risalita fino all'Admin)
+                var agencyUser = await _context.Set<ApplicationUser>()
+                    .FirstOrDefaultAsync(u => u.Id == agencyId);
+
+                if (agencyUser != null && !string.IsNullOrEmpty(agencyUser.AgencyId))
+                {
+                    // Risali fino all'Admin cercando l'abbonamento dell'Admin
+                    var adminSubscription = await _context.Set<UserSubscription>()
+                        .Include(us => us.SubscriptionPlan)
+                            .ThenInclude(sp => sp.Features)
+                        .Include(us => us.LastPayment)
+                        .Where(us => us.UserId == agencyUser.AgencyId && us.Status.ToLower() == "active")
+                        .OrderByDescending(us => us.CreationDate)
+                        .FirstOrDefaultAsync();
+
+                    return adminSubscription;
+                }
+            }
+
+            return null;
         }
 
         public async Task<UserSubscription?> GetByStripeSubscriptionIdAsync(string stripeSubscriptionId)

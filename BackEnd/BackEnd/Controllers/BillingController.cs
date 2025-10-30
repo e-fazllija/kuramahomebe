@@ -187,11 +187,22 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Controllo: solo Admin può vedere lo stato dell'abbonamento
+                if (!await IsAdminAsync())
+                {
+                    return StatusCode(403, "Accesso negato: solo gli Admin possono visualizzare lo stato dell'abbonamento");
+                }
+
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId);
+                // Recupera l'utente per ottenere AgencyId
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized();
+
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
                 
                 if (subscription == null)
                     return NotFound("Nessun abbonamento attivo trovato");
@@ -214,11 +225,22 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Controllo: solo Admin può cancellare l'abbonamento
+                if (!await IsAdminAsync())
+                {
+                    return StatusCode(403, "Accesso negato: solo gli Admin possono cancellare l'abbonamento");
+                }
+
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId);
+                // Recupera l'utente per ottenere AgencyId
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized();
+
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
                 
                 if (subscription == null)
                     return NotFound("Nessun abbonamento attivo trovato");
@@ -239,6 +261,23 @@ namespace BackEnd.Controllers
                 _logger.LogError(ex, "Errore durante la cancellazione dell'abbonamento");
                 return StatusCode(500, $"Errore durante la cancellazione dell'abbonamento: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Helper method per verificare se l'utente è Admin
+        /// </summary>
+        private async Task<bool> IsAdminAsync()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return false;
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return roles.Contains("Admin");
         }
     }
 

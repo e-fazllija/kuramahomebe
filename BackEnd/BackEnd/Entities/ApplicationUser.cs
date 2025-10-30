@@ -33,8 +33,8 @@ namespace BackEnd.Entities
         [MaxLength(100, ErrorMessage = "La città non può superare i 100 caratteri")]
         public string City { get; set; } = string.Empty;
 
-        [MaxLength(100, ErrorMessage = "La regione non può superare i 100 caratteri")]
-        public string? Region { get; set; }
+        [MaxLength(100, ErrorMessage = "La provincia non può superare i 100 caratteri")]
+        public string? Province { get; set; }
 
         [MaxLength(10, ErrorMessage = "Il CAP non può superare i 10 caratteri")]
         public string? ZipCode { get; set; }

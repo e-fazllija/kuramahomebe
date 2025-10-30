@@ -29,9 +29,9 @@ namespace BackEnd.Services.BusinessServices
             return _mapper.Map<IEnumerable<UserSubscriptionSelectModel>>(entities);
         }
 
-        public async Task<UserSubscriptionSelectModel?> GetActiveUserSubscriptionAsync(string userId)
+        public async Task<UserSubscriptionSelectModel?> GetActiveUserSubscriptionAsync(string userId, string? agencyId = null)
         {
-            var entity = await _unitOfWork.UserSubscriptionRepository.GetActiveUserSubscriptionAsync(userId);
+            var entity = await _unitOfWork.UserSubscriptionRepository.GetActiveUserSubscriptionAsync(userId, agencyId);
             return entity != null ? _mapper.Map<UserSubscriptionSelectModel>(entity) : null;
         }
 

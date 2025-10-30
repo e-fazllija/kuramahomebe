@@ -37,7 +37,7 @@ namespace BackEnd.Models.AuthModels
         [Required(ErrorMessage = "City is required")]
         public string City { get; set; } = string.Empty;
         
-        public string? Region { get; set; }
+        public string? Province { get; set; }
         
         public string? ZipCode { get; set; }
         

@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using BackEnd.Entities;
+using BackEnd.Exceptions;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.AuthModels;
@@ -28,6 +29,7 @@ namespace BackEnd.Controllers
         private readonly ILogger<AgenciesController> _logger;
         private readonly IMapper _mapper;
         private readonly IMailService _mailService;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
 
         public AgenciesController(
             UserManager<ApplicationUser> userManager,
@@ -35,7 +37,8 @@ namespace BackEnd.Controllers
            IConfiguration configuration,
             ILogger<AgenciesController> logger,
             IMapper mapper,
-            IMailService mailService)
+            IMailService mailService,
+            ISubscriptionLimitService subscriptionLimitService)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
@@ -43,6 +46,7 @@ namespace BackEnd.Controllers
             _logger = logger;
             _mapper = mapper;
             _mailService = mailService;
+            _subscriptionLimitService = subscriptionLimitService;
         }
 
         [HttpPost]
@@ -74,6 +78,25 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Verifica che solo gli Admin possano creare altre agenzie
+                var currentUser = await userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Utente non autorizzato"));
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                
+                if (!currentUserRoles.Contains("Admin"))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per creare altre agenzie. Solo gli admin possono creare nuove agenzie." });
+                }
+
+                // Verifica limite subscription PRIMA di creare
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_agencies", currentUser.AgencyId);
+                
+                if (!limitCheck.CanProceed)
+                {
+                    // Limite raggiunto - ritorna 429 con dettagli
+                    return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+                }
+
                 // Verifica se l'email esiste già
                 var userEmailExists = await userManager.FindByEmailAsync(model.Email);
                 if (userEmailExists != null)
@@ -167,6 +190,15 @@ namespace BackEnd.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await userManager.FindByIdAsync(userId);
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                
+                // Controllo: gli Agent non possono vedere le agenzie
+                if (currentUserRoles.Contains("Agent"))
+                {
+                    return StatusCode(403, "Accesso negato: gli agenti non possono visualizzare le agenzie");
+                }
+                
                 //currentPage = currentPage > 0 ? currentPage : 1;
                 var usersList = await userManager.GetUsersInRoleAsync("Agency");
                 usersList = usersList.Where(x => x.AgencyId == userId).ToList();

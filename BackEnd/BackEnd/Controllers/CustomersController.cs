@@ -7,6 +7,9 @@ using System.Data;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
+using BackEnd.Interfaces.IBusinessServices;
 
 namespace BackEnd.Controllers
 {
@@ -18,15 +21,21 @@ namespace BackEnd.Controllers
         private readonly IConfiguration _configuration;
         private readonly ICustomerServices _customerServices;
         private readonly ILogger<CustomersController> _logger;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public CustomersController(
            IConfiguration configuration,
            ICustomerServices customerServices,
-            ILogger<CustomersController> logger)
+            ILogger<CustomersController> logger,
+            ISubscriptionLimitService subscriptionLimitService,
+            UserManager<ApplicationUser> userManager)
         {
             _configuration = configuration;
             _customerServices = customerServices;
             _logger = logger;
+            _subscriptionLimitService = subscriptionLimitService;
+            _userManager = userManager;
         }
         [HttpPost]
         [Route(nameof(Create))]
@@ -34,6 +43,15 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await _userManager.FindByIdAsync(userId);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_customers", currentUser?.AgencyId);
+                if (!limitCheck.CanProceed)
+                {
+                    return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+                }
+                // ownership
+                request.ApplicationUserId = userId;
                 CustomerSelectModel Result = await _customerServices.Create(request);
                 return Ok();
             }
@@ -61,12 +79,18 @@ namespace BackEnd.Controllers
         }
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get([FromQuery] int currentPage, [FromQuery] string agencyId, [FromQuery] string? filterRequest = null)
+        public async Task<IActionResult> Get([FromQuery] string? filterRequest = null)
         {
             try
             {
-                //currentPage = currentPage > 0 ? currentPage : 1;
-                ListViewModel<CustomerSelectModel> res = await _customerServices.Get(currentPage, agencyId, filterRequest, null, null);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var role = User.FindFirstValue(ClaimTypes.Role);
+                ListViewModel<CustomerSelectModel> res = await _customerServices.Get(
+                    role == "Admin" ? userId: null,
+                    role == "Agency" ? userId: null,
+                    role == "Agent" ? userId: null,
+                    filterRequest,
+                    null, null);
 
                 return Ok(res);
             }
@@ -108,41 +132,41 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        [HttpGet]
-        [Route(nameof(ExportExcel))]
-        public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        {
-            try
-            {
-                var result = await _customerServices.Get(0, null, null, fromName, toName);
-                DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateExcelContent(table);
+        //[HttpGet]
+        //[Route(nameof(ExportExcel))]
+        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
+        //{
+        //    try
+        //    {
+        //        var result = await _customerServices.Get(0, null, null, fromName, toName);
+        //        DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
+        //        byte[] fileBytes = Export.GenerateExcelContent(table);
 
-                return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-            }
-        }
-        [HttpGet]
-        [Route(nameof(ExportCsv))]
-        public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        {
-            try
-            {
-                var result = await _customerServices.Get(0, null, null, fromName, toName);
-                DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateCsvContent(table);
+        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex.Message);
+        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+        //    }
+        //}
+        //[HttpGet]
+        //[Route(nameof(ExportCsv))]
+        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
+        //{
+        //    try
+        //    {
+        //        var result = await _customerServices.Get(0, null, null, fromName, toName);
+        //        DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
+        //        byte[] fileBytes = Export.GenerateCsvContent(table);
 
-                return File(fileBytes, "text/csv", "Output.csv");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-            }
-        }
+        //        return File(fileBytes, "text/csv", "Output.csv");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex.Message);
+        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+        //    }
+        //}
     }
 }

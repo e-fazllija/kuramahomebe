@@ -29,6 +29,7 @@ namespace BackEnd.Services
             builder.Services.AddTransient<IUserSubscriptionServices, UserSubscriptionServices>();
             builder.Services.AddTransient<ISubscriptionPlanServices, SubscriptionPlanServices>();
             builder.Services.AddTransient<ISubscriptionFeatureServices, SubscriptionFeatureServices>();
+            builder.Services.AddTransient<ISubscriptionLimitService, SubscriptionLimitService>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
 
             builder.Services.AddTransient<ProvinceServices, ProvinceServices>();

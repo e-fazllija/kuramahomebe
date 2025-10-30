@@ -1,20 +1,25 @@
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.UserSubscriptionModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using BackEnd.Entities;
+using System.Security.Claims;
 
 namespace BackEnd.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public class UserSubscriptionController : ControllerBase
     {
         private readonly IUserSubscriptionServices _userSubscriptionServices;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices)
+        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices, UserManager<ApplicationUser> userManager)
         {
             _userSubscriptionServices = userSubscriptionServices;
+            _userManager = userManager;
         }
 
         [HttpGet("{id}")]
@@ -53,7 +58,12 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId);
+                // Recupera l'utente per ottenere AgencyId per l'ereditarietà
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return NotFound($"Utente con ID {userId} non trovato");
+
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
                 if (subscription == null)
                     return NotFound($"Nessun abbonamento attivo trovato per l'utente {userId}");
 
@@ -199,6 +209,23 @@ namespace BackEnd.Controllers
             {
                 return StatusCode(500, $"Errore interno del server: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Helper method per verificare se l'utente è Admin
+        /// </summary>
+        private async Task<bool> IsAdminAsync()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return false;
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return roles.Contains("Admin");
         }
     }
 }

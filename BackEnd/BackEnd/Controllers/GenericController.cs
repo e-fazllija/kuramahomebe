@@ -7,6 +7,9 @@ using BackEnd.Models.ResponseModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using BackEnd.Entities;
+using System.Security.Claims;
 
 namespace BackEnd.Controllers
 {
@@ -19,19 +22,22 @@ namespace BackEnd.Controllers
         private readonly IMailService _mailService;
         private readonly IRealEstatePropertyPhotoServices _realEstatePropertyPhotoServices;
         private readonly ILogger<GenericController> _logger;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public GenericController(
            IConfiguration configuration,
            IGenericService genericService,
            IMailService mailService,
            IRealEstatePropertyPhotoServices realEstatePropertyPhotoServices,
-            ILogger<GenericController> logger)
+            ILogger<GenericController> logger,
+            UserManager<ApplicationUser> userManager)
         {
             _configuration = configuration;
             _genericService = genericService;
             _mailService = mailService;
             _realEstatePropertyPhotoServices = realEstatePropertyPhotoServices;
             _logger = logger;
+            _userManager = userManager;
         }
 
         [HttpGet]
@@ -57,6 +63,8 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Tutti gli utenti autenticati con abbonamento attivo possono vedere i dettagli della dashboard
+                // Il filtro viene applicato lato servizio in base al ruolo dell'utente
                 AdminHomeDetailsModel result = await _genericService.GetAdminHomeDetails(agencyId);
                 return Ok(result);
             }
@@ -146,5 +154,6 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
+
     }
 }

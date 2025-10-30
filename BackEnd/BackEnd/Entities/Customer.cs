@@ -4,9 +4,7 @@ namespace BackEnd.Entities
 {
     public class Customer : EntityBase
     {
-        [Required(ErrorMessage = "Il codice è obbligatorio")]
-        [MaxLength(50, ErrorMessage = "Il codice non può superare i 50 caratteri")]
-        public string Code { get; set; } = string.Empty;
+        // Code rimosso: utilizziamo l'Id ereditato da EntityBase
         public bool Buyer { get; set; }
         public bool Seller { get; set; }
         public bool Builder { get; set; }
@@ -36,8 +34,8 @@ namespace BackEnd.Entities
         public bool OngoingAssignment { get; set; }
         public virtual ICollection<RealEstateProperty>? RealEstateProperties { get; set; }
         public virtual ICollection<CustomerNotes>? CustomerNotes { get; set; }
-        [MaxLength(450, ErrorMessage = "L'ID agenzia non può superare i 450 caratteri")]
-        public string? AgencyId { get; set; }
-        public virtual ApplicationUser? Agency { get; set; }
+        [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
+        public string? ApplicationUserId { get; set; }
+        public virtual ApplicationUser? ApplicationUser { get; set; }
     }
 }

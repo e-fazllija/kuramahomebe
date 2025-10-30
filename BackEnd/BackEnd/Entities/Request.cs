@@ -41,8 +41,8 @@ namespace BackEnd.Entities
         public bool Archived { get; set; }
         public bool MortgageAdviceRequired { get; set; }
         public ICollection<RequestNotes>? RequestNotes { get; set; }
-        [MaxLength(450, ErrorMessage = "L'ID agenzia non può superare i 450 caratteri")]
-        public string? AgencyId { get; set; }
-        public virtual ApplicationUser? Agency { get; set; }
+        [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
+        public string? ApplicationUserId { get; set; }
+        public virtual ApplicationUser? ApplicationUser { get; set; }
     }
 }

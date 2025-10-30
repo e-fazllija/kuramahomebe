@@ -30,6 +30,12 @@ namespace BackEnd.Services.BusinessServices
             try
             {
                 var entityClass = _mapper.Map<Request>(dto);
+                
+                // Imposta sempre CreationDate e UpdateDate in UTC quando si crea una nuova entità
+                var now = DateTime.UtcNow;
+                entityClass.CreationDate = now;
+                entityClass.UpdateDate = now;
+                
                 await _unitOfWork.RequestRepository.InsertAsync(entityClass);
                 _unitOfWork.Save();
 
@@ -93,7 +99,9 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.AgencyId == agencyId);
+                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                if (!string.IsNullOrEmpty(userId))
+                    query = query.Where(x => x.ApplicationUserId == userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest));
@@ -218,7 +226,9 @@ namespace BackEnd.Services.BusinessServices
                     .OrderByDescending(x => x.Id);
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.AgencyId == agencyId);
+                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                if (!string.IsNullOrEmpty(userId))
+                    query = query.Where(x => x.ApplicationUserId == userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -346,6 +356,9 @@ namespace BackEnd.Services.BusinessServices
                     throw new NullReferenceException("Record non trovato!");
 
                 EntityClass = _mapper.Map(dto, EntityClass);
+                
+                // Aggiorna sempre UpdateDate in UTC quando si modifica un'entità
+                EntityClass.UpdateDate = DateTime.UtcNow;
 
                 _unitOfWork.RequestRepository.Update(EntityClass);
                 await _unitOfWork.SaveAsync();

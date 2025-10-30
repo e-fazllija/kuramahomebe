@@ -42,7 +42,30 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // Converti tutte le DateTime del DTO a UTC prima del mapping
+                // Questo è necessario perché PostgreSQL richiede DateTime con Kind=UTC
+                if (dto.AssignmentEnd.Kind == DateTimeKind.Unspecified)
+                {
+                    dto.AssignmentEnd = DateTime.SpecifyKind(dto.AssignmentEnd, DateTimeKind.Utc);
+                }
+                else if (dto.AssignmentEnd.Kind == DateTimeKind.Local)
+                {
+                    dto.AssignmentEnd = dto.AssignmentEnd.ToUniversalTime();
+                }
+                
+                // Verifica che AssignmentEnd sia valida, altrimenti imposta default
+                if (dto.AssignmentEnd == default(DateTime) || dto.AssignmentEnd == DateTime.MinValue)
+                {
+                    dto.AssignmentEnd = DateTime.UtcNow.AddYears(1);
+                }
+                
                 var entityClass = _mapper.Map<RealEstateProperty>(dto);
+                
+                // Imposta sempre CreationDate e UpdateDate in UTC quando si crea una nuova entità
+                var now = DateTime.UtcNow;
+                entityClass.CreationDate = now;
+                entityClass.UpdateDate = now;
+                
                 var propertyAdded = await _unitOfWork.RealEstatePropertyRepository.InsertAsync(entityClass);
                 _unitOfWork.Save();
 
@@ -54,8 +77,16 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                throw new Exception("Si è verificato un errore in fase creazione");
+                _logger.LogError(ex, $"Errore nella creazione dell'immobile nel servizio: {ex.Message}");
+                
+                // Log dell'inner exception se presente (per DbUpdateException)
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError($"Inner Exception: {ex.InnerException.Message}");
+                }
+                
+                // Propaga l'eccezione originale invece di crearne una nuova
+                throw;
             }
         }
 
@@ -69,12 +100,15 @@ namespace BackEnd.Services.BusinessServices
                     string fileName = $"RealEstatePropertyPhotos/{dto.PropertyId}/{file.FileName.Replace(" ", "-")}";
                     string fileUrl = await _storageServices.UploadFile(stream, fileName);
 
+                    var now = DateTime.UtcNow;
                     RealEstatePropertyPhoto photo = new RealEstatePropertyPhoto()
                     {
                         RealEstatePropertyId = dto.PropertyId,
                         FileName = fileName,
                         Url = fileUrl,
-                        Type = 1
+                        Type = 1,
+                        CreationDate = now,
+                        UpdateDate = now
                     };
 
                     await _unitOfWork.RealEstatePropertyPhotoRepository.InsertAsync(photo);
@@ -436,7 +470,7 @@ namespace BackEnd.Services.BusinessServices
                     usersList = usersList.Where(x => x.AgencyId == agencyId).ToList();
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    customerQuery = customerQuery.Where(x => x.AgencyId == agencyId);
+                    customerQuery = customerQuery.Where(x => x.ApplicationUserId == agencyId);
 
                 List<ApplicationUser> users = usersList.ToList();
 
@@ -536,7 +570,20 @@ namespace BackEnd.Services.BusinessServices
                 if (EntityClass == null)
                     throw new NullReferenceException("Record non trovato!");
 
+                // Converti AssignmentEnd a UTC se necessario (prima del mapping)
+                if (dto.AssignmentEnd.Kind == DateTimeKind.Unspecified)
+                {
+                    dto.AssignmentEnd = DateTime.SpecifyKind(dto.AssignmentEnd, DateTimeKind.Utc);
+                }
+                else if (dto.AssignmentEnd.Kind == DateTimeKind.Local)
+                {
+                    dto.AssignmentEnd = dto.AssignmentEnd.ToUniversalTime();
+                }
+
                 EntityClass = _mapper.Map(dto, EntityClass);
+                
+                // Aggiorna sempre UpdateDate in UTC quando si modifica un'entità
+                EntityClass.UpdateDate = DateTime.UtcNow;
 
                 _unitOfWork.RealEstatePropertyRepository.Update(EntityClass);
                 await _unitOfWork.SaveAsync();

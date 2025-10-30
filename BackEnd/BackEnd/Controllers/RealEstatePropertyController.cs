@@ -6,6 +6,10 @@ using BackEnd.Models.RealEstatePropertyModels;
 using BackEnd.Models.RealEstatePropertyPhotoModels;
 using BackEnd.Models.CalendarModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using BackEnd.Entities;
+using System.Security.Claims;
+using BackEnd.Models.SubscriptionLimitModels;
 
 namespace BackEnd.Controllers
 {
@@ -18,32 +22,73 @@ namespace BackEnd.Controllers
         private readonly IRealEstatePropertyServices _realEstatePropertyServices;
         private readonly IRealEstatePropertyPhotoServices _realEstatePropertyPhotoServices;
         private readonly ILogger<RealEstatePropertyController> _logger;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public RealEstatePropertyController(
            IConfiguration configuration,
            IRealEstatePropertyServices realEstatePropertyServices,
            IRealEstatePropertyPhotoServices realEstatePropertyPhotoServices,
-            ILogger<RealEstatePropertyController> logger)
+            ILogger<RealEstatePropertyController> logger,
+            ISubscriptionLimitService subscriptionLimitService,
+            UserManager<ApplicationUser> userManager)
         {
             _configuration = configuration;
             _realEstatePropertyServices = realEstatePropertyServices;
             _realEstatePropertyPhotoServices = realEstatePropertyPhotoServices;
             _logger = logger;
+            _subscriptionLimitService = subscriptionLimitService;
+            _userManager = userManager;
         }
 
         [HttpPost]
         [Route(nameof(Create))]
-        public async Task<IActionResult> Create(RealEstatePropertyCreateModel request)
+        public async Task<IActionResult> Create([FromForm] RealEstatePropertyCreateModel request)
         {
             try
             {
+                // Verifica limite subscription PRIMA di creare
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await _userManager.FindByIdAsync(userId);
+                if (currentUser == null)
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Utente non trovato" });
+
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_properties", currentUser.AgencyId);
+                
+                if (!limitCheck.CanProceed)
+                {
+                    // Limite raggiunto - ritorna 429 con dettagli
+                    return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+                }
+
+                        // Log per debug: verifica che AssignmentEnd sia valida (la conversione a UTC è gestita nel servizio)
+                        _logger.LogInformation($"AssignmentEnd ricevuta: {request.AssignmentEnd}, Kind: {request.AssignmentEnd.Kind}");
+
                 RealEstatePropertySelectModel Result = await _realEstatePropertyServices.Create(request);
                 return Ok(Result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+                _logger.LogError(ex, $"Errore nella creazione dell'immobile: {ex.Message}");
+                
+                // Log dell'inner exception se presente (per DbUpdateException)
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError($"Inner Exception: {ex.InnerException.Message}");
+                    if (ex.InnerException.StackTrace != null)
+                    {
+                        _logger.LogError($"Stack Trace: {ex.InnerException.StackTrace}");
+                    }
+                }
+                
+                // Messaggio dettagliato per il client
+                string errorMessage = ex.Message;
+                if (ex.InnerException != null)
+                {
+                    errorMessage += $" Dettagli: {ex.InnerException.Message}";
+                }
+                
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = errorMessage });
             }
         }
 

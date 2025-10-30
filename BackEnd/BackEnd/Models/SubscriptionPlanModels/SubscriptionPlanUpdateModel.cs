@@ -22,9 +22,6 @@ namespace BackEnd.Models.SubscriptionPlanModels
         [MaxLength(20, ErrorMessage = "Il periodo di fatturazione non può superare i 20 caratteri")]
         public string BillingPeriod { get; set; } = "monthly";
 
-        public int? MaxUsers { get; set; }
-        public int? MaxProperties { get; set; }
-
         public bool Active { get; set; } = true;
     }
 }

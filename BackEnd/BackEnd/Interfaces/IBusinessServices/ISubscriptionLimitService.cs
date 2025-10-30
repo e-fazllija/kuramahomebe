@@ -1,0 +1,31 @@
+using BackEnd.Models.SubscriptionLimitModels;
+
+namespace BackEnd.Interfaces.IBusinessServices
+{
+    /// <summary>
+    /// Interfaccia per il servizio di verifica limiti delle subscription
+    /// </summary>
+    public interface ISubscriptionLimitService
+    {
+        /// <summary>
+        /// Verifica se l'utente può procedere con la creazione dell'entità specificata
+        /// </summary>
+        /// <param name="userId">ID dell'utente che sta creando</param>
+        /// <param name="featureName">Nome della feature da verificare (es: "max_agencies", "max_properties")</param>
+        /// <param name="agencyId">ID dell'agenzia (opzionale, per risalita gerarchica)</param>
+        /// <returns>Status del limite con informazioni dettagliate</returns>
+        Task<SubscriptionLimitStatusResponse> CheckFeatureLimitAsync(string userId, string featureName, string? agencyId = null);
+
+        /// <summary>
+        /// Recupera tutti i limiti dello stato per l'utente specificato
+        /// </summary>
+        /// <param name="userId">ID dell'utente</param>
+        /// <param name="agencyId">ID dell'agenzia (opzionale)</param>
+        /// <returns>Dictionary con tutti i limiti (chiave = featureName)</returns>
+        Task<Dictionary<string, SubscriptionLimitStatusResponse>> GetAllLimitsAsync(string userId, string? agencyId = null);
+    }
+}
+
+
+
+

@@ -16,9 +16,6 @@ namespace BackEnd.Entities
         [Required, MaxLength(20)]
         public string BillingPeriod { get; set; } = "monthly"; // 'monthly' | 'yearly'
 
-        public int? MaxUsers { get; set; }
-        public int? MaxProperties { get; set; }
-
         public bool Active { get; set; } = true;
 
         // Navigation
