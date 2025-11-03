@@ -93,6 +93,17 @@ namespace BackEnd.Services.BusinessServices
             return await _unitOfWork.UserSubscriptionRepository.HasActiveSubscriptionAsync(userId);
         }
 
+        public async Task<bool> HasPremiumPlanAsync(string userId)
+        {
+            var activeSubscription = await _unitOfWork.UserSubscriptionRepository.GetActiveUserSubscriptionAsync(userId, null);
+            if (activeSubscription == null) return false;
+            
+            var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+            var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
+            
+            return planName == "premium" && status == "active";
+        }
+
         public async Task<UserSubscriptionSelectModel?> GetByStripeSubscriptionIdAsync(string stripeSubscriptionId)
         {
             var entity = await _unitOfWork.UserSubscriptionRepository.GetByStripeSubscriptionIdAsync(stripeSubscriptionId);

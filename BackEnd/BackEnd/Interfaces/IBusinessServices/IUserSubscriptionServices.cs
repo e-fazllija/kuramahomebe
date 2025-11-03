@@ -13,6 +13,7 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<bool> CancelSubscriptionAsync(int id);
         Task<bool> RenewSubscriptionAsync(int id);
         Task<bool> HasActiveSubscriptionAsync(string userId);
+        Task<bool> HasPremiumPlanAsync(string userId);
         Task<UserSubscriptionSelectModel?> GetByStripeSubscriptionIdAsync(string stripeSubscriptionId);
         Task<IEnumerable<UserSubscriptionSelectModel>> GetExpiredSubscriptionsAsync();
         Task<bool> CheckSubscriptionLimitsAsync(string userId, int planId);

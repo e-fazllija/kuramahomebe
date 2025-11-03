@@ -428,8 +428,16 @@ namespace BackEnd.Controllers
                                 var daysInMonth = 30;
                                 var creditDays = 0;
 
-                                // Calcola credito solo se l'abbonamento NON è scaduto
-                                if (!isExpired && oldPlanPrice > 0)
+                                // Verifica se è un upgrade (newPlanPrice > oldPlanPrice) o downgrade
+                                bool isUpgrade = newPlanPrice > oldPlanPrice;
+                                bool isDowngrade = oldPlanPrice > newPlanPrice;
+
+                                // Calcola credito solo per gli UPGRADE (non per i downgrade - nessun rimborso)
+                                // TODO: Il codice del rimborso è stato commentato - può essere riattivato in futuro se necessario
+                                // Quando si fa downgrade, non viene calcolato nessun credito/rimborso
+                                // L'utente ottiene solo il periodo standard del nuovo piano pagato
+                                /*
+                                if (!isExpired && oldPlanPrice > 0 && isUpgrade) // Solo per upgrade, non per downgrade
                                 {
                                     var daysRemaining = (int)(activeSubscription.EndDate.Value - today).TotalDays;
                                     if (daysRemaining > 0)
@@ -439,6 +447,23 @@ namespace BackEnd.Controllers
                                         creditDays = (int)(creditAmount / (newPlanPrice / daysInMonth));
                                     }
                                 }
+                                */
+
+                                // Sezione rimborso per downgrade - COMMENTATA (non viene applicato rimborso)
+                                // Quando si fa downgrade, l'utente perde i giorni rimanenti senza rimborso
+                                // Il nuovo abbonamento parte da oggi con durata standard del piano inferiore
+                                /*
+                                if (!isExpired && oldPlanPrice > 0 && isDowngrade)
+                                {
+                                    var daysRemaining = (int)(activeSubscription.EndDate.Value - today).TotalDays;
+                                    if (daysRemaining > 0)
+                                    {
+                                        // Calcola il credito in giorni del nuovo piano (rimborso convertito in giorni)
+                                        var creditAmount = (oldPlanPrice / daysInMonth) * daysRemaining;
+                                        creditDays = (int)(creditAmount / (newPlanPrice / daysInMonth));
+                                    }
+                                }
+                                */
 
                                 // Cancella il vecchio abbonamento
                                 await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
@@ -446,6 +471,8 @@ namespace BackEnd.Controllers
                                 // Crea nuovo abbonamento
                                 var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
                                 var baseEndDate = today.AddMonths(newMonths);
+                                // Per downgrade: creditDays = 0 (nessun rimborso/giorni extra)
+                                // Per upgrade: creditDays = 0 (commentato - può essere riattivato)
                                 var finalEndDate = baseEndDate.AddDays(creditDays);
 
                                 var subscriptionModel = new UserSubscriptionCreateModel
@@ -463,11 +490,21 @@ namespace BackEnd.Controllers
                                 
                                 if (isExpired)
                                 {
-                                    _logger.LogInformation($"Upgrade completato (abbonamento scaduto) per {user.Email}. Piano: {subscriptionPlan.Name}, Data decorrenza: {today}, Scadenza: {finalEndDate}");
+                                    _logger.LogInformation($"Cambio piano completato (abbonamento scaduto) per {user.Email}. Piano: {subscriptionPlan.Name}, Data decorrenza: {today}, Scadenza: {finalEndDate}");
+                                }
+                                else if (isUpgrade)
+                                {
+                                    // Upgrade: credito commentato per ora (può essere riattivato)
+                                    _logger.LogInformation($"Upgrade completato per {user.Email}. Piano: {subscriptionPlan.Name}, Scadenza: {finalEndDate}");
+                                }
+                                else if (isDowngrade)
+                                {
+                                    // Downgrade: nessun rimborso/credito applicato
+                                    _logger.LogInformation($"Downgrade completato per {user.Email}. Piano: {subscriptionPlan.Name} (nessun rimborso applicato), Scadenza: {finalEndDate}");
                                 }
                                 else
                                 {
-                                    _logger.LogInformation($"Upgrade completato per {user.Email}. Piano: {subscriptionPlan.Name}, Credito: {creditDays} giorni, Scadenza: {finalEndDate}");
+                                    _logger.LogInformation($"Cambio piano completato per {user.Email}. Piano: {subscriptionPlan.Name}, Scadenza: {finalEndDate}");
                                 }
                             }
                         }

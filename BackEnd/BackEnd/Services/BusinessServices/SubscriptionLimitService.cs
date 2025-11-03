@@ -12,15 +12,18 @@ namespace BackEnd.Services.BusinessServices
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IUserSubscriptionServices _userSubscriptionServices;
+        private readonly ISubscriptionPlanServices _subscriptionPlanServices;
         private readonly UserManager<Entities.ApplicationUser> _userManager;
 
         public SubscriptionLimitService(
             IUnitOfWork unitOfWork,
             IUserSubscriptionServices userSubscriptionServices,
+            ISubscriptionPlanServices subscriptionPlanServices,
             UserManager<Entities.ApplicationUser> userManager)
         {
             _unitOfWork = unitOfWork;
             _userSubscriptionServices = userSubscriptionServices;
+            _subscriptionPlanServices = subscriptionPlanServices;
             _userManager = userManager;
         }
 
@@ -332,6 +335,102 @@ namespace BackEnd.Services.BusinessServices
                     _ => "entità"
                 }
             };
+        }
+
+        /// <summary>
+        /// Verifica se il downgrade al piano specificato è possibile confrontando limiti vs utilizzo attuale
+        /// </summary>
+        public async Task<DowngradeCompatibilityResponse> CheckDowngradeCompatibilityAsync(
+            string userId,
+            int targetPlanId,
+            string? agencyId = null)
+        {
+            var response = new DowngradeCompatibilityResponse
+            {
+                TargetPlanId = targetPlanId,
+                CanDowngrade = true,
+                ExceededLimitsCount = 0,
+                Features = new List<FeatureCompatibilityItem>()
+            };
+
+            // Recupera il piano di destinazione
+            var targetPlan = await _subscriptionPlanServices.GetPlanWithFeaturesAsync(targetPlanId);
+            if (targetPlan == null)
+            {
+                response.Message = "Piano di destinazione non trovato";
+                response.CanDowngrade = false;
+                return response;
+            }
+
+            response.TargetPlanName = targetPlan.Name;
+
+            // Se il piano non ha features, il downgrade è sempre possibile
+            if (targetPlan.Features == null || !targetPlan.Features.Any())
+            {
+                response.Message = "Il piano di destinazione non ha limiti configurati";
+                return response;
+            }
+
+            // Recupera l'abbonamento attuale per identificare l'Admin root (subscriptionOwnerId)
+            var currentSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, agencyId);
+            string subscriptionOwnerId = userId; // Default all'utente stesso
+            if (currentSubscription != null)
+            {
+                subscriptionOwnerId = currentSubscription.UserId;
+            }
+
+            // Per ogni feature del piano di destinazione, verifica l'utilizzo attuale
+            foreach (var feature in targetPlan.Features)
+            {
+                var featureItem = new FeatureCompatibilityItem
+                {
+                    FeatureName = feature.FeatureName,
+                    FeatureDisplayName = GetEntityDisplayName(feature.FeatureName)
+                };
+
+                // Parsa il limite del nuovo piano
+                int? newLimit = ParseLimit(feature.FeatureValue);
+                featureItem.NewPlanLimit = newLimit;
+
+                // Conta l'utilizzo corrente nella gerarchia dell'Admin root
+                int currentUsage = await CountEntitiesInHierarchyAsync(feature.FeatureName, subscriptionOwnerId);
+                featureItem.CurrentUsage = currentUsage;
+
+                // Verifica se il limite viene superato
+                if (newLimit.HasValue && currentUsage > newLimit.Value)
+                {
+                    featureItem.IsExceeded = true;
+                    featureItem.Message = $"Limite: {newLimit.Value} {featureItem.FeatureDisplayName}, Utilizzo attuale: {currentUsage} (superato di {currentUsage - newLimit.Value})";
+                    response.ExceededLimitsCount++;
+                    response.CanDowngrade = false;
+                }
+                else if (newLimit.HasValue)
+                {
+                    featureItem.IsExceeded = false;
+                    int remaining = newLimit.Value - currentUsage;
+                    featureItem.Message = $"Limite: {newLimit.Value} {featureItem.FeatureDisplayName}, Utilizzo attuale: {currentUsage}, Rimanenti: {remaining}";
+                }
+                else
+                {
+                    // Unlimited
+                    featureItem.IsExceeded = false;
+                    featureItem.Message = $"Illimitato - Utilizzo attuale: {currentUsage} {featureItem.FeatureDisplayName}";
+                }
+
+                response.Features.Add(featureItem);
+            }
+
+            // Genera messaggio generale
+            if (response.CanDowngrade)
+            {
+                response.Message = $"Il downgrade al piano {response.TargetPlanName} è possibile. Tutti i limiti sono rispettati.";
+            }
+            else
+            {
+                response.Message = $"Il downgrade al piano {response.TargetPlanName} non è possibile. Hai {response.ExceededLimitsCount} limite/i superato/i. Elimina alcune risorse prima di procedere.";
+            }
+
+            return response;
         }
     }
 }

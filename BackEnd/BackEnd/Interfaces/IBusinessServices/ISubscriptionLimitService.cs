@@ -23,6 +23,15 @@ namespace BackEnd.Interfaces.IBusinessServices
         /// <param name="agencyId">ID dell'agenzia (opzionale)</param>
         /// <returns>Dictionary con tutti i limiti (chiave = featureName)</returns>
         Task<Dictionary<string, SubscriptionLimitStatusResponse>> GetAllLimitsAsync(string userId, string? agencyId = null);
+
+        /// <summary>
+        /// Verifica se il downgrade al piano specificato è possibile confrontando limiti vs utilizzo attuale
+        /// </summary>
+        /// <param name="userId">ID dell'utente</param>
+        /// <param name="targetPlanId">ID del piano di destinazione</param>
+        /// <param name="agencyId">ID dell'agenzia (opzionale)</param>
+        /// <returns>Response con compatibilità e dettagli delle features</returns>
+        Task<DowngradeCompatibilityResponse> CheckDowngradeCompatibilityAsync(string userId, int targetPlanId, string? agencyId = null);
     }
 }
 

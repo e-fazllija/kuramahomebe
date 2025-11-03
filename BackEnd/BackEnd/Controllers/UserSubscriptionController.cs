@@ -10,7 +10,7 @@ namespace BackEnd.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public class UserSubscriptionController : ControllerBase
     {
         private readonly IUserSubscriptionServices _userSubscriptionServices;

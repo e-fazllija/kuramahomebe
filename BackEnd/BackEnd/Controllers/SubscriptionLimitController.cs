@@ -82,6 +82,38 @@ namespace BackEnd.Controllers
                 return StatusCode(500, $"Errore interno del server: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Verifica se il downgrade al piano specificato è possibile
+        /// </summary>
+        /// <param name="planId">ID del piano di destinazione</param>
+        /// <returns>Response con compatibilità e dettagli delle features</returns>
+        [HttpGet("check-downgrade")]
+        public async Task<ActionResult<DowngradeCompatibilityResponse>> CheckDowngradeCompatibility(
+            [FromQuery] int planId)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Utente non autorizzato");
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return NotFound("Utente non trovato");
+
+                var result = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
+                    userId,
+                    planId,
+                    user.AgencyId);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Errore interno del server: {ex.Message}");
+            }
+        }
     }
 }
 
