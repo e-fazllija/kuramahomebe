@@ -32,5 +32,7 @@ namespace BackEnd.Models.CustomerModels
         public ICollection<CustomerNotes>? CustomerNotes { get; set; }
         public string UserId { get; set; } = string.Empty;
         public ApplicationUser? User { get; set; }
+        public string AdminId { get; set; } = string.Empty;
+
     }
 }

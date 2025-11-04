@@ -37,5 +37,8 @@ namespace BackEnd.Entities
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
         public string? UserId { get; set; }
         public virtual ApplicationUser? User { get; set; }
+        [Required(ErrorMessage = "L'AdminId è obbligatorio")]
+        [MaxLength(450, ErrorMessage = "L'AdminId non può superare i 450 caratteri")]
+        public string AdminId { get; set; } = string.Empty;
     }
 }

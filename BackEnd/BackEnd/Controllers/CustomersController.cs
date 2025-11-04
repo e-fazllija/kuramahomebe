@@ -55,6 +55,8 @@ namespace BackEnd.Controllers
                 }
                 // ownership
                 request.UserId = userId;
+                // Assegna AdminId dall'utente corrente
+                request.AdminId = currentUser?.AdminId ?? userId;
                 CustomerSelectModel Result = await _customerServices.Create(request);
                 return Ok();
             }
@@ -71,6 +73,7 @@ namespace BackEnd.Controllers
             try
             {
                 var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await _userManager.FindByIdAsync(currentUserId);
                 
                 // Recupera il cliente esistente
                 var customer = await _customerServices.GetById(request.Id);
@@ -82,6 +85,9 @@ namespace BackEnd.Controllers
                 
                 if (!canModify)
                     return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo cliente" });
+                
+                // Assegna AdminId dall'utente corrente (mantieni quello esistente se non è un admin)
+                request.AdminId = currentUser?.AdminId ?? customer.AdminId ?? currentUserId;
                 
                 CustomerSelectModel Result = await _customerServices.Update(request);
 

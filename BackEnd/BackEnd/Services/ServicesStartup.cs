@@ -31,8 +31,6 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ISubscriptionLimitService, SubscriptionLimitService>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
 
-            builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
-            builder.Services.AddTransient<CityServices, CityServices>();
             
             // Access Control Service
             builder.Services.AddScoped<AccessControlService>();
