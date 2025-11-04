@@ -105,24 +105,6 @@ namespace BackEnd.Services
                 .HasIndex(u => u.CreationDate)
                 .HasDatabaseName("IX_ApplicationUser_CreationDate");
 
-            // Location - Indice unique per evitare duplicati
-            builder.Entity<Location>()
-                .HasIndex(l => new { l.Name, l.CityId })
-                .IsUnique()
-                .HasDatabaseName("IX_Location_Name_CityId");
-
-            // City - Indice unique per evitare duplicati
-            builder.Entity<City>()
-                .HasIndex(c => new { c.Name, c.ProvinceId })
-                .IsUnique()
-                .HasDatabaseName("IX_City_Name_ProvinceId");
-
-            // Province - Indice unique sul nome
-            builder.Entity<Province>()
-                .HasIndex(p => p.Name)
-                .IsUnique()
-                .HasDatabaseName("IX_Province_Name");
-
             // ==================== SUBSCRIPTION SYSTEM ====================
 
             // UserSubscription relationships

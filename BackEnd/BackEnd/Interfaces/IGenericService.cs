@@ -1,5 +1,4 @@
 ﻿using BackEnd.Models.OutputModels;
-using BackEnd.Models.LocationModels;
 
 namespace BackEnd.Interfaces
 {

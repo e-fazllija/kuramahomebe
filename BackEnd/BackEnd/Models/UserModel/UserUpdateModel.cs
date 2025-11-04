@@ -25,7 +25,7 @@ namespace BackEnd.Models.UserModel
         public string? ZipCode { get; set; }
         public string? Province { get; set; }
         public string Color { get; set; } = "#ffffff";
-        public string AgencyId { get; set; }
+        public string AdminId { get; set; }
         public bool EmailConfirmed { get; set; }
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
 
