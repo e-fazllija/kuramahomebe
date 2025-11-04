@@ -100,6 +100,15 @@ namespace BackEnd.Controllers
             {
                 var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 
+                // Verifica che l'utente possa modificare questo evento
+                var existingEvent = await _calendarServices.GetById(request.Id);
+                if (existingEvent == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Evento non trovato" });
+                
+                bool canModify = await _accessControl.CanModifyEntity(currentUserId, existingEvent.UserId);
+                if (!canModify)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo evento" });
+                
                 // Valida che le entità associate siano nella cerchia dell'utente
                 if (request.CustomerId.HasValue)
                 {
@@ -134,7 +143,7 @@ namespace BackEnd.Controllers
                         return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
                 }
                 
-               CalendarSelectModel Result = await _calendarServices.Update(request);
+                CalendarSelectModel Result = await _calendarServices.Update(request);
 
                 return Ok();
             }
@@ -147,11 +156,13 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get(string? agencyId, string? agentId)
+        public async Task<IActionResult> Get()
         {
             try
             {
-                ListViewModel<CalendarSelectModel> res = await _calendarServices.Get(agencyId, agentId, null, null);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                ListViewModel<CalendarSelectModel> res = await _calendarServices.Get(userId, null, null);
 
                 return Ok(res);
             }
@@ -164,11 +175,13 @@ namespace BackEnd.Controllers
         
         [HttpGet]
         [Route(nameof(GetToInsert))]
-        public async Task<IActionResult> GetToInsert(string agencyId)
+        public async Task<IActionResult> GetToInsert()
         {
             try
             {
-                CalendarCreateViewModel res = await _calendarServices.GetToInsert(agencyId);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                CalendarCreateViewModel res = await _calendarServices.GetToInsert(userId);
 
                 return Ok(res);
             }
@@ -202,8 +215,18 @@ namespace BackEnd.Controllers
         {
             try
             {
-                CalendarSelectModel result = new CalendarSelectModel();
-                result = await _calendarServices.GetById(id);
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                CalendarSelectModel result = await _calendarServices.GetById(id);
+                
+                if (result == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Evento non trovato" });
+                
+                // Verifica che l'utente possa accedere a questo evento (deve essere nella cerchia)
+                bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
+                
+                if (!canAccess)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questo evento" });
 
                 return Ok(result);
             }
@@ -219,6 +242,18 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera l'evento esistente
+                var existingEvent = await _calendarServices.GetById(id);
+                if (existingEvent == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Evento non trovato" });
+                
+                // Verifica permessi di eliminazione
+                bool canDelete = await _accessControl.CanModifyEntity(currentUserId, existingEvent.UserId);
+                if (!canDelete)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questo evento" });
+                
                 Calendar result = await _calendarServices.Delete(id);
                 return Ok();
             }

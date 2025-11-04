@@ -22,13 +22,16 @@ namespace BackEnd.Services.BusinessServices
         private readonly ILogger<CalendarServices> _logger;
         private readonly UserManager<ApplicationUser> userManager;
         private readonly RoleManager<IdentityRole> roleManager;
-        public CalendarServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CalendarServices> logger, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)
+        private readonly AccessControlService _accessControl;
+        
+        public CalendarServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CalendarServices> logger, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, AccessControlService accessControl)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.userManager = userManager;
             this.roleManager = roleManager;
+            _accessControl = accessControl;
         }
 
         public async Task<CalendarSelectModel> Create(CalendarCreateModel dto)
@@ -167,7 +170,7 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<CalendarSelectModel>> Get(string? agencyId, string? agentId, char? fromName, char? toName)
+        public async Task<ListViewModel<CalendarSelectModel>> Get(string? userId, char? fromName, char? toName)
         {
             try
             {
@@ -176,15 +179,11 @@ namespace BackEnd.Services.BusinessServices
                     .Include(x => x.User)
                     .OrderByDescending(x => x.EventStartDate);
                 
-                // Filtra per UserId (agente) se specificato
-                if(!string.IsNullOrEmpty(agentId))
+                // Filtra per cerchia usando AccessControlService
+                if (!string.IsNullOrEmpty(userId))
                 {
-                    query = query.Where(x => x.UserId == agentId);
-                }
-                // Altrimenti, se è specificato agencyId, filtra per tutti gli agenti di quell'agenzia
-                else if (!string.IsNullOrEmpty(agencyId))
-                {
-                    query = query.Where(x => x.User.AdminId == agencyId);
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
                 }
 
                 if (fromName != null)
@@ -222,13 +221,25 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<CalendarCreateViewModel> GetToInsert(string agencyId)
+        public async Task<CalendarCreateViewModel> GetToInsert(string userId)
         {
             try
             {
-                List<Customer> customers = await _unitOfWork.dbContext.Customers.Where(x => x.UserId == agencyId).ToListAsync();
-                List<RealEstateProperty> properties = await _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId).ToListAsync();
-                List<Request> requests = await _unitOfWork.dbContext.Requests.Where(x => x.UserId == agencyId).ToListAsync();
+                // Usa AccessControlService per ottenere la cerchia
+                var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                
+                // Recupera solo entità della cerchia
+                List<Customer> customers = await _unitOfWork.dbContext.Customers
+                    .Where(x => circleUserIds.Contains(x.UserId))
+                    .ToListAsync();
+                    
+                List<RealEstateProperty> properties = await _unitOfWork.dbContext.RealEstateProperties
+                    .Where(x => circleUserIds.Contains(x.UserId))
+                    .ToListAsync();
+                    
+                List<Request> requests = await _unitOfWork.dbContext.Requests
+                    .Where(x => circleUserIds.Contains(x.UserId))
+                    .ToListAsync();
 
                 CalendarCreateViewModel result = new CalendarCreateViewModel();
                 result.Customers = _mapper.Map<List<CustomerSelectModel>>(customers);
@@ -253,18 +264,37 @@ namespace BackEnd.Services.BusinessServices
                 ApplicationUser user = await userManager.FindByIdAsync(userId);
                 List<UserSelectModel> agencies = new List<UserSelectModel>();
                 List<UserSelectModel> agents = new List<UserSelectModel>();
+                
                 if(await userManager.IsInRoleAsync(user, "Admin"))
                 {
-                    // Admin vede solo le proprie Agency (dove AgencyId == userId)
+                    // Admin vede solo le proprie Agency (dove AdminId == userId)
                     var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
                     agenciesList = agenciesList.Where(x => x.AdminId == userId).ToList();
                     agencies = _mapper.Map<List<UserSelectModel>>(agenciesList);
+                    
+                    // Admin vede anche gli agenti
+                    var agentsList = await userManager.GetUsersInRoleAsync("Agent");
+                    if (!string.IsNullOrEmpty(agencyId))
+                    {
+                        // Se è selezionata un'agency, mostra solo gli agenti di quella agency
+                        agentsList = agentsList.Where(x => x.AdminId == agencyId).ToList();
+                    }
+                    else
+                    {
+                        // Altrimenti mostra tutti gli agenti della cerchia (propri + delle agency)
+                        var myAgencyIds = agenciesList.Select(x => x.Id).ToList();
+                        agentsList = agentsList.Where(x => 
+                            x.AdminId == userId || // Agenti diretti dell'Admin
+                            myAgencyIds.Contains(x.AdminId) // Agenti delle Agency dell'Admin
+                        ).ToList();
+                    }
+                    agents = _mapper.Map<List<UserSelectModel>>(agentsList);
                 }
 
                 if(await userManager.IsInRoleAsync(user, "Agency"))
                 {
                     var agentsList = await userManager.GetUsersInRoleAsync("Agent");
-                    agentsList = agentsList.Where(x => x.AdminId == (agencyId ?? userId)).ToList();
+                    agentsList = agentsList.Where(x => x.AdminId == userId).ToList();
                     agents = _mapper.Map<List<UserSelectModel>>(agentsList);
                 }
 
