@@ -1,5 +1,4 @@
 ﻿using BackEnd.Models.OutputModels;
-using BackEnd.Models.LocationModels;
 
 namespace BackEnd.Interfaces
 {
@@ -7,6 +6,5 @@ namespace BackEnd.Interfaces
     {
         Task<HomeDetailsModel> GetHomeDetails();
         Task<AdminHomeDetailsModel> GetAdminHomeDetails(string? agencyId);
-        Task<List<LocationSelectModel>> GetLocations();
     }
 }
