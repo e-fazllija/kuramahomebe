@@ -55,9 +55,25 @@ namespace BackEnd.Controllers
         {
             try
             {
-                ApplicationUser user = await userManager.FindByIdAsync(request.Id) ?? throw new NullReferenceException("Agente non trovato");
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await userManager.FindByIdAsync(userId);
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                
+                // Solo Admin può aggiornare le agenzie
+                if (!currentUserRoles.Contains("Admin"))
+                {
+                    return StatusCode(403, "Accesso negato: solo gli admin possono modificare le agenzie");
+                }
+                
+                ApplicationUser user = await userManager.FindByIdAsync(request.Id) ?? throw new NullReferenceException("Agenzia non trovata");
+                
+                // Admin può aggiornare solo le proprie Agency
+                if (user.AgencyId != userId)
+                {
+                    return StatusCode(403, "Accesso negato: puoi modificare solo le tue agenzie");
+                }
+                
                 _mapper.Map(request, user);
-
                 IdentityResult Result = await userManager.UpdateAsync(user);
 
                 if (Result.Succeeded)
@@ -223,38 +239,34 @@ namespace BackEnd.Controllers
         }
 
         [HttpGet]
-        [Route(nameof(GetMain))]
-        public async Task<IActionResult> GetMain()
-        {
-            try
-            {
-                //currentPage = currentPage > 0 ? currentPage : 1;
-                var usersList = await userManager.GetUsersInRoleAsync("Agency");
-
-                List<ApplicationUser> users = usersList.Where(x => x.EmailConfirmed).ToList();
-                ListViewModel<UserSelectModel> result = new ListViewModel<UserSelectModel>();
-
-                result.Total = users.Count();
-                result.Data = _mapper.Map<List<UserSelectModel>>(users);
-
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-            }
-        }
-
-        [HttpGet]
         [Route(nameof(GetById))]
         public async Task<IActionResult> GetById(string id)
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await userManager.FindByIdAsync(userId);
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                
+                // Agency e Agent non possono vedere le agenzie
+                if (currentUserRoles.Contains("Agency") || currentUserRoles.Contains("Agent"))
+                {
+                    return StatusCode(403, "Accesso negato");
+                }
+                
                 var user = await userManager.FindByIdAsync(id);
+                if (user == null)
+                {
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Agenzia non trovata" });
+                }
+                
+                // Admin può vedere solo le proprie Agency
+                if (currentUserRoles.Contains("Admin") && user.AgencyId != userId)
+                {
+                    return StatusCode(403, "Accesso negato: puoi visualizzare solo le tue agenzie");
+                }
+                
                 UserSelectModel result = _mapper.Map<UserSelectModel>(user);
-
                 return Ok(result);
             }
             catch (Exception ex)
@@ -270,17 +282,30 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await userManager.FindByIdAsync(userId);
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                
+                // Solo Admin può eliminare le agenzie
+                if (!currentUserRoles.Contains("Admin"))
+                {
+                    return StatusCode(403, "Accesso negato: solo gli admin possono eliminare le agenzie");
+                }
+                
                 ApplicationUser? user = await userManager.FindByIdAsync(id);
-                if (user != null)
+                if (user == null)
                 {
-                    await userManager.DeleteAsync(user);
-                    return Ok();
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Agenzia non trovata" });
                 }
-                else
+                
+                // Admin può eliminare solo le proprie Agency
+                if (user.AgencyId != userId)
                 {
-                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente non trovato" });
+                    return StatusCode(403, "Accesso negato: puoi eliminare solo le tue agenzie");
                 }
-
+                
+                await userManager.DeleteAsync(user);
+                return Ok();
             }
             catch (Exception ex)
             {

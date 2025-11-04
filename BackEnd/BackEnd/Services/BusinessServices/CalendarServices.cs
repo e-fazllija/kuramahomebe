@@ -255,7 +255,9 @@ namespace BackEnd.Services.BusinessServices
                 List<UserSelectModel> agents = new List<UserSelectModel>();
                 if(await userManager.IsInRoleAsync(user, "Admin"))
                 {
+                    // Admin vede solo le proprie Agency (dove AgencyId == userId)
                     var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
+                    agenciesList = agenciesList.Where(x => x.AgencyId == userId).ToList();
                     agencies = _mapper.Map<List<UserSelectModel>>(agenciesList);
                 }
 
