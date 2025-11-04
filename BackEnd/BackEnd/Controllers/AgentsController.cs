@@ -184,7 +184,7 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get(int currentPage, string? agencyId, string? filterRequest)
+        public async Task<IActionResult> Get(string? adminId, string? agencyId, string? filterRequest)
         {
             try
             {

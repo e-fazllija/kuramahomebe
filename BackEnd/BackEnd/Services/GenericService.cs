@@ -14,6 +14,10 @@ using Microsoft.Extensions.Options;
 using Org.BouncyCastle.Utilities;
 using System;
 using BackEnd.Interfaces.IBusinessServices;
+using BackEnd.Models.CustomerModels;
+using BackEnd.Models.CalendarModels;
+using BackEnd.Models.UserModel;
+using BackEnd.Models.RequestModels;
 
 namespace BackEnd.Services
 {
@@ -249,6 +253,210 @@ namespace BackEnd.Services
             {
                 _logger.LogError(ex.Message);
                 throw new Exception("Si è verificato un errore nel recupero delle località");
+            }
+        }
+
+        public async Task<DashboardAggregatedDataModel> GetDashboardAggregatedData(string? agencyId, int? year)
+        {
+            try
+            {
+                var result = new DashboardAggregatedDataModel();
+                var now = DateTime.UtcNow;
+
+                // Filtro base per agenzia
+                IQueryable<RealEstateProperty> propertiesQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.RealEstateProperties 
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Agent.AgencyId == agencyId);
+
+                IQueryable<Request> requestsQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.Requests 
+                    : _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId);
+
+                IQueryable<Customer> customersQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.Customers 
+                    : _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId);
+
+                IQueryable<Calendar> calendarQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.Calendars 
+                    : _unitOfWork.dbContext.Calendars.Where(x => x.ApplicationUser.AgencyId == agencyId);
+
+                // Applica filtro anno se specificato
+                if (year.HasValue)
+                {
+                    // Specifica DateTimeKind.Utc per PostgreSQL (richiede timestamp with timezone)
+                    var startDate = new DateTime(year.Value, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    var endDate = new DateTime(year.Value, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+                    
+                    propertiesQuery = propertiesQuery.Where(x => x.CreationDate >= startDate && x.CreationDate <= endDate);
+                    requestsQuery = requestsQuery.Where(x => x.CreationDate >= startDate && x.CreationDate <= endDate);
+                    customersQuery = customersQuery.Where(x => x.CreationDate >= startDate && x.CreationDate <= endDate);
+                    calendarQuery = calendarQuery.Where(x => x.EventStartDate >= startDate && x.EventStartDate <= endDate);
+                }
+
+                // ===== RealEstatePropertyHomeDetails =====
+                result.RealEstatePropertyHomeDetails.Total = propertiesQuery.Count();
+                result.RealEstatePropertyHomeDetails.TotalSale = propertiesQuery.Where(x => x.Status == "Vendita").Count();
+                result.RealEstatePropertyHomeDetails.TotalRent = propertiesQuery.Where(x => x.Status == "Affitto").Count();
+                result.RealEstatePropertyHomeDetails.TotalLastMonth = propertiesQuery.Where(x => x.CreationDate >= now.AddMonths(-1)).Count();
+
+                var propertiesList = await propertiesQuery.ToListAsync();
+
+                foreach (var item in propertiesList.Where(x => x.Status == "Vendita"))
+                {
+                    if (!result.RealEstatePropertyHomeDetails.DistinctByCitySale.ContainsKey(item.City))
+                        result.RealEstatePropertyHomeDetails.DistinctByCitySale[item.City] = 1;
+                    else
+                        result.RealEstatePropertyHomeDetails.DistinctByCitySale[item.City]++;
+
+                    var typeKey = item.Typology ?? item.Category;
+                    if (!result.RealEstatePropertyHomeDetails.DistinctByTypeSale.ContainsKey(typeKey))
+                        result.RealEstatePropertyHomeDetails.DistinctByTypeSale[typeKey] = 1;
+                    else
+                        result.RealEstatePropertyHomeDetails.DistinctByTypeSale[typeKey]++;
+                }
+
+                foreach (var item in propertiesList.Where(x => x.Status == "Affitto"))
+                {
+                    if (!result.RealEstatePropertyHomeDetails.DistinctByCityRent.ContainsKey(item.City))
+                        result.RealEstatePropertyHomeDetails.DistinctByCityRent[item.City] = 1;
+                    else
+                        result.RealEstatePropertyHomeDetails.DistinctByCityRent[item.City]++;
+
+                    var typeKey = item.Typology ?? item.Category;
+                    if (!result.RealEstatePropertyHomeDetails.DistinctByTypeRent.ContainsKey(typeKey))
+                        result.RealEstatePropertyHomeDetails.DistinctByTypeRent[typeKey] = 1;
+                    else
+                        result.RealEstatePropertyHomeDetails.DistinctByTypeRent[typeKey]++;
+                }
+
+                result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth = propertiesList
+                    .GroupBy(obj => obj.CreationDate.Month + "/" + obj.CreationDate.Year.ToString())
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                result.RealEstatePropertyHomeDetails.MaxAnnual = result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth.Values.Any() ?
+                    result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth.Values.Max() : 0;
+
+                result.RealEstatePropertyHomeDetails.MinAnnual = result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth.Values.Any() ? 
+                    result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth.Values.Min() : 0;
+
+                // ===== RequestHomeDetails =====
+                var requestsList = await requestsQuery.ToListAsync();
+                
+                result.RequestHomeDetails.Total = requestsList.Count;
+                result.RequestHomeDetails.TotalActive = requestsList.Where(x => !x.Closed && !x.Archived).Count();
+                result.RequestHomeDetails.TotalArchived = requestsList.Where(x => x.Archived).Count();
+                result.RequestHomeDetails.TotalClosed = requestsList.Where(x => x.Closed).Count();
+                result.RequestHomeDetails.TotalLastMonth = requestsList.Where(x => x.CreationDate >= now.AddMonths(-1) && !x.Closed && !x.Archived).Count();
+                result.RequestHomeDetails.TotalSale = requestsList.Where(x => x.Contract == "Vendita" && !x.Closed && !x.Archived).Count();
+                result.RequestHomeDetails.TotalRent = requestsList.Where(x => x.Contract == "Affitto" && !x.Closed && !x.Archived).Count();
+
+                result.RequestHomeDetails.TotalCreatedPerMonth = requestsList
+                    .GroupBy(obj => obj.CreationDate.Month + "/" + obj.CreationDate.Year.ToString())
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                result.RequestHomeDetails.MaxAnnual = result.RequestHomeDetails.TotalCreatedPerMonth.Values.Any() ?
+                    result.RequestHomeDetails.TotalCreatedPerMonth.Values.Max() : 0;
+
+                result.RequestHomeDetails.MinAnnual = result.RequestHomeDetails.TotalCreatedPerMonth.Values.Any() ?
+                    result.RequestHomeDetails.TotalCreatedPerMonth.Values.Min() : 0;
+
+                foreach (var item in requestsList.Where(x => x.Contract == "Vendita"))
+                {
+                    string[] cities = item.City.Split(',');
+                    foreach(var city in cities)
+                    {
+                        if (!result.RequestHomeDetails.DistinctByCitySale.ContainsKey(city))
+                            result.RequestHomeDetails.DistinctByCitySale[city] = 1;
+                        else
+                            result.RequestHomeDetails.DistinctByCitySale[city]++;
+                    }
+
+                    if (!result.RequestHomeDetails.DistinctByTypeSale.ContainsKey(item.PropertyType))
+                        result.RequestHomeDetails.DistinctByTypeSale[item.PropertyType] = 1;
+                    else
+                        result.RequestHomeDetails.DistinctByTypeSale[item.PropertyType]++;
+                }
+
+                foreach (var item in requestsList.Where(x => x.Contract == "Affitto"))
+                {
+                    string[] cities = item.City.Split(',');
+                    foreach (var city in cities)
+                    {
+                        if (!result.RequestHomeDetails.DistinctByCityRent.ContainsKey(city))
+                            result.RequestHomeDetails.DistinctByCityRent[city] = 1;
+                        else
+                            result.RequestHomeDetails.DistinctByCityRent[city]++;
+                    }
+
+                    if (!result.RequestHomeDetails.DistinctByTypeRent.ContainsKey(item.PropertyType))
+                        result.RequestHomeDetails.DistinctByTypeRent[item.PropertyType] = 1;
+                    else
+                        result.RequestHomeDetails.DistinctByTypeRent[item.PropertyType]++;
+                }
+
+                // ===== Customers =====
+                var customersList = await customersQuery.ToListAsync();
+                result.TotalCustomers = customersList.Count;
+                result.TotalBuyers = customersList.Where(x => x.Buyer).Count();
+                result.TotalSellers = customersList.Where(x => x.Seller).Count();
+                result.Customers = _mapper.Map<List<CustomerSelectModel>>(customersList);
+
+                // ===== Calendar Events =====
+                var calendarList = await calendarQuery.ToListAsync();
+                result.TotalAppointments = calendarList.Where(x => !x.Cancelled).Count();
+                result.TotalConfirmedAppointments = calendarList.Where(x => x.Confirmed && !x.Cancelled).Count();
+                result.CalendarEvents = _mapper.Map<List<CalendarSelectModel>>(calendarList);
+
+                // ===== Agents =====
+                var agentsList = await userManager.GetUsersInRoleAsync("Agent");
+                if (!string.IsNullOrEmpty(agencyId))
+                {
+                    agentsList = agentsList.Where(x => x.AgencyId == agencyId).ToList();
+                }
+                result.TotalAgents = agentsList.Count;
+                result.Agents = _mapper.Map<List<UserSelectModel>>(agentsList);
+
+                // ===== Agencies (solo per superadmin) =====
+                if (string.IsNullOrEmpty(agencyId))
+                {
+                    var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
+                    result.Agencies = _mapper.Map<List<UserSelectModel>>(agenciesList);
+                }
+
+                // ===== Properties Lists =====
+                // Proprietà disponibili (non vendute e AssignmentEnd > oggi)
+                var availableProperties = propertiesList
+                    .Where(p => !p.Sold && p.AssignmentEnd > now)
+                    .ToList();
+                result.AvailableProperties = _mapper.Map<List<RealEstatePropertyListModel>>(availableProperties);
+
+                // Proprietà vendute
+                var soldPropertiesQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Sold) 
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Sold && x.Agent.AgencyId == agencyId);
+
+                if (year.HasValue)
+                {
+                    // Specifica DateTimeKind.Utc per PostgreSQL (richiede timestamp with timezone)
+                    var startDate = new DateTime(year.Value, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    var endDate = new DateTime(year.Value, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+                    soldPropertiesQuery = soldPropertiesQuery.Where(x => 
+                        (x.UpdateDate >= startDate && x.UpdateDate <= endDate) || 
+                        (x.CreationDate >= startDate && x.CreationDate <= endDate));
+                }
+
+                var soldPropertiesList = await soldPropertiesQuery.ToListAsync();
+                result.SoldProperties = _mapper.Map<List<RealEstatePropertyListModel>>(soldPropertiesList);
+
+                // ===== Requests =====
+                result.Requests = _mapper.Map<List<RequestSelectModel>>(requestsList);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore nel recupero dei dati aggregati della dashboard");
+                throw new Exception("Si è verificato un errore nel recupero dei dati della dashboard");
             }
         }
     }

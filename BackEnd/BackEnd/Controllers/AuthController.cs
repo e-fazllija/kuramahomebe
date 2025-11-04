@@ -67,12 +67,6 @@ namespace BackEnd.Controllers
 
                 var result = await userManager.CreateAsync(user, model.Password);
 
-                if(model.Role == "Agency")
-                {
-                    ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
-                    newUser.AgencyId = newUser.Id;
-                    await userManager.UpdateAsync(newUser);
-                }
                 if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresUpper")
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "La password deve contenere almeno una lettera maiuscola!" });
                 else if (!result.Succeeded && result.Errors.First().Code == "PasswordRequiresNonAlphanumeric")
@@ -84,6 +78,13 @@ namespace BackEnd.Controllers
 
                 if (!result.Succeeded)
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel { Status = "Error", Message = "Si è verificato un errore! Controllare i dati inseriti e provare nuovamente" });
+
+                if (model.Role == "Admin")
+                {
+                    ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
+                    newUser.AgencyId = newUser.Id;
+                    await userManager.UpdateAsync(newUser);
+                }
 
                 var roleResult = await userManager.AddToRoleAsync(user, model.Role);
 
@@ -146,7 +147,7 @@ namespace BackEnd.Controllers
                     var token = new JwtSecurityToken(
                         issuer: _configuration["Authentication:Issuer"],
                         audience: _configuration["Authentication:Audience"],
-                        expires: DateTime.Now.AddMinutes(1),
+                        expires: DateTime.Now.AddMinutes(30),
                         claims: authClaims,
                         signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                     );
@@ -583,7 +584,7 @@ namespace BackEnd.Controllers
                 var newToken = new JwtSecurityToken(
                     issuer: _configuration["Authentication:Issuer"],
                     audience: _configuration["Authentication:Audience"],
-                    expires: DateTime.Now.AddMinutes(1),
+                    expires: DateTime.Now.AddMinutes(30),
                     claims: authClaims,
                     signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                 );
