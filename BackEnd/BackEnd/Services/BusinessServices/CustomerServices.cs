@@ -16,13 +16,15 @@ namespace BackEnd.Services.BusinessServices
         private readonly IMapper _mapper;
         private readonly ILogger<CustomerServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
-        public CustomerServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CustomerServices> logger, IOptionsMonitor<PaginationOptions> options)
+        private readonly AccessControlService _accessControl;
+        
+        public CustomerServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CustomerServices> logger, IOptionsMonitor<PaginationOptions> options, AccessControlService accessControl)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.options = options;
-
+            _accessControl = accessControl;
         }
         public async Task<CustomerSelectModel> Create(CustomerCreateModel dto)
         {
@@ -91,23 +93,21 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<CustomerSelectModel>> Get(string? adminId, string? agencyId, string? userId, string? filterRequest, char? fromName, char? toName)
+        public async Task<ListViewModel<CustomerSelectModel>> Get(string? userId, string? filterRequest, char? fromName, char? toName)
         {
             try
             {
                 IQueryable<Customer> query = _unitOfWork.dbContext.Customers.OrderByDescending(x => x.Id);
 
+                // Filtra per cerchia usando AccessControlService
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.UserId == userId);
-
-                if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.User.AdminId == agencyId);
-
-                if (!string.IsNullOrEmpty(adminId))
-                    query = query.Where(x => x.User.Admin.AdminId == adminId);
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
-                    query = query.Where(x => x.FirstName.Contains(filterRequest));
+                    query = query.Where(x => x.FirstName.Contains(filterRequest) || x.LastName.Contains(filterRequest));
 
                 if (fromName != null)
                 {
@@ -124,8 +124,6 @@ namespace BackEnd.Services.BusinessServices
                 ListViewModel<CustomerSelectModel> result = new ListViewModel<CustomerSelectModel>();
 
                 result.Total = await query.CountAsync();
-
-                
 
                 List<Customer> queryList = await query
                     //.Include(x => x.CustomerType)

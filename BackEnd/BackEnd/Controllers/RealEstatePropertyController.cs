@@ -183,12 +183,14 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city)
+        public async Task<IActionResult> Get(int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city)
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
                 ListViewModel<RealEstatePropertySelectModel> res = await _realEstatePropertyServices.Get(
-                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, city);
+                    currentPage, filterRequest, contract, priceFrom, priceTo, category, typologie, city, userId);
 
                 return Ok(res);
             }
@@ -201,12 +203,14 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(GetList))]
-        public async Task<IActionResult> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold)
+        public async Task<IActionResult> GetList(int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold)
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
                 ListViewModel<RealEstatePropertyListModel> res = await _realEstatePropertyServices.GetList(
-                    currentPage, agencyId, filterRequest, contract, priceFrom, priceTo, category, typologie, city, sold);
+                    currentPage, filterRequest, contract, priceFrom, priceTo, category, typologie, city, sold, userId);
 
                 return Ok(res);
             }

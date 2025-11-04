@@ -100,11 +100,10 @@ namespace BackEnd.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var role = User.FindFirstValue(ClaimTypes.Role);
+                
+                // AccessControlService gestisce automaticamente la cerchia in base al userId
                 ListViewModel<CustomerSelectModel> res = await _customerServices.Get(
-                    role == "Admin" ? userId: null,
-                    role == "Agency" ? userId: null,
-                    role == "Agent" ? userId: null,
+                    userId, 
                     filterRequest,
                     null, null);
 

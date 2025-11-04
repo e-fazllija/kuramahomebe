@@ -95,12 +95,13 @@ namespace BackEnd.Controllers
         }
         [HttpGet]
         [Route(nameof(Get))]
-        public async Task<IActionResult> Get([FromQuery] int currentPage, [FromQuery] string? agencyId = null, [FromQuery] string? filterRequest = null, [FromQuery] string? userId = null)
+        public async Task<IActionResult> Get([FromQuery] int currentPage, [FromQuery] string? filterRequest = null)
         {
             try
             {
-                //currentPage = currentPage > 0 ? currentPage : 1;
-                ListViewModel<RequestSelectModel> res = await _requestServices.Get(currentPage, agencyId, filterRequest, null, null, userId);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                ListViewModel<RequestSelectModel> res = await _requestServices.Get(currentPage, filterRequest, null, null, userId);
 
                 return Ok(res);
             }
@@ -113,11 +114,13 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(GetList))]
-        public async Task<IActionResult> GetList([FromQuery] int currentPage, [FromQuery] string? agencyId = null, [FromQuery] string? filterRequest = null, [FromQuery] string? userId = null)
+        public async Task<IActionResult> GetList([FromQuery] int currentPage, [FromQuery] string? filterRequest = null)
         {
             try
             {
-                ListViewModel<RequestListModel> res = await _requestServices.GetList(currentPage, agencyId, filterRequest, null, null, userId);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                ListViewModel<RequestListModel> res = await _requestServices.GetList(currentPage, filterRequest, null, null, userId);
 
                 return Ok(res);
             }
@@ -206,7 +209,8 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var result = await _requestServices.Get(0, null, null, fromName, toName, null);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var result = await _requestServices.Get(0, null, fromName, toName, userId);
                 DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
                 byte[] fileBytes = Export.GenerateExcelContent(table);
 
@@ -224,7 +228,8 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var result = await _requestServices.Get(0, null, null, fromName, toName, null);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var result = await _requestServices.Get(0, null, fromName, toName, userId);
                 DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
                 byte[] fileBytes = Export.GenerateCsvContent(table);
 

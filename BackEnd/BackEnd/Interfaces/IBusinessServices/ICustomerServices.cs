@@ -7,7 +7,7 @@ namespace BackEnd.Interfaces.IBusinessServices
     public interface ICustomerServices
     {
         Task<CustomerSelectModel> Create(CustomerCreateModel dto);
-        Task<ListViewModel<CustomerSelectModel>> Get( string? adminId, string? agencyId, string? userId, string? filterRequest, char? fromName, char? toName);
+        Task<ListViewModel<CustomerSelectModel>> Get(string? userId, string? filterRequest, char? fromName, char? toName);
         Task<CustomerSelectModel> Update(CustomerUpdateModel dto);
         Task<CustomerSelectModel> GetById(int id);
         Task<Customer> Delete(int id);

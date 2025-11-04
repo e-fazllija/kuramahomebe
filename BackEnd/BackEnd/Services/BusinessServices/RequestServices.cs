@@ -17,13 +17,15 @@ namespace BackEnd.Services.BusinessServices
         private readonly IMapper _mapper;
         private readonly ILogger<RequestServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
-        public RequestServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<RequestServices> logger, IOptionsMonitor<PaginationOptions> options)
+        private readonly AccessControlService _accessControl;
+        
+        public RequestServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<RequestServices> logger, IOptionsMonitor<PaginationOptions> options, AccessControlService accessControl)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.options = options;
-
+            _accessControl = accessControl;
         }
         public async Task<RequestSelectModel> Create(RequestCreateModel dto)
         {
@@ -92,19 +94,21 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<RequestSelectModel>> Get(int currentPage, string? agencyId, string? filterRequest, char? fromName, char? toName, string? userId)
+        public async Task<ListViewModel<RequestSelectModel>> Get(int currentPage, string? filterRequest, char? fromName, char? toName, string? userId)
         {
             try
             {
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
-                if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.User.AdminId == agencyId);
+                // Filtra per cerchia usando AccessControlService
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.UserId == userId);
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
-                    query = query.Where(x => x.Customer.FirstName.Contains(filterRequest));
+                    query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
 
                 //if (fromName != null)
                 //{
@@ -217,7 +221,7 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<RequestListModel>> GetList(int currentPage, string? agencyId, string? filterRequest, char? fromName, char? toName, string? userId)
+        public async Task<ListViewModel<RequestListModel>> GetList(int currentPage, string? filterRequest, char? fromName, char? toName, string? userId)
         {
             try
             {
@@ -225,10 +229,12 @@ namespace BackEnd.Services.BusinessServices
                     .Include(x => x.Customer)
                     .OrderByDescending(x => x.Id);
 
-                if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.User.AdminId == agencyId);
+                // Filtra per cerchia usando AccessControlService
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.UserId == userId);
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));

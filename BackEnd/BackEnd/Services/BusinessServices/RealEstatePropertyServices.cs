@@ -22,13 +22,16 @@ namespace BackEnd.Services.BusinessServices
         private readonly IOptionsMonitor<PaginationOptions> options;
         private readonly IStorageServices _storageServices;
         private readonly UserManager<ApplicationUser> userManager;
+        private readonly AccessControlService _accessControl;
+        
         public RealEstatePropertyServices(
             IUnitOfWork unitOfWork,
             IMapper mapper,
             ILogger<RealEstatePropertyServices> logger,
             IOptionsMonitor<PaginationOptions> options,
             IStorageServices storageServices,
-            UserManager<ApplicationUser> userManager
+            UserManager<ApplicationUser> userManager,
+            AccessControlService accessControl
             )
         {
             _unitOfWork = unitOfWork;
@@ -37,6 +40,7 @@ namespace BackEnd.Services.BusinessServices
             this.options = options;
             _storageServices = storageServices;
             this.userManager = userManager;
+            _accessControl = accessControl;
         }
         public async Task<RealEstatePropertySelectModel> Create(RealEstatePropertyCreateModel dto)
         {
@@ -259,7 +263,7 @@ namespace BackEnd.Services.BusinessServices
         }
 
         public async Task<ListViewModel<RealEstatePropertySelectModel>> Get(
-            int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city)
+            int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, string? userId = null)
         {
             try
             {
@@ -267,8 +271,12 @@ namespace BackEnd.Services.BusinessServices
                     .Include(x => x.Photos.OrderBy(x => x.Position))
                     .OrderByDescending(x => x.Id);
 
-                if (!string.IsNullOrEmpty(agencyId) && agencyId != "all")
-                    query = query.Where(x => x.User.AdminId!.Contains(agencyId));
+                // Filtra per cerchia usando AccessControlService
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x =>
@@ -355,7 +363,7 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<ListViewModel<RealEstatePropertyListModel>> GetList(int currentPage, string? agencyId, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold)
+        public async Task<ListViewModel<RealEstatePropertyListModel>> GetList(int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold, string? userId = null)
         {
             try
             {
@@ -364,8 +372,12 @@ namespace BackEnd.Services.BusinessServices
                     .Include(x => x.User)
                     .OrderByDescending(x => x.Id);
 
-                if (!string.IsNullOrEmpty(agencyId) && agencyId != "all")
-                    query = query.Where(x => x.User.AdminId!.Contains(agencyId));
+                // Filtra per cerchia usando AccessControlService
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x =>
