@@ -54,15 +54,15 @@ namespace BackEnd.Controllers
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Utente non trovato" });
 
                 var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_properties", currentUser.AgencyId);
-                
+
                 if (!limitCheck.CanProceed)
                 {
                     // Limite raggiunto - ritorna 429 con dettagli
                     return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
                 }
 
-                        // Log per debug: verifica che AssignmentEnd sia valida (la conversione a UTC è gestita nel servizio)
-                        _logger.LogInformation($"AssignmentEnd ricevuta: {request.AssignmentEnd}, Kind: {request.AssignmentEnd.Kind}");
+                // Log per debug: verifica che AssignmentEnd sia valida (la conversione a UTC è gestita nel servizio)
+                _logger.LogInformation($"AssignmentEnd ricevuta: {request.AssignmentEnd}, Kind: {request.AssignmentEnd.Kind}");
 
                 RealEstatePropertySelectModel Result = await _realEstatePropertyServices.Create(request);
                 return Ok(Result);
@@ -70,7 +70,7 @@ namespace BackEnd.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Errore nella creazione dell'immobile: {ex.Message}");
-                
+
                 // Log dell'inner exception se presente (per DbUpdateException)
                 if (ex.InnerException != null)
                 {
@@ -80,14 +80,14 @@ namespace BackEnd.Controllers
                         _logger.LogError($"Stack Trace: {ex.InnerException.StackTrace}");
                     }
                 }
-                
+
                 // Messaggio dettagliato per il client
                 string errorMessage = ex.Message;
                 if (ex.InnerException != null)
                 {
                     errorMessage += $" Dettagli: {ex.InnerException.Message}";
                 }
-                
+
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = errorMessage });
             }
         }
