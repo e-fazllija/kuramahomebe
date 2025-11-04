@@ -36,7 +36,7 @@ namespace BackEnd.Controllers
                 throw new UnauthorizedAccessException("Utente non autenticato");
 
             var user = await _unitOfWork.dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            return (userId, user?.AgencyId ?? userId);
+            return (userId, user?.AdminId ?? userId);
         }
 
         [HttpPost]

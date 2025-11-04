@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using BackEnd.Entities;
 using System.Security.Claims;
 using BackEnd.Models.SubscriptionLimitModels;
+using BackEnd.Services;
 
 namespace BackEnd.Controllers
 {
@@ -24,6 +25,7 @@ namespace BackEnd.Controllers
         private readonly ILogger<RealEstatePropertyController> _logger;
         private readonly ISubscriptionLimitService _subscriptionLimitService;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly AccessControlService _accessControl;
 
         public RealEstatePropertyController(
            IConfiguration configuration,
@@ -31,7 +33,8 @@ namespace BackEnd.Controllers
            IRealEstatePropertyPhotoServices realEstatePropertyPhotoServices,
             ILogger<RealEstatePropertyController> logger,
             ISubscriptionLimitService subscriptionLimitService,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            AccessControlService accessControl)
         {
             _configuration = configuration;
             _realEstatePropertyServices = realEstatePropertyServices;
@@ -39,6 +42,7 @@ namespace BackEnd.Controllers
             _logger = logger;
             _subscriptionLimitService = subscriptionLimitService;
             _userManager = userManager;
+            _accessControl = accessControl;
         }
 
         [HttpPost]
@@ -53,7 +57,7 @@ namespace BackEnd.Controllers
                 if (currentUser == null)
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Utente non trovato" });
 
-                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_properties", currentUser.AgencyId);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_properties", currentUser.AdminId);
 
                 if (!limitCheck.CanProceed)
                 {
@@ -114,6 +118,19 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera la proprietà esistente
+                var property = await _realEstatePropertyServices.GetById(request.Id);
+                if (property == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Proprietà non trovata" });
+                
+                // Verifica permessi di modifica usando AccessControlService
+                bool canModify = await _accessControl.CanModifyEntity(currentUserId, property.UserId);
+                
+                if (!canModify)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa proprietà" });
+                
                 RealEstatePropertySelectModel Result = await _realEstatePropertyServices.Update(request);
 
                 return Ok();
@@ -239,8 +256,18 @@ namespace BackEnd.Controllers
         {
             try
             {
-                RealEstatePropertySelectModel result = new RealEstatePropertySelectModel();
-                result = await _realEstatePropertyServices.GetById(id);
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                RealEstatePropertySelectModel result = await _realEstatePropertyServices.GetById(id);
+                
+                if (result == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Proprietà non trovata" });
+                
+                // Verifica che l'utente possa accedere a questa proprietà (deve essere nella cerchia)
+                bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
+                
+                if (!canAccess)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa proprietà" });
 
                 return Ok(result);
             }
@@ -256,6 +283,19 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera la proprietà esistente
+                var property = await _realEstatePropertyServices.GetById(id);
+                if (property == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Proprietà non trovata" });
+                
+                // Verifica permessi di eliminazione usando AccessControlService
+                bool canDelete = await _accessControl.CanModifyEntity(currentUserId, property.UserId);
+                
+                if (!canDelete)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa proprietà" });
+                
                 await _realEstatePropertyServices.Delete(id);
                 return Ok();
             }

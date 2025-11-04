@@ -12,7 +12,7 @@ namespace BackEnd.Entities
         public string Name { get; set; } = string.Empty;
 
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
-        public string? ApplicationUserId { get; set; }
+        public string? UserId { get; set; }
         
         [Required(ErrorMessage = "L'ID provincia è obbligatorio")]
         public int ProvinceId { get; set; }

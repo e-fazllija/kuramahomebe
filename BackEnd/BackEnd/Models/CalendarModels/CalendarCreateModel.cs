@@ -6,7 +6,7 @@ namespace BackEnd.Models.CalendarModels
     public class CalendarCreateModel
     {
         [Required]
-        public string ApplicationUserId { get; set; } = string.Empty;
+        public string UserId { get; set; } = string.Empty;
         [Required]
         public string EventName { get; set; } = string.Empty;
         [Required]

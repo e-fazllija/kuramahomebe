@@ -12,7 +12,7 @@ namespace BackEnd.Entities
         [Required(ErrorMessage = "L'ID città è obbligatorio")]
         public int CityId { get; set; }
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
-        public string? ApplicationUserId { get; set; }
+        public string? UserId { get; set; }
         
         // Navigation property
         [ForeignKey("CityId")]

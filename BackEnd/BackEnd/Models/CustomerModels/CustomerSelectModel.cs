@@ -30,7 +30,7 @@ namespace BackEnd.Models.CustomerModels
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }
         public ICollection<CustomerNotes>? CustomerNotes { get; set; }
-        public string AgencyId { get; set; } = string.Empty;
-        public ApplicationUser? Agency { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public ApplicationUser? User { get; set; }
     }
 }

@@ -55,14 +55,14 @@ namespace BackEnd.Services.Repositories
                 var agencyUser = await _context.Set<ApplicationUser>()
                     .FirstOrDefaultAsync(u => u.Id == agencyId);
 
-                if (agencyUser != null && !string.IsNullOrEmpty(agencyUser.AgencyId))
+                if (agencyUser != null && !string.IsNullOrEmpty(agencyUser.AdminId))
                 {
                     // Risali fino all'Admin cercando l'abbonamento dell'Admin
                     var adminSubscription = await _context.Set<UserSubscription>()
                         .Include(us => us.SubscriptionPlan)
                             .ThenInclude(sp => sp.Features)
                         .Include(us => us.LastPayment)
-                        .Where(us => us.UserId == agencyUser.AgencyId && us.Status.ToLower() == "active")
+                        .Where(us => us.UserId == agencyUser.AdminId && us.Status.ToLower() == "active")
                         .OrderByDescending(us => us.CreationDate)
                         .FirstOrDefaultAsync();
 

@@ -82,7 +82,7 @@ namespace BackEnd.Controllers
                 if (model.Role == "Admin")
                 {
                     ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
-                    newUser.AgencyId = newUser.Id;
+                    newUser.AdminId = newUser.Id;
                     await userManager.UpdateAsync(newUser);
                 }
 
@@ -128,7 +128,7 @@ namespace BackEnd.Controllers
                 var pass = await userManager.CheckPasswordAsync(user, model.Password);
                 if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
                 {
-                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AgencyId);
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
 
                     var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     var userRoles = await userManager.GetRolesAsync(user);
@@ -171,7 +171,7 @@ namespace BackEnd.Controllers
                     LoginResponse result = new LoginResponse()
                     {
                         Id = user.Id,
-                        AgencyId = user.AgencyId ?? string.Empty,
+                        AgencyId = user.AdminId ?? string.Empty,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
                         Email = user.Email!,
@@ -238,7 +238,7 @@ namespace BackEnd.Controllers
                     }
                     
                     // Recupera l'abbonamento aggiornato dell'utente (con ereditarietà)
-                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AgencyId);
+                    var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
                     var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
                     
                     var userRoles = await userManager.GetRolesAsync(user);
@@ -250,7 +250,7 @@ namespace BackEnd.Controllers
                     var result = new
                     {
                         Id = user.Id,
-                        AgencyId = user.AgencyId ?? string.Empty,
+                        AgencyId = user.AdminId ?? string.Empty,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
                         Email = user.Email,
@@ -558,7 +558,7 @@ namespace BackEnd.Controllers
                 }
 
                 // Recupera l'abbonamento aggiornato dell'utente (con ereditarietà)
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
 
                 // Recupera i ruoli dell'utente
@@ -609,7 +609,7 @@ namespace BackEnd.Controllers
                 var result = new LoginResponse()
                 {
                     Id = user.Id,
-                    AgencyId = user.AgencyId ?? string.Empty,
+                    AgencyId = user.AdminId ?? string.Empty,
                     FirstName = user.FirstName,
                     LastName = user.LastName,
                     Email = user.Email!,

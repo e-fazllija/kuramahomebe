@@ -181,7 +181,7 @@ namespace BackEnd.Services.BusinessServices
         private async Task<int> CountAgenciesAsync(string adminId)
         {
             var agencies = await _userManager.GetUsersInRoleAsync("Agency");
-            return agencies.Count(u => u.AgencyId == adminId);
+            return agencies.Count(u => u.AdminId == adminId);
         }
 
         /// <summary>
@@ -191,7 +191,7 @@ namespace BackEnd.Services.BusinessServices
         {
             // Trova tutte le Agency dirette dell'Admin
             var directAgencies = await _unitOfWork.dbContext.Users
-                .Where(u => u.AgencyId == adminId)
+                .Where(u => u.AdminId == adminId)
                 .Select(u => u.Id)
                 .ToListAsync();
 
@@ -200,11 +200,11 @@ namespace BackEnd.Services.BusinessServices
             // - Creati da Agency dirette (AgentId in directAgencies)
             // - Creati da Agent di Agency dirette (Agent.AgencyId in directAgencies)
             return await _unitOfWork.dbContext.RealEstateProperties
-                .Include(p => p.Agent)
+                .Include(p => p.User)
                 .Where(p => !p.Archived && (
-                    p.AgentId == adminId ||  // Admin diretto
-                    directAgencies.Contains(p.AgentId) ||  // Agency dirette
-                    (p.Agent.AgencyId != null && directAgencies.Contains(p.Agent.AgencyId))  // Agent di Agency
+                    p.UserId == adminId ||  // Admin diretto
+                    directAgencies.Contains(p.UserId) ||  // Agency dirette
+                    (p.User.AdminId != null && directAgencies.Contains(p.User.AdminId))  // Agent di Agency
                 ))
                 .CountAsync();
         }
@@ -216,13 +216,13 @@ namespace BackEnd.Services.BusinessServices
         {
             // Trova tutte le Agency dirette dell'Admin
             var directAgencies = await _unitOfWork.dbContext.Users
-                .Where(u => u.AgencyId == adminId)
+                .Where(u => u.AdminId == adminId)
                 .Select(u => u.Id)
                 .ToListAsync();
 
             // Conta Agent che hanno AgencyId nelle Agency dirette
             var agents = await _userManager.GetUsersInRoleAsync("Agent");
-            return agents.Count(a => a.AgencyId != null && directAgencies.Contains(a.AgencyId));
+            return agents.Count(a => a.AdminId != null && directAgencies.Contains(a.AdminId));
         }
 
         /// <summary>
@@ -232,12 +232,12 @@ namespace BackEnd.Services.BusinessServices
         {
             // Trova tutte le Agency dirette dell'Admin
             var directAgencies = await _unitOfWork.dbContext.Users
-                .Where(u => u.AgencyId == adminId)
+                .Where(u => u.AdminId == adminId)
                 .Select(u => u.Id)
                 .ToListAsync();
 
             return await _unitOfWork.dbContext.Customers
-                .Where(c => c.ApplicationUserId != null && directAgencies.Contains(c.ApplicationUserId))
+                .Where(c => c.UserId != null && directAgencies.Contains(c.UserId))
                 .CountAsync();
         }
 
@@ -248,12 +248,12 @@ namespace BackEnd.Services.BusinessServices
         {
             // Trova tutte le Agency dirette dell'Admin
             var directAgencies = await _unitOfWork.dbContext.Users
-                .Where(u => u.AgencyId == adminId)
+                .Where(u => u.AdminId == adminId)
                 .Select(u => u.Id)
                 .ToListAsync();
 
             return await _unitOfWork.dbContext.Requests
-                .Where(r => r.ApplicationUserId != null && directAgencies.Contains(r.ApplicationUserId) && !r.Archived)
+                .Where(r => r.UserId != null && directAgencies.Contains(r.UserId) && !r.Archived)
                 .CountAsync();
         }
 

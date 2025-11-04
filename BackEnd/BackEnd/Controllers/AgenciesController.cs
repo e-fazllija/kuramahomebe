@@ -68,7 +68,7 @@ namespace BackEnd.Controllers
                 ApplicationUser user = await userManager.FindByIdAsync(request.Id) ?? throw new NullReferenceException("Agenzia non trovata");
                 
                 // Admin può aggiornare solo le proprie Agency
-                if (user.AgencyId != userId)
+                if (user.AdminId != userId)
                 {
                     return StatusCode(403, "Accesso negato: puoi modificare solo le tue agenzie");
                 }
@@ -105,7 +105,7 @@ namespace BackEnd.Controllers
 
                 // Verifica limite subscription PRIMA di creare
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_agencies", currentUser.AgencyId);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_agencies", currentUser.AdminId);
                 
                 if (!limitCheck.CanProceed)
                 {
@@ -125,7 +125,7 @@ namespace BackEnd.Controllers
                 ApplicationUser user = _mapper.Map<ApplicationUser>(model);
                 user.SecurityStamp = Guid.NewGuid().ToString();
                 user.UserName = user.Email.Split("@")[0];
-                user.AgencyId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                user.AdminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
                 var result = await userManager.CreateAsync(user, randomPassword);
 
@@ -217,7 +217,7 @@ namespace BackEnd.Controllers
                 
                 //currentPage = currentPage > 0 ? currentPage : 1;
                 var usersList = await userManager.GetUsersInRoleAsync("Agency");
-                usersList = usersList.Where(x => x.AgencyId == userId).ToList();
+                usersList = usersList.Where(x => x.AdminId == userId).ToList();
 
 
                 if (!string.IsNullOrEmpty(filterRequest))
@@ -261,7 +261,7 @@ namespace BackEnd.Controllers
                 }
                 
                 // Admin può vedere solo le proprie Agency
-                if (currentUserRoles.Contains("Admin") && user.AgencyId != userId)
+                if (currentUserRoles.Contains("Admin") && user.AdminId != userId)
                 {
                     return StatusCode(403, "Accesso negato: puoi visualizzare solo le tue agenzie");
                 }
@@ -299,7 +299,7 @@ namespace BackEnd.Controllers
                 }
                 
                 // Admin può eliminare solo le proprie Agency
-                if (user.AgencyId != userId)
+                if (user.AdminId != userId)
                 {
                     return StatusCode(403, "Accesso negato: puoi eliminare solo le tue agenzie");
                 }

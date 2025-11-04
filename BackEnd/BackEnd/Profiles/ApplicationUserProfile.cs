@@ -19,7 +19,7 @@ namespace BackEnd.Profiles
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))
                 .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
-                .ForMember(dest => dest.Agency, opt => opt.Ignore()) // Navigation property
+                .ForMember(dest => dest.Admin, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.RealEstateProperties, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.Subscriptions, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.Payments, opt => opt.Ignore()); // Navigation property
@@ -32,7 +32,7 @@ namespace BackEnd.Profiles
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))
                 .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province
                 .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
-                .ForMember(dest => dest.Agency, opt => opt.Ignore()) // Navigation property
+                .ForMember(dest => dest.Admin, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.RealEstateProperties, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.Subscriptions, opt => opt.Ignore()) // Navigation property
                 .ForMember(dest => dest.Payments, opt => opt.Ignore()); // Navigation property

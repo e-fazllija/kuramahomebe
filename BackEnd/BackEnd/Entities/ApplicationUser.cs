@@ -43,7 +43,7 @@ namespace BackEnd.Entities
         public string? Country { get; set; } = "Italia";
 
         [MaxLength(450, ErrorMessage = "L'ID agenzia non può superare i 450 caratteri")]
-        public string? AgencyId { get; set; }
+        public string? AdminId { get; set; }
 
         [MaxLength(20, ErrorMessage = "Il colore non può superare i 20 caratteri")]
         public string Color { get; set; } = "#ffffff";
@@ -51,7 +51,7 @@ namespace BackEnd.Entities
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
 
-        public ApplicationUser? Agency { get; set; }
+        public ApplicationUser? Admin { get; set; }
 
         // --- DATI FISCALI / FATTURAZIONE ---
 

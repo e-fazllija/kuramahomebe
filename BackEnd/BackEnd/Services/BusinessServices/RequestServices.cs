@@ -99,9 +99,9 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                    query = query.Where(x => x.User.AdminId == agencyId);
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.ApplicationUserId == userId);
+                    query = query.Where(x => x.UserId == userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest));
@@ -226,9 +226,9 @@ namespace BackEnd.Services.BusinessServices
                     .OrderByDescending(x => x.Id);
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                    query = query.Where(x => x.User.AdminId == agencyId);
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.ApplicationUserId == userId);
+                    query = query.Where(x => x.UserId == userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));

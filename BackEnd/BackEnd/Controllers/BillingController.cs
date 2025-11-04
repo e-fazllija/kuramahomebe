@@ -202,7 +202,7 @@ namespace BackEnd.Controllers
                 if (user == null)
                     return Unauthorized();
 
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 
                 if (subscription == null)
                     return NotFound("Nessun abbonamento attivo trovato");
@@ -240,7 +240,7 @@ namespace BackEnd.Controllers
                 if (user == null)
                     return Unauthorized();
 
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 
                 if (subscription == null)
                     return NotFound("Nessun abbonamento attivo trovato");

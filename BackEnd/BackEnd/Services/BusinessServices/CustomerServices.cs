@@ -98,13 +98,13 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Customer> query = _unitOfWork.dbContext.Customers.OrderByDescending(x => x.Id);
 
                 if (!string.IsNullOrEmpty(userId))
-                    query = query.Where(x => x.ApplicationUserId == userId);
+                    query = query.Where(x => x.UserId == userId);
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                    query = query.Where(x => x.User.AdminId == agencyId);
 
                 if (!string.IsNullOrEmpty(adminId))
-                    query = query.Where(x => x.ApplicationUser.Agency.AgencyId == adminId);
+                    query = query.Where(x => x.User.Admin.AdminId == adminId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.FirstName.Contains(filterRequest));

@@ -9,8 +9,8 @@ namespace BackEnd.Models.CalendarModels
     {
         public int Id { get; set; }
         [Required]
-        public string ApplicationUserId { get; set; } = string.Empty;
-        public virtual ApplicationUser ApplicationUser { get; set; } = new ApplicationUser();
+        public string UserId { get; set; } = string.Empty;
+        public virtual ApplicationUser User { get; set; } = new ApplicationUser();
         public string EventName { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public int? CustomerId { get; set; }

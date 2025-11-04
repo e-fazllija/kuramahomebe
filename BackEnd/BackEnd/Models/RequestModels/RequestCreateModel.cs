@@ -32,6 +32,6 @@ namespace BackEnd.Models.RequestModels
         public bool Archived { get; set; }
         public bool MortgageAdviceRequired { get; set; }
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
-        public string? ApplicationUserId { get; set; }
+        public string? UserId { get; set; }
     }
 }

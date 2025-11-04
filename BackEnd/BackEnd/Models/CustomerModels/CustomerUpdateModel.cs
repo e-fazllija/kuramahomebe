@@ -25,6 +25,6 @@ namespace BackEnd.Models.CustomerModels
         public bool AcquisitionDone { get; set; }
         public bool OngoingAssignment { get; set; }
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
-        public string? ApplicationUserId { get; set; }
+        public string? UserId { get; set; }
     }
 }

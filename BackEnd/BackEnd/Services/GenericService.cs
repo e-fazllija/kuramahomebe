@@ -93,7 +93,7 @@ namespace BackEnd.Services
                 AdminHomeDetailsModel result = new AdminHomeDetailsModel();
                 IQueryable<RealEstateProperty> propertiesInHome = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.RealEstateProperties 
-                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Agent.AgencyId == agencyId);
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId);
 
                 result.RealEstatePropertyHomeDetails.Total = propertiesInHome.Count();
                 result.RealEstatePropertyHomeDetails.TotalSale = propertiesInHome.Where(x => x.Status == "Vendita").Count();
@@ -156,7 +156,7 @@ namespace BackEnd.Services
 
                 IQueryable<Request> request = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Requests 
-                    : _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId);
+                    : _unitOfWork.dbContext.Requests.Where(x => x.UserId == agencyId);
                 result.RequestHomeDetails.Total = request.Count();
                 result.RequestHomeDetails.TotalActive = request.Where(x => !x.Closed && !x.Archived).Count();
                 result.RequestHomeDetails.TotalArchived = request.Where(x => x.Archived).Count();
@@ -229,10 +229,10 @@ namespace BackEnd.Services
 
                 result.TotalCustomers = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Customers.Count() 
-                    : _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId).Count();
+                    : _unitOfWork.dbContext.Customers.Where(x => x.UserId == agencyId).Count();
                 result.TotalAgents = string.IsNullOrEmpty(agencyId) 
                     ? userManager.GetUsersInRoleAsync("Agent").Result.Count() 
-                    : userManager.GetUsersInRoleAsync("Agent").Result.Where(x => x.AgencyId == agencyId).Count();
+                    : userManager.GetUsersInRoleAsync("Agent").Result.Where(x => x.AdminId == agencyId).Count();
 
                 return result;
             }
@@ -266,19 +266,19 @@ namespace BackEnd.Services
                 // Filtro base per agenzia
                 IQueryable<RealEstateProperty> propertiesQuery = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.RealEstateProperties 
-                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Agent.AgencyId == agencyId);
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId);
 
                 IQueryable<Request> requestsQuery = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Requests 
-                    : _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId);
+                    : _unitOfWork.dbContext.Requests.Where(x => x.UserId == agencyId);
 
                 IQueryable<Customer> customersQuery = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Customers 
-                    : _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId);
+                    : _unitOfWork.dbContext.Customers.Where(x => x.UserId == agencyId);
 
                 IQueryable<Calendar> calendarQuery = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.Calendars 
-                    : _unitOfWork.dbContext.Calendars.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                    : _unitOfWork.dbContext.Calendars.Where(x => x.User.AdminId == agencyId);
 
                 // Applica filtro anno se specificato
                 if (year.HasValue)
@@ -411,7 +411,7 @@ namespace BackEnd.Services
                 var agentsList = await userManager.GetUsersInRoleAsync("Agent");
                 if (!string.IsNullOrEmpty(agencyId))
                 {
-                    agentsList = agentsList.Where(x => x.AgencyId == agencyId).ToList();
+                    agentsList = agentsList.Where(x => x.AdminId == agencyId).ToList();
                 }
                 result.TotalAgents = agentsList.Count;
                 result.Agents = _mapper.Map<List<UserSelectModel>>(agentsList);
@@ -433,7 +433,7 @@ namespace BackEnd.Services
                 // Proprietà vendute
                 var soldPropertiesQuery = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Sold) 
-                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Sold && x.Agent.AgencyId == agencyId);
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Sold && x.User.AdminId == agencyId);
 
                 if (year.HasValue)
                 {

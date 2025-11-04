@@ -32,7 +32,7 @@ namespace BackEnd.Models.RequestModels
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }
         public ICollection<RequestNotes>? RequestNotes { get; set; }
-        public string AgencyId { get; set; } = string.Empty;
-        public ApplicationUser? Agency { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public ApplicationUser? User { get; set; }
     }
 }

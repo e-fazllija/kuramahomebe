@@ -7,6 +7,7 @@ using System.Data;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace BackEnd.Controllers
 {
@@ -18,15 +19,27 @@ namespace BackEnd.Controllers
         private readonly IConfiguration _configuration;
         private readonly ICalendarServices _calendarServices;
         private readonly ILogger<CalendarController> _logger;
+        private readonly AccessControlService _accessControl;
+        private readonly ICustomerServices _customerServices;
+        private readonly IRealEstatePropertyServices _realEstatePropertyServices;
+        private readonly IRequestServices _requestServices;
 
         public CalendarController(
            IConfiguration configuration,
            ICalendarServices calendarServices,
-            ILogger<CalendarController> logger)
+            ILogger<CalendarController> logger,
+            AccessControlService accessControl,
+            ICustomerServices customerServices,
+            IRealEstatePropertyServices realEstatePropertyServices,
+            IRequestServices requestServices)
         {
             _configuration = configuration;
             _calendarServices = calendarServices;
             _logger = logger;
+            _accessControl = accessControl;
+            _customerServices = customerServices;
+            _realEstatePropertyServices = realEstatePropertyServices;
+            _requestServices = requestServices;
         }
         [HttpPost]
         [Route(nameof(Create))]
@@ -34,6 +47,42 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Valida che le entità associate siano nella cerchia dell'utente
+                if (request.CustomerId.HasValue)
+                {
+                    var customer = await _customerServices.GetById(request.CustomerId.Value);
+                    if (customer == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Cliente non trovato" });
+                    
+                    bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
+                    if (!canAccessCustomer)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                }
+                
+                if (request.RealEstatePropertyId.HasValue)
+                {
+                    var property = await _realEstatePropertyServices.GetById(request.RealEstatePropertyId.Value);
+                    if (property == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Proprietà immobiliare non trovata" });
+                    
+                    bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
+                    if (!canAccessProperty)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                }
+                
+                if (request.RequestId.HasValue)
+                {
+                    var req = await _requestServices.GetById(request.RequestId.Value);
+                    if (req == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                    
+                    bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
+                    if (!canAccessRequest)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                }
+                
                 CalendarSelectModel Result = await _calendarServices.Create(request);
                 return Ok();
             }
@@ -49,6 +98,42 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Valida che le entità associate siano nella cerchia dell'utente
+                if (request.CustomerId.HasValue)
+                {
+                    var customer = await _customerServices.GetById(request.CustomerId.Value);
+                    if (customer == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Cliente non trovato" });
+                    
+                    bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
+                    if (!canAccessCustomer)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                }
+                
+                if (request.RealEstatePropertyId.HasValue)
+                {
+                    var property = await _realEstatePropertyServices.GetById(request.RealEstatePropertyId.Value);
+                    if (property == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Proprietà immobiliare non trovata" });
+                    
+                    bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
+                    if (!canAccessProperty)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                }
+                
+                if (request.RequestId.HasValue)
+                {
+                    var req = await _requestServices.GetById(request.RequestId.Value);
+                    if (req == null)
+                        return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                    
+                    bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
+                    if (!canAccessRequest)
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                }
+                
                CalendarSelectModel Result = await _calendarServices.Update(request);
 
                 return Ok();

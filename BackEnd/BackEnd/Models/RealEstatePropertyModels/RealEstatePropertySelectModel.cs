@@ -70,8 +70,8 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public virtual ICollection<RealEstatePropertyPhotoSelectModel> Photos { get; set; } = new List<RealEstatePropertyPhotoSelectModel>();
         public int CustomerId { get; set; }
         public virtual CustomerSelectModel Customer { get; set; } = new CustomerSelectModel();
-        public string AgentId { get; set; }
-        public virtual ApplicationUser Agent { get; set; } = new ApplicationUser();
+        public string UserId { get; set; }
+        public virtual ApplicationUser User { get; set; } = new ApplicationUser();
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
     }
 }

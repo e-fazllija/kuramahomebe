@@ -15,7 +15,7 @@ namespace BackEnd.Services
                 .HasOne(c => c.Customer).WithMany(c => c.RealEstateProperties);
 
             builder.Entity<RealEstateProperty>()
-                .HasOne(c => c.Agent).WithMany(c => c.RealEstateProperties).HasForeignKey(p => p.AgentId);
+                .HasOne(c => c.User).WithMany(c => c.RealEstateProperties).HasForeignKey(p => p.UserId);
 
             builder.Entity<RealEstateProperty>()
                 .HasMany(c => c.Photos).WithOne(e => e.RealEstateProperty);
@@ -30,10 +30,10 @@ namespace BackEnd.Services
                 .HasMany(c => c.CustomerNotes);
 
             builder.Entity<Customer>()
-                .HasOne(c => c.ApplicationUser).WithMany().HasForeignKey(c => c.ApplicationUserId).OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.NoAction);
 
             builder.Entity<Request>()
-                .HasOne(c => c.ApplicationUser).WithMany().HasForeignKey(c => c.ApplicationUserId).OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.NoAction);
 
             // ==================== INDICI ====================
 
@@ -46,12 +46,12 @@ namespace BackEnd.Services
             // Rimosso indice unico su Code (campo eliminato)
 
             builder.Entity<Customer>()
-                .HasIndex(c => new { c.ApplicationUserId, c.CreationDate })
-                .HasDatabaseName("IX_Customer_ApplicationUserId_CreationDate");
+                .HasIndex(c => new { c.UserId, c.CreationDate })
+                .HasDatabaseName("IX_Customer_UserId_CreationDate");
 
             // RealEstateProperty - Indici per filtri e ricerche
             builder.Entity<RealEstateProperty>()
-                .HasIndex(p => new { p.AgentId, p.CreationDate })
+                .HasIndex(p => new { p.UserId, p.CreationDate })
                 .HasDatabaseName("IX_RealEstateProperty_AgentId_CreationDate");
 
             builder.Entity<RealEstateProperty>()
@@ -76,7 +76,7 @@ namespace BackEnd.Services
 
             // Calendar - Indici per agenda e filtri temporali
             builder.Entity<Calendar>()
-                .HasIndex(c => new { c.ApplicationUserId, c.EventStartDate })
+                .HasIndex(c => new { c.UserId, c.EventStartDate })
                 .HasDatabaseName("IX_Calendar_UserId_StartDate");
 
             builder.Entity<Calendar>()

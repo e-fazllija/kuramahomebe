@@ -23,19 +23,22 @@ namespace BackEnd.Controllers
         private readonly ILogger<RequestsController> _logger;
         private readonly ISubscriptionLimitService _subscriptionLimitService;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly AccessControlService _accessControl;
 
         public RequestsController(
            IConfiguration configuration,
            IRequestServices requestServices,
             ILogger<RequestsController> logger,
             ISubscriptionLimitService subscriptionLimitService,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            AccessControlService accessControl)
         {
             _configuration = configuration;
             _requestServices = requestServices;
             _logger = logger;
             _subscriptionLimitService = subscriptionLimitService;
             _userManager = userManager;
+            _accessControl = accessControl;
         }
         [HttpPost]
         [Route(nameof(Create))]
@@ -45,13 +48,13 @@ namespace BackEnd.Controllers
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 var currentUser = await _userManager.FindByIdAsync(userId);
-                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_requests", currentUser?.AgencyId);
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_requests", currentUser?.AdminId);
                 if (!limitCheck.CanProceed)
                 {
                     return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
                 }
                 // ownership
-                request.ApplicationUserId = userId;
+                request.UserId = userId;
                 RequestSelectModel Result = await _requestServices.Create(request);
                 return Ok();
             }
@@ -67,6 +70,19 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera la richiesta esistente
+                var req = await _requestServices.GetById(request.Id);
+                if (req == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                
+                // Verifica permessi di modifica usando AccessControlService
+                bool canModify = await _accessControl.CanModifyEntity(currentUserId, req.UserId);
+                
+                if (!canModify)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa richiesta" });
+                
                 RequestSelectModel Result = await _requestServices.Update(request);
 
                 return Ok();
@@ -135,8 +151,18 @@ namespace BackEnd.Controllers
         {
             try
             {
-                RequestSelectModel result = new RequestSelectModel();
-                result = await _requestServices.GetById(id);
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                RequestSelectModel result = await _requestServices.GetById(id);
+                
+                if (result == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                
+                // Verifica che l'utente possa accedere a questa richiesta (deve essere nella cerchia)
+                bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
+                
+                if (!canAccess)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
 
                 return Ok(result);
             }
@@ -152,6 +178,19 @@ namespace BackEnd.Controllers
         {
             try
             {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera la richiesta esistente
+                var request = await _requestServices.GetById(id);
+                if (request == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                
+                // Verifica permessi di eliminazione usando AccessControlService
+                bool canDelete = await _accessControl.CanModifyEntity(currentUserId, request.UserId);
+                
+                if (!canDelete)
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa richiesta" });
+                
                 Request result = await _requestServices.Delete(id);
                 return Ok();
             }

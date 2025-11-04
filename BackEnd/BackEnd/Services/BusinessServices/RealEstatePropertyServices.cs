@@ -182,7 +182,7 @@ namespace BackEnd.Services.BusinessServices
             try
             {
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
-                     .Include(x => x.Photos.OrderBy(x => x.Position)).Where(x => !x.Archived && x.Agent!.Agency!.EmailConfirmed)
+                     .Include(x => x.Photos.OrderBy(x => x.Position)).Where(x => !x.Archived && x.User!.Admin!.EmailConfirmed)
                      //.Include(x => x.Agent)
                      .OrderByDescending(x => x.Id);
 
@@ -224,7 +224,7 @@ namespace BackEnd.Services.BusinessServices
                 if (to > 0)
                     query = query.Where(x => x.Price <= to);
                 if (!string.IsNullOrEmpty(agencyId))
-                    query = query.Where(x => x.Agent.AgencyId == agencyId);
+                    query = query.Where(x => x.User.AdminId == agencyId);
                 if (toName != null)
                 {
                     string toNameString = toName.ToString();
@@ -268,7 +268,7 @@ namespace BackEnd.Services.BusinessServices
                     .OrderByDescending(x => x.Id);
 
                 if (!string.IsNullOrEmpty(agencyId) && agencyId != "all")
-                    query = query.Where(x => x.Agent.AgencyId!.Contains(agencyId));
+                    query = query.Where(x => x.User.AdminId!.Contains(agencyId));
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x =>
@@ -361,11 +361,11 @@ namespace BackEnd.Services.BusinessServices
             {
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
                     .Include(x => x.Photos.OrderBy(x => x.Position))
-                    .Include(x => x.Agent)
+                    .Include(x => x.User)
                     .OrderByDescending(x => x.Id);
 
                 if (!string.IsNullOrEmpty(agencyId) && agencyId != "all")
-                    query = query.Where(x => x.Agent.AgencyId!.Contains(agencyId));
+                    query = query.Where(x => x.User.AdminId!.Contains(agencyId));
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x =>
@@ -441,8 +441,8 @@ namespace BackEnd.Services.BusinessServices
                         Auction = x.Auction,
                         Sold = x.Sold,
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
-                        AgencyId = x.Agent.AgencyId,
-                        AgentId = x.AgentId
+                        AgencyId = x.User.AdminId,
+                        AgentId = x.UserId
                     })
                     .ToListAsync();
 
@@ -467,10 +467,10 @@ namespace BackEnd.Services.BusinessServices
                 var usersList = await userManager.GetUsersInRoleAsync("Agent");
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    usersList = usersList.Where(x => x.AgencyId == agencyId).ToList();
+                    usersList = usersList.Where(x => x.AdminId == agencyId).ToList();
 
                 if (!string.IsNullOrEmpty(agencyId))
-                    customerQuery = customerQuery.Where(x => x.ApplicationUserId == agencyId);
+                    customerQuery = customerQuery.Where(x => x.UserId == agencyId);
 
                 List<ApplicationUser> users = usersList.ToList();
 
@@ -543,7 +543,7 @@ namespace BackEnd.Services.BusinessServices
                 if (id is not > 0)
                     throw new Exception("Si è verificato un errore!");
 
-                var query = await _unitOfWork.dbContext.RealEstateProperties.Include(x => x.Photos.OrderBy(y => y.Position)).Include(x => x.Agent).Include(x => x.Customer)
+                var query = await _unitOfWork.dbContext.RealEstateProperties.Include(x => x.Photos.OrderBy(y => y.Position)).Include(x => x.User).Include(x => x.Customer)
                     .Include(x => x.RealEstatePropertyNotes)
                     .FirstOrDefaultAsync(x => x.Id == id);
 
@@ -623,7 +623,7 @@ namespace BackEnd.Services.BusinessServices
 
 
                 var agentsList = await userManager.GetUsersInRoleAsync("Agent");
-                agentsList = agentsList.Where(x => x.AgencyId == (agencyId ?? userId)).ToList();
+                agentsList = agentsList.Where(x => x.AdminId == (agencyId ?? userId)).ToList();
                 agents = _mapper.Map<List<UserSelectModel>>(agentsList);
 
 

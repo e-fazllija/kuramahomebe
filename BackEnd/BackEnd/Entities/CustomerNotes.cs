@@ -6,8 +6,8 @@ namespace BackEnd.Entities
     {
         [Required]
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
-        public string ApplicationUserId { get; set; }
-        public ApplicationUser ApplicationUser { get; set; }
+        public string UserId { get; set; }
+        public ApplicationUser User { get; set; }
         public int? CalendarId { get; set; }
         public int CustomerId { get; set; }
         [Required]

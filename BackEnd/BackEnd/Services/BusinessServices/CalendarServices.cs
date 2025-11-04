@@ -41,13 +41,13 @@ namespace BackEnd.Services.BusinessServices
                 var result = await _unitOfWork.CalendarRepository.InsertAsync(entityClass);
                 _unitOfWork.Save();
 
-                ApplicationUser user = await userManager.FindByIdAsync(entityClass.ApplicationUserId);
+                ApplicationUser user = await userManager.FindByIdAsync(entityClass.UserId);
 
                 if(entityClass.RequestId > 0 && entityClass.RequestId != null)
                 {
                     RequestNotes note = new RequestNotes()
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         CalendarId = result.Entity.Id,
                         RequestId = entityClass.RequestId ?? 0,
                         Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
@@ -61,7 +61,7 @@ namespace BackEnd.Services.BusinessServices
                 {
                     RealEstatePropertyNotes note = new RealEstatePropertyNotes()
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         CalendarId = result.Entity.Id,
                         RealEstatePropertyId = entityClass.RealEstatePropertyId ?? 0,
                         Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
@@ -74,7 +74,7 @@ namespace BackEnd.Services.BusinessServices
                 {
                     CustomerNotes note = new CustomerNotes()
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         CalendarId = result.Entity.Id,
                         CustomerId = entityClass.CustomerId ?? 0,
                         Text = $"<strong>Nota di</strong>: {user.FirstName} {user.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
@@ -173,18 +173,18 @@ namespace BackEnd.Services.BusinessServices
             {
                 // Query base: tutti gli appuntamenti ordinati per data
                 IQueryable<Calendar> query = _unitOfWork.dbContext.Calendars
-                    .Include(x => x.ApplicationUser)
+                    .Include(x => x.User)
                     .OrderByDescending(x => x.EventStartDate);
                 
-                // Filtra per ApplicationUserId (agente) se specificato
+                // Filtra per UserId (agente) se specificato
                 if(!string.IsNullOrEmpty(agentId))
                 {
-                    query = query.Where(x => x.ApplicationUserId == agentId);
+                    query = query.Where(x => x.UserId == agentId);
                 }
                 // Altrimenti, se è specificato agencyId, filtra per tutti gli agenti di quell'agenzia
                 else if (!string.IsNullOrEmpty(agencyId))
                 {
-                    query = query.Where(x => x.ApplicationUser.AgencyId == agencyId);
+                    query = query.Where(x => x.User.AdminId == agencyId);
                 }
 
                 if (fromName != null)
@@ -205,7 +205,7 @@ namespace BackEnd.Services.BusinessServices
 
                 
                 List<Calendar> queryList = await query
-                    .Include(x => x.ApplicationUser)
+                    .Include(x => x.User)
                     .AsNoTracking()
                     .ToListAsync();
 
@@ -226,9 +226,9 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
-                List<Customer> customers = await _unitOfWork.dbContext.Customers.Where(x => x.ApplicationUserId == agencyId).ToListAsync();
-                List<RealEstateProperty> properties = await _unitOfWork.dbContext.RealEstateProperties.Where(x => x.Agent.AgencyId == agencyId).ToListAsync();
-                List<Request> requests = await _unitOfWork.dbContext.Requests.Where(x => x.ApplicationUserId == agencyId).ToListAsync();
+                List<Customer> customers = await _unitOfWork.dbContext.Customers.Where(x => x.UserId == agencyId).ToListAsync();
+                List<RealEstateProperty> properties = await _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId).ToListAsync();
+                List<Request> requests = await _unitOfWork.dbContext.Requests.Where(x => x.UserId == agencyId).ToListAsync();
 
                 CalendarCreateViewModel result = new CalendarCreateViewModel();
                 result.Customers = _mapper.Map<List<CustomerSelectModel>>(customers);
@@ -257,14 +257,14 @@ namespace BackEnd.Services.BusinessServices
                 {
                     // Admin vede solo le proprie Agency (dove AgencyId == userId)
                     var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
-                    agenciesList = agenciesList.Where(x => x.AgencyId == userId).ToList();
+                    agenciesList = agenciesList.Where(x => x.AdminId == userId).ToList();
                     agencies = _mapper.Map<List<UserSelectModel>>(agenciesList);
                 }
 
                 if(await userManager.IsInRoleAsync(user, "Agency"))
                 {
                     var agentsList = await userManager.GetUsersInRoleAsync("Agent");
-                    agentsList = agentsList.Where(x => x.AgencyId == (agencyId ?? userId)).ToList();
+                    agentsList = agentsList.Where(x => x.AdminId == (agencyId ?? userId)).ToList();
                     agents = _mapper.Map<List<UserSelectModel>>(agentsList);
                 }
 
@@ -318,17 +318,17 @@ namespace BackEnd.Services.BusinessServices
                 {
                     existingRequestNote = new RequestNotes
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         CalendarId = entityClass.Id,
                         RequestId = requestId.Value,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.RequestNotes.AddAsync(existingRequestNote);
                 }
                 else
                 {
                     existingRequestNote.RequestId = requestId.Value;
-                    existingRequestNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
+                    existingRequestNote.Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.RequestNotes.Update(existingRequestNote);
                 }
             }
@@ -347,16 +347,16 @@ namespace BackEnd.Services.BusinessServices
                 {
                     existingPropertyNote = new RealEstatePropertyNotes
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         RealEstatePropertyId = realEstatePropertyId ?? 0,
                         CalendarId = entityClass.Id,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.RealEstatePropertyNotes.AddAsync(existingPropertyNote);
                 }
                 else
                 {
-                    existingPropertyNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
+                    existingPropertyNote.Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.RealEstatePropertyNotes.Update(existingPropertyNote);
                 }
             }
@@ -375,16 +375,16 @@ namespace BackEnd.Services.BusinessServices
                 {
                     existingCustomerNote = new CustomerNotes
                     {
-                        ApplicationUserId = entityClass.ApplicationUserId,
+                        UserId = entityClass.UserId,
                         CustomerId = customerId ?? 0,
                         CalendarId = entityClass.Id,
-                        Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
+                        Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}"
                     };
                     await _unitOfWork.dbContext.CustomerNotes.AddAsync(existingCustomerNote);
                 }
                 else
                 {
-                    existingCustomerNote.Text = $"<strong>Nota di</strong>: {entityClass.ApplicationUser.FirstName} {entityClass.ApplicationUser.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
+                    existingCustomerNote.Text = $"<strong>Nota di</strong>: {entityClass.User.FirstName} {entityClass.User.LastName} <br> <strong>Titolo</strong>: {entityClass.EventName}";
                     _unitOfWork.dbContext.CustomerNotes.Update(existingCustomerNote);
                 }
             }
@@ -400,7 +400,7 @@ namespace BackEnd.Services.BusinessServices
             try
             {
                 var entityClass =
-                    await _unitOfWork.dbContext.Calendars.Include(x => x.ApplicationUser).FirstOrDefaultAsync(x => x.Id == dto.Id);
+                    await _unitOfWork.dbContext.Calendars.Include(x => x.User).FirstOrDefaultAsync(x => x.Id == dto.Id);
 
                 if (entityClass == null)
                     throw new NullReferenceException("Record non trovato!");

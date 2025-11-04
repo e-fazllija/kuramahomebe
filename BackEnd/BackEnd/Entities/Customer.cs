@@ -35,7 +35,7 @@ namespace BackEnd.Entities
         public virtual ICollection<RealEstateProperty>? RealEstateProperties { get; set; }
         public virtual ICollection<CustomerNotes>? CustomerNotes { get; set; }
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
-        public string? ApplicationUserId { get; set; }
-        public virtual ApplicationUser? ApplicationUser { get; set; }
+        public string? UserId { get; set; }
+        public virtual ApplicationUser? User { get; set; }
     }
 }

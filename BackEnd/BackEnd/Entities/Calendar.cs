@@ -6,8 +6,8 @@ namespace BackEnd.Entities
     {
         [Required]
         [MaxLength(450, ErrorMessage = "L'ID utente non può superare i 450 caratteri")]
-        public string ApplicationUserId { get; set; } = string.Empty;
-        public virtual ApplicationUser ApplicationUser { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public virtual ApplicationUser User { get; set; }
         [Required]
         [MaxLength(200, ErrorMessage = "Il nome dell'evento non può superare i 200 caratteri")]
         public string EventName { get; set; } = string.Empty;

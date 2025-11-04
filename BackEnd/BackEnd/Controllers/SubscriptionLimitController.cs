@@ -46,7 +46,7 @@ namespace BackEnd.Controllers
                 var result = await _subscriptionLimitService.CheckFeatureLimitAsync(
                     userId, 
                     featureName, 
-                    user.AgencyId);
+                    user.AdminId);
 
                 return Ok(result);
             }
@@ -73,7 +73,7 @@ namespace BackEnd.Controllers
                 if (user == null)
                     return NotFound("Utente non trovato");
 
-                var limits = await _subscriptionLimitService.GetAllLimitsAsync(userId, user.AgencyId);
+                var limits = await _subscriptionLimitService.GetAllLimitsAsync(userId, user.AdminId);
 
                 return Ok(limits);
             }
@@ -105,7 +105,7 @@ namespace BackEnd.Controllers
                 var result = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
                     userId,
                     planId,
-                    user.AgencyId);
+                    user.AdminId);
 
                 return Ok(result);
             }

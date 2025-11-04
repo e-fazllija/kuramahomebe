@@ -1,3 +1,4 @@
+using BackEnd;
 using BackEnd.Data;
 using BackEnd.Entities;
 using BackEnd.Models.Options;
@@ -123,6 +124,24 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
+}
+
+// Seed test data (solo in Development e se abilitato nella configurazione)
+if (app.Environment.IsDevelopment())
+{
+    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", false);
+    if (seedTestData)
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            
+            var seeder = new TestDataSeeder(context, userManager, roleManager);
+            await seeder.SeedTestData();
+        }
+    }
 }
 
 app.Run();

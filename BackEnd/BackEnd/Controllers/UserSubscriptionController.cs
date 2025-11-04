@@ -63,7 +63,7 @@ namespace BackEnd.Controllers
                 if (user == null)
                     return NotFound($"Utente con ID {userId} non trovato");
 
-                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AgencyId);
+                var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 if (subscription == null)
                     return NotFound($"Nessun abbonamento attivo trovato per l'utente {userId}");
 

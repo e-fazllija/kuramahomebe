@@ -85,8 +85,8 @@ namespace BackEnd.Entities
         public int CustomerId { get; set; }
         public Customer Customer { get; set; }
         [MaxLength(450, ErrorMessage = "L'ID agente non può superare i 450 caratteri")]
-        public string AgentId { get; set; } = string.Empty;
-        public ApplicationUser Agent { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public ApplicationUser User { get; set; }
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
     }
 }

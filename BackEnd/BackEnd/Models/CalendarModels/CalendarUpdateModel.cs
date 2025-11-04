@@ -7,7 +7,7 @@ namespace BackEnd.Models.CalendarModels
     {
         public int Id { get; set; }
         [Required]
-        public string ApplicationUserId { get; set; } = string.Empty;
+        public string UserId { get; set; } = string.Empty;
         [Required]
         public string EventName { get; set; } = string.Empty;
         [Required]

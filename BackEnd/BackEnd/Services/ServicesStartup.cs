@@ -34,6 +34,9 @@ namespace BackEnd.Services
 
             builder.Services.AddTransient<ProvinceServices, ProvinceServices>();
             builder.Services.AddTransient<CityServices, CityServices>();
+            
+            // Access Control Service
+            builder.Services.AddScoped<AccessControlService>();
 
             builder.Services.AddAuthorization(options =>
             {
