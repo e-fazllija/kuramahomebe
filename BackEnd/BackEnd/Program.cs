@@ -87,13 +87,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Seed locations data
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await LocationDataSeeder.SeedLocations(context);
-}
-
 // Seed roles data
 using (var scope = app.Services.CreateScope())
 {

@@ -14,32 +14,6 @@ namespace BackEnd.Services.BusinessServices
             _context = context;
         }
 
-        public async Task<Province> Create(ProvinceCreateModel model)
-        {
-            var province = new Province
-            {
-                Name = model.Name
-            };
-
-            _context.Provinces.Add(province);
-            await _context.SaveChangesAsync();
-
-            return province;
-        }
-
-        public async Task<Province> Update(ProvinceUpdateModel model)
-        {
-            var province = await _context.Provinces.FindAsync(model.Id);
-            if (province == null)
-                throw new ArgumentException("Provincia non trovata");
-
-            province.Name = model.Name;
-
-            await _context.SaveChangesAsync();
-
-            return province;
-        }
-
         public async Task<Province> GetById(int id)
         {
             var province = await _context.Provinces
@@ -87,19 +61,5 @@ namespace BackEnd.Services.BusinessServices
             return provinces;
         }
 
-        public async Task Delete(int id)
-        {
-            var province = await _context.Provinces.FindAsync(id);
-            if (province == null)
-                throw new ArgumentException("Provincia non trovata");
-
-            // Verifica se ci sono città associate
-            var hasCities = await _context.Cities.AnyAsync(c => c.ProvinceId == id);
-            if (hasCities)
-                throw new InvalidOperationException("Non è possibile eliminare una provincia che ha città associate");
-
-            _context.Provinces.Remove(province);
-            await _context.SaveChangesAsync();
-        }
     }
 } 

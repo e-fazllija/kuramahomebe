@@ -14,44 +14,6 @@ namespace BackEnd.Services.BusinessServices
             _context = context;
         }
 
-        public async Task<City> Create(CityCreateModel model)
-        {
-            // Verifica che la provincia esista
-            var province = await _context.Provinces.FindAsync(model.ProvinceId);
-            if (province == null)
-                throw new ArgumentException("Provincia non trovata");
-
-            var city = new City
-            {
-                Name = model.Name,
-                ProvinceId = model.ProvinceId
-            };
-
-            _context.Cities.Add(city);
-            await _context.SaveChangesAsync();
-
-            return city;
-        }
-
-        public async Task<City> Update(CityUpdateModel model)
-        {
-            var city = await _context.Cities.FindAsync(model.Id);
-            if (city == null)
-                throw new ArgumentException("Città non trovata");
-
-            // Verifica che la provincia esista
-            var province = await _context.Provinces.FindAsync(model.ProvinceId);
-            if (province == null)
-                throw new ArgumentException("Provincia non trovata");
-
-            city.Name = model.Name;
-            city.ProvinceId = model.ProvinceId;
-
-            await _context.SaveChangesAsync();
-
-            return city;
-        }
-
         public async Task<City> GetById(int id)
         {
             var city = await _context.Cities
@@ -128,21 +90,6 @@ namespace BackEnd.Services.BusinessServices
                 .ToListAsync();
 
             return cities;
-        }
-
-        public async Task Delete(int id)
-        {
-            var city = await _context.Cities.FindAsync(id);
-            if (city == null)
-                throw new ArgumentException("Città non trovata");
-
-            // Verifica se ci sono località associate
-            var hasLocations = await _context.Locations.AnyAsync(l => l.CityId == id);
-            if (hasLocations)
-                throw new InvalidOperationException("Non è possibile eliminare una città che ha località associate");
-
-            _context.Cities.Remove(city);
-            await _context.SaveChangesAsync();
         }
 
         public async Task<List<CityListModel>> GetList(string? filterRequest = null, int? provinceId = null)
