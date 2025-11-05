@@ -19,7 +19,7 @@ namespace BackEnd.Models.CalendarModels
         public string? Color { get; set; }
         public DateTime EventStartDate { get; set; }
         public DateTime EventEndDate { get; set; }
-        public DateTime CreationDate { get; set; } = DateTime.Now;
+        public DateTime CreationDate { get; set; } = DateTime.UtcNow;
         public bool Confirmed { get; set; }
         public bool Cancelled { get; set; }
         public bool Postponed { get; set; }
