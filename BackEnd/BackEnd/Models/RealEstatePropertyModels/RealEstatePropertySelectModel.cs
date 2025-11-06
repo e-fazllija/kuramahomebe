@@ -37,6 +37,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int TotalBuildingfloors { get; set; }
         public int Elevators { get; set; }
         public string? MoreDetails { get; set; }
+        public string? MoreFeatures { get; set; }
         public int Bedrooms { get; set; }
         public int WarehouseRooms { get; set; }
         public int Kitchens { get; set; }

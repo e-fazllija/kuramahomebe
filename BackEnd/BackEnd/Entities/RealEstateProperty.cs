@@ -44,6 +44,8 @@ namespace BackEnd.Entities
         public int Elevators { get; set; }
         [MaxLength(2000, ErrorMessage = "I dettagli aggiuntivi non possono superare i 2000 caratteri")]
         public string? MoreDetails { get; set; }
+        [MaxLength(2000, ErrorMessage = "Le altre caratteristiche non possono superare i 2000 caratteri")]
+        public string? MoreFeatures { get; set; }
         public int Bedrooms { get; set; }
         public int WarehouseRooms { get; set; }
         public int Kitchens { get; set; }

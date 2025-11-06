@@ -20,11 +20,15 @@ namespace BackEnd.Services
         {
             _configuration = configuration;
             //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
-            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString"));
+            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString")); 
             blobstorageconnection = _configuration.GetValue<string>("Storage:LocalConnectionString")!;//secret.Value;
             cloudStorageAccount = CloudStorageAccount.Parse(blobstorageconnection);
             blobClient = cloudStorageAccount.CreateCloudBlobClient();
             container = blobClient.GetContainerReference(_configuration.GetValue<string>("Storage:BlobContainerName"));
+            
+            // Assicura che il container esista e sia pubblico
+            container.CreateIfNotExistsAsync().Wait();
+            container.SetPermissionsAsync(new BlobContainerPermissions { PublicAccess = BlobContainerPublicAccessType.Blob }).Wait();
         }
         public async Task<string> UploadFile(Stream file, string fileName)
         {
