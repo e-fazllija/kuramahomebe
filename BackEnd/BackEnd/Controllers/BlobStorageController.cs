@@ -5,6 +5,7 @@ using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -21,22 +22,39 @@ namespace BackEnd.Controllers
     {
         private readonly IStorageServices _storageServices;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly AccessControlService _accessControl;
+        private readonly UserManager<ApplicationUser> _userManager;
         private const string FOLDER_PLACEHOLDER_FILE = ".folder_placeholder";
         
-        public BlobStorageController(IStorageServices storageServices, IUnitOfWork unitOfWork) 
+        public BlobStorageController(
+            IStorageServices storageServices, 
+            IUnitOfWork unitOfWork,
+            AccessControlService accessControl,
+            UserManager<ApplicationUser> userManager) 
         {
             _storageServices = storageServices;
             _unitOfWork = unitOfWork;
+            _accessControl = accessControl;
+            _userManager = userManager;
         }
 
-        private async Task<(string userId, string? agencyId)> GetCurrentUserInfo()
+        /// <summary>
+        /// Ottiene le informazioni dell'utente corrente dal token JWT
+        /// </summary>
+        private async Task<(string userId, string adminId, ApplicationUser user, IList<string> roles)> GetCurrentUserInfo()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
                 throw new UnauthorizedAccessException("Utente non autenticato");
 
-            var user = await _unitOfWork.dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            return (userId, user?.AdminId ?? userId);
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                throw new UnauthorizedAccessException("Utente non trovato");
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var adminId = user.AdminId ?? userId;
+
+            return (userId, adminId, user, roles);
         }
 
         [HttpPost]
@@ -46,12 +64,28 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var (userId, agencyId) = await GetCurrentUserInfo();
+                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
                 
-                // Costruisci il path della cartella
+                // Costruisci il path della cartella usando l'ID utente come root
+                // Struttura: {userId}/{subfolder}/{subfolder2}/...
                 string folderPath = string.IsNullOrEmpty(request.ParentPath) 
-                    ? $"{agencyId}/{request.FolderName}"
+                    ? $"{userId}/{request.FolderName}"
                     : $"{request.ParentPath}/{request.FolderName}";
+
+                // Verifica che il ParentPath appartenga all'utente corrente o alla sua cerchia
+                if (!string.IsNullOrEmpty(request.ParentPath))
+                {
+                    var parentUserId = request.ParentPath.Split('/')[0];
+                    var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
+                    if (!canAccess && parentUserId != userId)
+                    {
+                        return StatusCode(403, new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = "Non hai i permessi per creare cartelle in questo path" 
+                        });
+                    }
+                }
 
                 // Crea un file placeholder per rappresentare la cartella nel blob storage
                 string placeholderFileName = $"{folderPath}/{FOLDER_PLACEHOLDER_FILE}";
@@ -69,7 +103,7 @@ namespace BackEnd.Controllers
                     IsFolder = true,
                     IsPrivate = false,
                     ParentPath = request.ParentPath,
-                    AgencyId = agencyId,
+                    AgencyId = adminId,
                     UserId = userId,
                     CreationDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow
@@ -113,12 +147,40 @@ namespace BackEnd.Controllers
                 if (request.File == null)
                     return BadRequest("Nessun file selezionato");
 
-                var (userId, agencyId) = await GetCurrentUserInfo();
+                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
 
-                // Costruisci il path del file
-                string filePath = string.IsNullOrEmpty(request.ParentPath)
-                    ? $"{agencyId}/{request.File.FileName.Replace(" ", "-")}"
-                    : $"{request.ParentPath}/{request.File.FileName.Replace(" ", "-")}";
+                // Costruisci il path del file usando l'ID utente come root
+                // Se è privato, va nella sottocartella "private"
+                string sanitizedFileName = request.File.FileName.Replace(" ", "-");
+                string filePath;
+                
+                if (string.IsNullOrEmpty(request.ParentPath))
+                {
+                    // Root dell'utente
+                    filePath = request.IsPrivate 
+                        ? $"{userId}/private/{sanitizedFileName}"
+                        : $"{userId}/{sanitizedFileName}";
+                }
+                else
+                {
+                    // In una sottocartella
+                    var parentUserId = request.ParentPath.Split('/')[0];
+                    
+                    // Verifica permessi sul ParentPath
+                    var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
+                    if (!canAccess && parentUserId != userId)
+                    {
+                        return StatusCode(403, new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = "Non hai i permessi per caricare file in questo path" 
+                        });
+                    }
+                    
+                    filePath = request.IsPrivate
+                        ? $"{request.ParentPath}/private/{sanitizedFileName}"
+                        : $"{request.ParentPath}/{sanitizedFileName}";
+                }
 
                 Stream stream = request.File.OpenReadStream();
                 string fileUrl = await _storageServices.UploadFile(stream, filePath);
@@ -131,8 +193,8 @@ namespace BackEnd.Controllers
                     IsFolder = false,
                     IsPrivate = request.IsPrivate,
                     ParentPath = request.ParentPath,
-                    AgencyId = agencyId,
-                    UserId = request.IsPrivate ? userId : null,
+                    AgencyId = adminId,
+                    UserId = userId, // Il creatore del file
                     CreationDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow
                 };
@@ -172,45 +234,101 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var (userId, agencyId) = await GetCurrentUserInfo();
+                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
 
-                // Filtra i documenti per agencyId e parentPath
+                // Ottieni tutti gli utenti nella cerchia (modello collaborativo)
+                var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+
+                // Query base: documenti degli utenti nella cerchia
                 var query = _unitOfWork.dbContext.Documentation
-                    .Where(d => d.AgencyId == agencyId);
+                    .Where(d => circleUserIds.Contains(d.UserId ?? ""));
 
                 // Filtra per parentPath
                 if (string.IsNullOrEmpty(parentPath))
                 {
+                    // Root: mostra solo le root degli utenti nella cerchia
                     query = query.Where(d => string.IsNullOrEmpty(d.ParentPath) || d.ParentPath == "");
                 }
                 else
                 {
+                    // Path specifico: verifica permessi
+                    var pathUserId = parentPath.Split('/')[0];
+                    var canAccess = await _accessControl.CanAccessEntity(userId, pathUserId);
+                    
+                    if (!canAccess && pathUserId != userId)
+                    {
+                        return StatusCode(403, new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = "Non hai i permessi per accedere a questo path" 
+                        });
+                    }
+                    
                     query = query.Where(d => d.ParentPath == parentPath);
                 }
 
                 var documents = await query.ToListAsync();
 
-                // Filtra i file privati: mostra solo quelli dell'utente corrente
-                var filteredDocs = documents
-                    .Where(d => !d.IsPrivate || d.UserId == userId)
-                    .Select(document => new DocumentationSelectModel
+                // Filtra i file privati basandosi sulla logica superiore:
+                // - Owner: vede tutto
+                // - Superiore (Admin/Agency): vede anche i file privati dei sottoposti
+                // - Colleghi: NON vedono i file privati
+                var filteredDocs = new List<DocumentationSelectModel>();
+                
+                foreach (var document in documents)
+                {
+                    bool canView = true;
+                    bool isOwner = document.UserId == userId;
+                    bool isSuperior = await _accessControl.IsSuperiorOf(userId, document.UserId ?? "");
+                    
+                    if (document.IsPrivate)
                     {
-                        Id = document.Id,
-                        FileName = document.FileName,
-                        FileUrl = document.FileUrl,
-                        DisplayName = document.DisplayName ?? GetDisplayNameFromPath(document.FileName),
-                        IsFolder = document.IsFolder,
-                        IsPrivate = document.IsPrivate,
-                        ParentPath = document.ParentPath,
-                        AgencyId = document.AgencyId,
-                        UserId = document.UserId,
-                        CreationDate = document.CreationDate
-                    })
+                        // File privato: verifica se può vederlo
+                        canView = isOwner || isSuperior;
+                    }
+                    
+                    if (canView)
+                    {
+                        // Ottieni informazioni sul creatore
+                        string creatorName = "Sconosciuto";
+                        if (!string.IsNullOrEmpty(document.UserId))
+                        {
+                            var creator = await _userManager.FindByIdAsync(document.UserId);
+                            if (creator != null)
+                            {
+                                creatorName = $"{creator.FirstName} {creator.LastName}";
+                                if (isOwner) creatorName += " (Tu)";
+                            }
+                        }
+                        
+                        // Verifica permessi di modifica
+                        bool canModify = await _accessControl.CanModifyEntity(userId, document.UserId ?? "");
+                        
+                        filteredDocs.Add(new DocumentationSelectModel
+                        {
+                            Id = document.Id,
+                            FileName = document.FileName,
+                            FileUrl = document.FileUrl,
+                            DisplayName = document.DisplayName ?? GetDisplayNameFromPath(document.FileName),
+                            IsFolder = document.IsFolder,
+                            IsPrivate = document.IsPrivate,
+                            ParentPath = document.ParentPath,
+                            AgencyId = document.AgencyId,
+                            UserId = document.UserId,
+                            CreationDate = document.CreationDate,
+                            IsOwner = isOwner,
+                            CanModify = canModify,
+                            CreatorName = creatorName
+                        });
+                    }
+                }
+
+                var result = filteredDocs
                     .OrderByDescending(d => d.IsFolder) // Cartelle prima
                     .ThenBy(d => d.DisplayName)
                     .ToList();
 
-                return Ok(filteredDocs);
+                return Ok(result);
             }
             catch (UnauthorizedAccessException)
             {
@@ -230,7 +348,7 @@ namespace BackEnd.Controllers
         {
             try
             {
-                var (userId, agencyId) = await GetCurrentUserInfo();
+                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
                 
                 Documentation document = await _unitOfWork.dbContext.Documentation
                     .FirstOrDefaultAsync(x => x.Id == id);
@@ -238,19 +356,44 @@ namespace BackEnd.Controllers
                 if (document == null)
                     return NotFound("Documento non trovato");
 
-                // Verifica che l'utente possa eliminare il documento
-                if (document.AgencyId != agencyId)
-                    return Forbid("Non hai i permessi per eliminare questo documento");
+                // Verifica permessi di eliminazione usando AccessControlService
+                // - Admin: può eliminare tutto nella sua cerchia
+                // - Agency: può eliminare propri + Agent
+                // - Agent: solo propri
+                bool canDelete = await _accessControl.CanModifyEntity(userId, document.UserId ?? "");
+                
+                if (!canDelete)
+                {
+                    return StatusCode(403, new AuthResponseModel() 
+                    { 
+                        Status = "Error", 
+                        Message = "Non hai i permessi per eliminare questo documento" 
+                    });
+                }
 
-                if (document.IsPrivate && document.UserId != userId)
-                    return Forbid("Non hai i permessi per eliminare questo documento privato");
+                // Verifica aggiuntiva per file privati:
+                // Solo owner e superiori possono eliminarli
+                if (document.IsPrivate)
+                {
+                    bool isOwner = document.UserId == userId;
+                    bool isSuperior = await _accessControl.IsSuperiorOf(userId, document.UserId ?? "");
+                    
+                    if (!isOwner && !isSuperior)
+                    {
+                        return StatusCode(403, new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = "Non hai i permessi per eliminare questo documento privato" 
+                        });
+                    }
+                }
 
                 // Se è una cartella, elimina ricorsivamente tutti i file al suo interno
                 if (document.IsFolder)
                 {
                     string folderPath = document.ParentPath != null 
                         ? $"{document.ParentPath}/{document.DisplayName}"
-                        : $"{agencyId}/{document.DisplayName}";
+                        : $"{document.UserId}/{document.DisplayName}";
                     
                     var childDocuments = await _unitOfWork.dbContext.Documentation
                         .Where(d => d.ParentPath != null && d.ParentPath.StartsWith(folderPath))
@@ -258,6 +401,17 @@ namespace BackEnd.Controllers
 
                     foreach (var child in childDocuments)
                     {
+                        // Verifica permessi anche per i file figli
+                        bool canDeleteChild = await _accessControl.CanModifyEntity(userId, child.UserId ?? "");
+                        if (!canDeleteChild)
+                        {
+                            return StatusCode(403, new AuthResponseModel() 
+                            { 
+                                Status = "Error", 
+                                Message = $"Non hai i permessi per eliminare il file: {child.DisplayName}" 
+                            });
+                        }
+                        
                         await _storageServices.DeleteFile(child.FileName);
                         _unitOfWork.dbContext.Documentation.Remove(child);
                     }

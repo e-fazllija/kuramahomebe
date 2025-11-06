@@ -25,10 +25,6 @@ namespace BackEnd.Services
             cloudStorageAccount = CloudStorageAccount.Parse(blobstorageconnection);
             blobClient = cloudStorageAccount.CreateCloudBlobClient();
             container = blobClient.GetContainerReference(_configuration.GetValue<string>("Storage:BlobContainerName"));
-            
-            // Assicura che il container esista e sia pubblico
-            container.CreateIfNotExistsAsync().Wait();
-            container.SetPermissionsAsync(new BlobContainerPermissions { PublicAccess = BlobContainerPublicAccessType.Blob }).Wait();
         }
         public async Task<string> UploadFile(Stream file, string fileName)
         {

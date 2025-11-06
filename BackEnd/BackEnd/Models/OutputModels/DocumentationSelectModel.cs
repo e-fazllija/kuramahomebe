@@ -12,5 +12,10 @@
         public string? AgencyId { get; set; }
         public string? UserId { get; set; }
         public DateTime CreationDate { get; set; }
+        
+        // Campi per il frontend - indicano i permessi
+        public bool IsOwner { get; set; }
+        public bool CanModify { get; set; }
+        public string? CreatorName { get; set; }
     }
 }
