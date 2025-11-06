@@ -10,7 +10,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int CommercialSurfaceate { get; set; }
         public string AddressLine { get; set; } = string.Empty;
         public string City { get; set; } = string.Empty;
-        public string Region { get; set; } = string.Empty;
+        public string State { get; set; } = string.Empty;
         public double Price { get; set; }
         public string Category { get; set; } = string.Empty;
         public string? Typology { get; set; }

@@ -279,14 +279,18 @@ namespace BackEnd.Services
                 }
 
                 // ===== RealEstatePropertyHomeDetails =====
-                result.RealEstatePropertyHomeDetails.Total = propertiesQuery.Count();
-                result.RealEstatePropertyHomeDetails.TotalSale = propertiesQuery.Where(x => x.Status == "Vendita").Count();
-                result.RealEstatePropertyHomeDetails.TotalRent = propertiesQuery.Where(x => x.Status == "Affitto").Count();
-                result.RealEstatePropertyHomeDetails.TotalLastMonth = propertiesQuery.Where(x => x.CreationDate >= now.AddMonths(-1)).Count();
+                // Ottimizzazione: usa CountAsync invece di caricare tutte le entità
+                result.RealEstatePropertyHomeDetails.Total = await propertiesQuery.CountAsync();
+                result.RealEstatePropertyHomeDetails.TotalSale = await propertiesQuery.Where(x => x.Status == "Vendita").CountAsync();
+                result.RealEstatePropertyHomeDetails.TotalRent = await propertiesQuery.Where(x => x.Status == "Affitto").CountAsync();
+                result.RealEstatePropertyHomeDetails.TotalLastMonth = await propertiesQuery.Where(x => x.CreationDate >= now.AddMonths(-1)).CountAsync();
 
-                var propertiesList = await propertiesQuery.ToListAsync();
+                // Carica solo i campi necessari per le statistiche (City, Status, Typology, Category, CreationDate)
+                var propertiesForStats = await propertiesQuery
+                    .Select(x => new { x.City, x.Status, x.Typology, x.Category, x.CreationDate })
+                    .ToListAsync();
 
-                foreach (var item in propertiesList.Where(x => x.Status == "Vendita"))
+                foreach (var item in propertiesForStats.Where(x => x.Status == "Vendita"))
                 {
                     if (!result.RealEstatePropertyHomeDetails.DistinctByCitySale.ContainsKey(item.City))
                         result.RealEstatePropertyHomeDetails.DistinctByCitySale[item.City] = 1;
@@ -300,7 +304,7 @@ namespace BackEnd.Services
                         result.RealEstatePropertyHomeDetails.DistinctByTypeSale[typeKey]++;
                 }
 
-                foreach (var item in propertiesList.Where(x => x.Status == "Affitto"))
+                foreach (var item in propertiesForStats.Where(x => x.Status == "Affitto"))
                 {
                     if (!result.RealEstatePropertyHomeDetails.DistinctByCityRent.ContainsKey(item.City))
                         result.RealEstatePropertyHomeDetails.DistinctByCityRent[item.City] = 1;
@@ -314,7 +318,7 @@ namespace BackEnd.Services
                         result.RealEstatePropertyHomeDetails.DistinctByTypeRent[typeKey]++;
                 }
 
-                result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth = propertiesList
+                result.RealEstatePropertyHomeDetails.TotalCreatedPerMonth = propertiesForStats
                     .GroupBy(obj => obj.CreationDate.Month + "/" + obj.CreationDate.Year.ToString())
                     .ToDictionary(g => g.Key, g => g.Count());
 
@@ -410,10 +414,37 @@ namespace BackEnd.Services
 
                 // ===== Properties Lists =====
                 // Proprietà disponibili (non vendute e AssignmentEnd > oggi)
-                var availableProperties = propertiesList
+                // NOTA: Le proprietà disponibili NON devono essere filtrate per anno (vogliamo tutte quelle disponibili)
+                // Ottimizzazione: usa proiezione diretta con Select() per caricare solo i campi necessari
+                IQueryable<RealEstateProperty> availablePropertiesBaseQuery = string.IsNullOrEmpty(agencyId) 
+                    ? _unitOfWork.dbContext.RealEstateProperties 
+                    : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId);
+
+                result.AvailableProperties = await availablePropertiesBaseQuery
                     .Where(p => !p.Sold && p.AssignmentEnd > now)
-                    .ToList();
-                result.AvailableProperties = _mapper.Map<List<RealEstatePropertyListModel>>(availableProperties);
+                    .Include(x => x.User)
+                    .Include(x => x.Photos)
+                    .Select(x => new RealEstatePropertyListModel
+                    {
+                        Id = x.Id,
+                        CreationDate = x.CreationDate,
+                        AssignmentEnd = x.AssignmentEnd,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        AddressLine = x.AddressLine,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        StateOfTheProperty = x.StateOfTheProperty,
+                        Status = x.Status,
+                        Auction = x.Auction,
+                        Sold = x.Sold,
+                        FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
+                        AgencyId = x.User != null ? x.User.AdminId : null,
+                        AgentId = x.UserId
+                    })
+                    .ToListAsync();
 
                 // Proprietà vendute
                 var soldPropertiesQuery = string.IsNullOrEmpty(agencyId) 
@@ -430,8 +461,31 @@ namespace BackEnd.Services
                         (x.CreationDate >= startDate && x.CreationDate <= endDate));
                 }
 
-                var soldPropertiesList = await soldPropertiesQuery.ToListAsync();
-                result.SoldProperties = _mapper.Map<List<RealEstatePropertyListModel>>(soldPropertiesList);
+                // Ottimizzazione: usa proiezione diretta con Select() per caricare solo i campi necessari
+                result.SoldProperties = await soldPropertiesQuery
+                    .Include(x => x.User)
+                    .Include(x => x.Photos)
+                    .Select(x => new RealEstatePropertyListModel
+                    {
+                        Id = x.Id,
+                        CreationDate = x.CreationDate,
+                        AssignmentEnd = x.AssignmentEnd,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        AddressLine = x.AddressLine,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        StateOfTheProperty = x.StateOfTheProperty,
+                        Status = x.Status,
+                        Auction = x.Auction,
+                        Sold = x.Sold,
+                        FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
+                        AgencyId = x.User != null ? x.User.AdminId : null,
+                        AgentId = x.UserId
+                    })
+                    .ToListAsync();
 
                 // ===== Requests =====
                 result.Requests = _mapper.Map<List<RequestSelectModel>>(requestsList);

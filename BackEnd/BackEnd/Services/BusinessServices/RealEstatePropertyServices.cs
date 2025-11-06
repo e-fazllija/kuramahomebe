@@ -444,7 +444,7 @@ namespace BackEnd.Services.BusinessServices
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
                         City = x.City,
-                        Region = x.State,
+                        State = x.State,
                         Price = x.Price,
                         Category = x.Category,
                         Typology = x.Typology,
