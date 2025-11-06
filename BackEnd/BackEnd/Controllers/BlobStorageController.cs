@@ -304,11 +304,26 @@ namespace BackEnd.Controllers
                         // Verifica permessi di modifica
                         bool canModify = await _accessControl.CanModifyEntity(userId, document.UserId ?? "");
                         
+                        // Genera URL con SAS token per file (non per cartelle)
+                        string fileUrl = document.FileUrl;
+                        if (!document.IsFolder && !string.IsNullOrEmpty(document.FileName))
+                        {
+                            try
+                            {
+                                fileUrl = _storageServices.GenerateSasUrl(document.FileName, expirationMinutes: 60);
+                            }
+                            catch (Exception ex)
+                            {
+                                // In caso di errore, usa l'URL originale (fallback)
+                                fileUrl = document.FileUrl;
+                            }
+                        }
+                        
                         filteredDocs.Add(new DocumentationSelectModel
                         {
                             Id = document.Id,
                             FileName = document.FileName,
-                            FileUrl = document.FileUrl,
+                            FileUrl = fileUrl, // URL con SAS token per accesso temporaneo
                             DisplayName = document.DisplayName ?? GetDisplayNameFromPath(document.FileName),
                             IsFolder = document.IsFolder,
                             IsPrivate = document.IsPrivate,

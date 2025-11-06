@@ -20,7 +20,7 @@ namespace BackEnd.Services.BusinessServices
         private readonly IMapper _mapper;
         private readonly ILogger<RealEstatePropertyServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
-        private readonly IStorageServices _storageServices;
+        private readonly IPropertyStorageService _propertyStorageService;
         private readonly UserManager<ApplicationUser> userManager;
         private readonly AccessControlService _accessControl;
         
@@ -29,7 +29,7 @@ namespace BackEnd.Services.BusinessServices
             IMapper mapper,
             ILogger<RealEstatePropertyServices> logger,
             IOptionsMonitor<PaginationOptions> options,
-            IStorageServices storageServices,
+            IPropertyStorageService propertyStorageService,
             UserManager<ApplicationUser> userManager,
             AccessControlService accessControl
             )
@@ -38,7 +38,7 @@ namespace BackEnd.Services.BusinessServices
             _mapper = mapper;
             _logger = logger;
             this.options = options;
-            _storageServices = storageServices;
+            _propertyStorageService = propertyStorageService;
             this.userManager = userManager;
             _accessControl = accessControl;
         }
@@ -102,7 +102,7 @@ namespace BackEnd.Services.BusinessServices
                 {
                     Stream stream = file.OpenReadStream();
                     string fileName = $"RealEstatePropertyPhotos/{dto.PropertyId}/{file.FileName.Replace(" ", "-")}";
-                    string fileUrl = await _storageServices.UploadFile(stream, fileName);
+                    string fileUrl = await _propertyStorageService.UploadPropertyImage(stream, fileName);
 
                     var now = DateTime.UtcNow;
                     RealEstatePropertyPhoto photo = new RealEstatePropertyPhoto()
@@ -155,7 +155,7 @@ namespace BackEnd.Services.BusinessServices
 
                 foreach (var photo in EntityClasses.Photos)
                 {
-                    await _storageServices.DeleteFile(photo.FileName);
+                    await _propertyStorageService.DeletePropertyImage(photo.FileName);
                 }
 
                 _unitOfWork.dbContext.RealEstatePropertyPhotos.RemoveRange(EntityClasses.Photos);

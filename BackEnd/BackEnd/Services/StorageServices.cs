@@ -8,23 +8,64 @@ using Azure.Security.KeyVault.Secrets;
 
 namespace BackEnd.Services
 {
+    /// <summary>
+    /// Servizio per la gestione dello storage dei documenti privati.
+    /// Utilizza un container blob con accesso privato che richiede autenticazione.
+    /// Per le immagini delle proprietà pubbliche, usare IPropertyStorageService.
+    /// </summary>
     public class StorageServices : IStorageServices
     {
         private readonly IConfiguration _configuration;
+        private readonly ILogger<StorageServices> _logger;
         private string blobstorageconnection;
         private CloudStorageAccount cloudStorageAccount;
         private CloudBlobClient blobClient;
         private CloudBlobContainer container;
         private SecretClient secretClient;
-        public StorageServices(IConfiguration configuration)
+        
+        public StorageServices(IConfiguration configuration, ILogger<StorageServices> logger)
         {
             _configuration = configuration;
+            _logger = logger;
+            
             //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
             //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString")); 
             blobstorageconnection = _configuration.GetValue<string>("Storage:LocalConnectionString")!;//secret.Value;
             cloudStorageAccount = CloudStorageAccount.Parse(blobstorageconnection);
             blobClient = cloudStorageAccount.CreateCloudBlobClient();
+            
+            // Container per documenti privati (richiede autenticazione)
             container = blobClient.GetContainerReference(_configuration.GetValue<string>("Storage:BlobContainerName"));
+            
+            // Assicura che il container esista con permessi privati
+            InitializeContainerAsync().Wait();
+        }
+
+        /// <summary>
+        /// Inizializza il container con permessi privati (accesso solo autenticato)
+        /// </summary>
+        private async Task InitializeContainerAsync()
+        {
+            try
+            {
+                // Crea il container se non esiste
+                await container.CreateIfNotExistsAsync();
+
+                // Imposta i permessi di accesso privato (nessun accesso anonimo)
+                BlobContainerPermissions permissions = new BlobContainerPermissions
+                {
+                    PublicAccess = BlobContainerPublicAccessType.Off
+                };
+
+                await container.SetPermissionsAsync(permissions);
+                
+                _logger.LogInformation($"Container documenti '{container.Name}' inizializzato con accesso privato");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore durante l'inizializzazione del container documenti: {ex.Message}");
+                throw;
+            }
         }
         public async Task<string> UploadFile(Stream file, string fileName)
         {
@@ -116,6 +157,36 @@ namespace BackEnd.Services
             string urlBlob = _configuration.GetValue<string>("Storage:Url");
             var substring = url.Replace(urlBlob + container + "/", "");
             return substring;
+        }
+
+        /// <summary>
+        /// Genera un URL con Shared Access Signature (SAS) per accesso temporaneo a file privati
+        /// </summary>
+        public string GenerateSasUrl(string fileName, int expirationMinutes = 60)
+        {
+            try
+            {
+                var blob = container.GetBlockBlobReference(fileName);
+
+                // Crea una policy SAS con permessi di lettura
+                var sasConstraints = new SharedAccessBlobPolicy
+                {
+                    SharedAccessStartTime = DateTimeOffset.UtcNow.AddMinutes(-5), // 5 minuti di buffer per differenze di clock
+                    SharedAccessExpiryTime = DateTimeOffset.UtcNow.AddMinutes(expirationMinutes),
+                    Permissions = SharedAccessBlobPermissions.Read
+                };
+
+                // Genera il token SAS
+                var sasBlobToken = blob.GetSharedAccessSignature(sasConstraints);
+
+                // Restituisce l'URL completo con il token SAS
+                return blob.Uri + sasBlobToken;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore durante la generazione del SAS token per '{fileName}': {ex.Message}");
+                throw new Exception("Si è verificato un errore durante la generazione dell'accesso al file.");
+            }
         }
 
     }

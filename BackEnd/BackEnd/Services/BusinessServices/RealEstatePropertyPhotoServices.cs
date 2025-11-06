@@ -16,14 +16,14 @@ namespace BackEnd.Services.BusinessServices
         private readonly IMapper _mapper;
         private readonly ILogger<RealEstatePropertyPhotoServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
-        private readonly IStorageServices _storageServices;
-        public RealEstatePropertyPhotoServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<RealEstatePropertyPhotoServices> logger, IOptionsMonitor<PaginationOptions> options, IStorageServices storageServices)
+        private readonly IPropertyStorageService _propertyStorageService;
+        public RealEstatePropertyPhotoServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<RealEstatePropertyPhotoServices> logger, IOptionsMonitor<PaginationOptions> options, IPropertyStorageService propertyStorageService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.options = options;
-            _storageServices = storageServices;
+            _propertyStorageService = propertyStorageService;
         }
         public async Task<RealEstatePropertyPhotoSelectModel> Create(RealEstatePropertyPhotoCreateModel dto)
         {
@@ -65,7 +65,7 @@ namespace BackEnd.Services.BusinessServices
                 _unitOfWork.RealEstatePropertyPhotoRepository.Delete(EntityClasses);
                 await _unitOfWork.SaveAsync();
 
-                await _storageServices.DeleteFile(EntityClasses.FileName);
+                await _propertyStorageService.DeletePropertyImage(EntityClasses.FileName);
 
                 _logger.LogInformation(nameof(Delete));
             }
