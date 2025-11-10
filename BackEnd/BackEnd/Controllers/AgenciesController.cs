@@ -15,6 +15,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace BackEnd.Controllers
 {
@@ -124,8 +126,9 @@ namespace BackEnd.Controllers
                 // Crea l'utente
                 ApplicationUser user = _mapper.Map<ApplicationUser>(model);
                 user.SecurityStamp = Guid.NewGuid().ToString();
-                user.UserName = user.Email.Split("@")[0];
+                user.UserName = user.Email;
                 user.AdminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                user.EmailConfirmed = true;
 
                 var result = await userManager.CreateAsync(user, randomPassword);
 
@@ -146,20 +149,15 @@ namespace BackEnd.Controllers
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Errore durante l'assegnazione del ruolo" });
                 }
 
-                // Genera token per conferma email
-                var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-
-                // ===== MODALITÀ TEST: Link di conferma email =====
-                var confirmationLink = $"http://localhost:5173/email-confirmation/{user.Email}/{token}";
+                // ===== MODALITÀ TEST: Comunicazione credenziali =====
                 Console.WriteLine("========================================");
-                Console.WriteLine("LINK DI CONFERMA AGENZIA (TEST):");
-                Console.WriteLine(confirmationLink);
+                Console.WriteLine("CREAZIONE AGENZIA (TEST):");
+                Console.WriteLine($"EMAIL: {user.Email}");
                 Console.WriteLine($"PASSWORD TEMPORANEA: {randomPassword}");
                 Console.WriteLine("========================================");
 
                 // ===== MODALITÀ PRODUZIONE: Invio email con credenziali =====
                 // Decommentare le righe seguenti per l'invio effettivo delle email in produzione
-                // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
                 // MailRequest mailRequest = new MailRequest()
                 // {
                 //     ToEmail = user.Email,
@@ -171,10 +169,7 @@ namespace BackEnd.Controllers
                 //         <p>Email: {user.Email}</p>
                 //         <p>Password: {randomPassword}</p>
                 //         <p><strong>IMPORTANTE:</strong> Cambia la password al primo accesso per motivi di sicurezza.</p>
-                //         <p>Per attivare il tuo account, <a href='{confirmationLink}'>clicca qui</a></p>
-                //         <p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p>
-                //         <p>{confirmationLink}</p>
-                //         <p>Il link scadrà tra 24 ore.</p>
+                //         <p>Per accedere alla piattaforma, visita il portale KuramaHome e inserisci le tue credenziali.</p>
                 //     "
                 // };
                 // await _mailService.SendEmailAsync(mailRequest);
@@ -304,6 +299,19 @@ namespace BackEnd.Controllers
                     return StatusCode(403, "Accesso negato: puoi eliminare solo le tue agenzie");
                 }
                 
+                // Rimuovi eventuali utenti collegati (es. agenti) per evitare violazioni FK
+                var dependentUsers = await userManager.Users.Where(u => u.AdminId == id).ToListAsync();
+
+                foreach (var dependent in dependentUsers)
+                {
+                    var deleteDependentResult = await userManager.DeleteAsync(dependent);
+                    if (!deleteDependentResult.Succeeded)
+                    {
+                        var errorMessage = string.Join(", ", deleteDependentResult.Errors.Select(e => e.Description));
+                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Impossibile eliminare gli utenti collegati: {errorMessage}" });
+                    }
+                }
+
                 await userManager.DeleteAsync(user);
                 return Ok();
             }

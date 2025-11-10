@@ -18,5 +18,6 @@ namespace BackEnd.Models.RequestModels
         public string PropertyType { get; set; } = string.Empty;
         public bool Archived { get; set; }
         public bool Closed { get; set; }
+        public string? UserId { get; set; }
     }
 } 

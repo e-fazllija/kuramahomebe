@@ -13,7 +13,7 @@ namespace BackEnd.Profiles
 
             CreateMap<ApplicationUser, UserCreateModel>();
             CreateMap<UserCreateModel, ApplicationUser>()
-                .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.Email.Replace(" ", "_"))) // Genera UserName da Email
+                .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.Email)) // Mantiene lo stesso indirizzo email come UserName
                 .ForMember(dest => dest.SecurityStamp, opt => opt.Ignore()) // Gestito manualmente nel controller
                 .ForMember(dest => dest.CreationDate, opt => opt.MapFrom(src => DateTime.UtcNow))
                 .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src => DateTime.UtcNow))

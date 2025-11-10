@@ -58,10 +58,13 @@ namespace BackEnd.Controllers
                 var currentUser = await userManager.FindByIdAsync(currentUserId);
                 var currentUserRoles = await userManager.GetRolesAsync(currentUser);
                 
-                // Gli Agent non possono aggiornare altri agenti
+                // Gli Agent possono modificare solo sé stessi
                 if (currentUserRoles.Contains("Agent"))
                 {
-                    return StatusCode(403, "Accesso negato: gli agenti non possono modificare altri agenti");
+                    if (request.Id != currentUserId)
+                    {
+                        return StatusCode(403, "Accesso negato: gli agenti possono modificare solo il proprio profilo");
+                    }
                 }
                 
                 ApplicationUser user = await userManager.FindByIdAsync(request.Id) ?? throw new NullReferenceException("Agente non trovato");
@@ -145,8 +148,9 @@ namespace BackEnd.Controllers
                 // Crea l'utente
                 ApplicationUser user = _mapper.Map<ApplicationUser>(model);
                 user.SecurityStamp = Guid.NewGuid().ToString();
-                user.UserName = user.Email.Split("@")[0];
+                user.UserName = user.Email;
                 user.AdminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                user.EmailConfirmed = true;
 
                 var result = await userManager.CreateAsync(user, randomPassword);
 
@@ -167,20 +171,15 @@ namespace BackEnd.Controllers
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Errore durante l'assegnazione del ruolo" });
                 }
 
-                // Genera token per conferma email
-                var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-
-                // ===== MODALITÀ TEST: Link di conferma email =====
-                var confirmationLink = $"http://localhost:5173/email-confirmation/{user.Email}/{token}";
+                // ===== MODALITÀ TEST: Comunicazione credenziali =====
                 Console.WriteLine("========================================");
-                Console.WriteLine("LINK DI CONFERMA AGENTE (TEST):");
-                Console.WriteLine(confirmationLink);
+                Console.WriteLine("CREAZIONE AGENTE (TEST):");
+                Console.WriteLine($"EMAIL: {user.Email}");
                 Console.WriteLine($"PASSWORD TEMPORANEA: {randomPassword}");
                 Console.WriteLine("========================================");
 
                 // ===== MODALITÀ PRODUZIONE: Invio email con credenziali =====
                 // Decommentare le righe seguenti per l'invio effettivo delle email in produzione
-                // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
                 // MailRequest mailRequest = new MailRequest()
                 // {
                 //     ToEmail = user.Email,
@@ -192,10 +191,7 @@ namespace BackEnd.Controllers
                 //         <p>Email: {user.Email}</p>
                 //         <p>Password: {randomPassword}</p>
                 //         <p><strong>IMPORTANTE:</strong> Cambia la password al primo accesso per motivi di sicurezza.</p>
-                //         <p>Per attivare il tuo account, <a href='{confirmationLink}'>clicca qui</a></p>
-                //         <p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p>
-                //         <p>{confirmationLink}</p>
-                //         <p>Il link scadrà tra 24 ore.</p>
+                //         <p>Per accedere alla piattaforma, visita il portale KuramaHome e inserisci le tue credenziali.</p>
                 //     "
                 // };
                 // await _mailService.SendEmailAsync(mailRequest);

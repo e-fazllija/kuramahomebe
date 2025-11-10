@@ -8,6 +8,7 @@ using BackEnd.Models.RequestModels;
 using BackEnd.Models.Options;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
+using Microsoft.AspNetCore.Identity;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -18,14 +19,22 @@ namespace BackEnd.Services.BusinessServices
         private readonly ILogger<RequestServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
         private readonly AccessControlService _accessControl;
-        
-        public RequestServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<RequestServices> logger, IOptionsMonitor<PaginationOptions> options, AccessControlService accessControl)
+        private readonly UserManager<ApplicationUser> _userManager;
+
+        public RequestServices(
+            IUnitOfWork unitOfWork,
+            IMapper mapper,
+            ILogger<RequestServices> logger,
+            IOptionsMonitor<PaginationOptions> options,
+            AccessControlService accessControl,
+            UserManager<ApplicationUser> userManager)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.options = options;
             _accessControl = accessControl;
+            _userManager = userManager;
         }
         public async Task<RequestSelectModel> Create(RequestCreateModel dto)
         {
@@ -101,11 +110,7 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
                 // Filtra per cerchia usando AccessControlService
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
-                    query = query.Where(x => circleUserIds.Contains(x.UserId));
-                }
+                query = await ApplyRoleBasedFilter(query, userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -230,11 +235,7 @@ namespace BackEnd.Services.BusinessServices
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
-                    query = query.Where(x => circleUserIds.Contains(x.UserId));
-                }
+                query = await ApplyRoleBasedFilter(query, userId);
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -267,7 +268,8 @@ namespace BackEnd.Services.BusinessServices
                         PriceFrom = x.PriceFrom,
                         PropertyType = x.PropertyType,
                         Archived = x.Archived,
-                        Closed = x.Closed
+                        Closed = x.Closed,
+                        UserId = x.UserId
                     })
                     .ToListAsync();
 
@@ -282,6 +284,26 @@ namespace BackEnd.Services.BusinessServices
                 _logger.LogError(ex.Message);
                 throw new Exception("Si è verificato un errore");
             }
+        }
+
+        private async Task<IQueryable<Request>> ApplyRoleBasedFilter(IQueryable<Request> query, string? userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return query;
+            }
+
+            var currentUser = await _userManager.FindByIdAsync(userId);
+
+            if (currentUser == null)
+            {
+                return query.Where(request => false);
+            }
+
+            var currentUserRoles = await _userManager.GetRolesAsync(currentUser);
+
+            var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+            return query.Where(request => request.UserId != null && circleUserIds.Contains(request.UserId));
         }
 
         public async Task<RequestSelectModel> GetById(int id)

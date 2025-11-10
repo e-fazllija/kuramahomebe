@@ -12,7 +12,7 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<ListViewModel<RealEstatePropertySelectModel>> Get(int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, string? userId = null);
         Task<ListViewModel<RealEstatePropertyListModel>> GetList(int currentPage, string? filterRequest, string? contract, int? priceFrom, int? priceTo, string? category, string? typologie, string? city, bool? sold, string? userId = null);
         public int GetPropertyCount();
-        Task<RealEstatePropertyCreateViewModel> GetToInsert(string? agencyId);
+        Task<RealEstatePropertyCreateViewModel> GetToInsert(string currentUserId);
         Task<RealEstatePropertySelectModel> Update(RealEstatePropertyUpdateModel dto);
         Task<RealEstatePropertySelectModel> GetById(int id);
         Task Delete(int id);

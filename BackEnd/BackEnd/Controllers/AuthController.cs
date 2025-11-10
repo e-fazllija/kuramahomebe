@@ -125,8 +125,18 @@ namespace BackEnd.Controllers
             {
                 model.Email = model.Email.Replace(" ", "_");
                 var user = await userManager.FindByEmailAsync(model.Email);
-                var pass = await userManager.CheckPasswordAsync(user, model.Password);
-                if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
+
+                if (user == null)
+                {
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Credenziali non valide" });
+                }
+
+                if (!user.EmailConfirmed)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Account temporaneamente bloccato." });
+                }
+
+                if (await userManager.CheckPasswordAsync(user, model.Password))
                 {
                     var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
 
@@ -184,7 +194,7 @@ namespace BackEnd.Controllers
 
                     return Ok(result);
                 }
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Utente non autorizzato" });
+                return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Credenziali non valide" });
             }
             catch (Exception ex)
             {

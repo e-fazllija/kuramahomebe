@@ -471,25 +471,39 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<RealEstatePropertyCreateViewModel> GetToInsert(string? agencyId)
+        public async Task<RealEstatePropertyCreateViewModel> GetToInsert(string currentUserId)
         {
             try
             {
-                IQueryable<Customer> customerQuery = _unitOfWork.dbContext.Customers;
-                var usersList = await userManager.GetUsersInRoleAsync("Agent");
+                if (string.IsNullOrWhiteSpace(currentUserId))
+                {
+                    throw new ArgumentException("Utente non valido per il recupero dei dati di inserimento", nameof(currentUserId));
+                }
 
-                if (!string.IsNullOrEmpty(agencyId))
-                    usersList = usersList.Where(x => x.AdminId == agencyId).ToList();
+                var currentUser = await userManager.FindByIdAsync(currentUserId)
+                    ?? throw new InvalidOperationException("Utente corrente non trovato");
 
-                if (!string.IsNullOrEmpty(agencyId))
-                    customerQuery = customerQuery.Where(x => x.UserId == agencyId);
+                var accessibleUserIds = await _accessControl.GetCircleUserIdsFor(currentUserId);
+                if (!accessibleUserIds.Contains(currentUserId))
+                {
+                    accessibleUserIds.Add(currentUserId);
+                }
 
-                List<ApplicationUser> users = usersList.ToList();
+                IQueryable<Customer> customerQuery = _unitOfWork.dbContext.Customers
+                    .Include(c => c.User)
+                    .Where(customer =>
+                        (!string.IsNullOrEmpty(customer.UserId) && accessibleUserIds.Contains(customer.UserId)) ||
+                        (customer.User != null && !string.IsNullOrEmpty(customer.User.AdminId) && accessibleUserIds.Contains(customer.User.AdminId)));
 
-                RealEstatePropertyCreateViewModel result = new RealEstatePropertyCreateViewModel();
-                List<Customer> customers = await customerQuery.ToListAsync();
-                result.Customers = _mapper.Map<List<CustomerSelectModel>>(customers);
-                result.Agents = _mapper.Map<List<UserSelectModel>>(users);
+                var agentsInCircle = (await userManager.GetUsersInRoleAsync("Agent"))
+                    .Where(agent => accessibleUserIds.Contains(agent.Id))
+                    .ToList();
+
+                var result = new RealEstatePropertyCreateViewModel
+                {
+                    Customers = _mapper.Map<List<CustomerSelectModel>>(await customerQuery.ToListAsync()),
+                    Agents = _mapper.Map<List<UserSelectModel>>(agentsInCircle)
+                };
 
                 _logger.LogInformation(nameof(GetToInsert));
 

@@ -55,8 +55,8 @@ namespace BackEnd.Controllers
                 }
                 // ownership
                 request.UserId = userId;
-                // Assegna AdminId dall'utente corrente
-                request.AdminId = currentUser?.AdminId ?? userId;
+                // Assegna AdminId all'utente che crea il cliente
+                request.AdminId = userId;
                 CustomerSelectModel Result = await _customerServices.Create(request);
                 return Ok();
             }
@@ -86,8 +86,8 @@ namespace BackEnd.Controllers
                 if (!canModify)
                     return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo cliente" });
                 
-                // Assegna AdminId dall'utente corrente (mantieni quello esistente se non è un admin)
-                request.AdminId = currentUser?.AdminId ?? customer.AdminId ?? currentUserId;
+                // Mantieni l'AdminId originale del cliente
+                request.AdminId = customer.AdminId;
                 
                 CustomerSelectModel Result = await _customerServices.Update(request);
 

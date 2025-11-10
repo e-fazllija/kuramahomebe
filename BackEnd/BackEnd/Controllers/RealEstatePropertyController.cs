@@ -240,11 +240,18 @@ namespace BackEnd.Controllers
 
         [HttpGet]
         [Route(nameof(GetToInsert))]
-        public async Task<IActionResult> GetToInsert(string? agencyId)
+        public async Task<IActionResult> GetToInsert()
         {
             try
             {
-                RealEstatePropertyCreateViewModel res = await _realEstatePropertyServices.GetToInsert(agencyId);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                RealEstatePropertyCreateViewModel res = await _realEstatePropertyServices.GetToInsert(userId);
 
                 return Ok(res);
             }
