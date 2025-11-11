@@ -8,7 +8,8 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string Title { get; set; } = string.Empty;
         [Required]
         public string Category { get; set; } = string.Empty;
-        public string? Typology { get; set; }
+        [Required(ErrorMessage = "Tipologia obbligatoria")]
+        public string Typology { get; set; } = string.Empty;
         public bool InHome { get; set; }
         public bool Highlighted { get; set; }
         public bool Auction { get; set; }
@@ -27,6 +28,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         [Required]
         public string PostCode { get; set; } = string.Empty;
         [Required]
+        [Range(1, int.MaxValue, ErrorMessage = "Superficie obbligatoria")]
         public int CommercialSurfaceate { get; set; }
         public string? Floor { get; set; }
         [Required]
@@ -43,9 +45,12 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int ParkingSpaces { get; set; }
         public string? Heating { get; set; }
         public string? Exposure { get; set; }
-        public string? EnergyClass { get; set; }
+        [Required(ErrorMessage = "Classe energetica obbligatoria")]
+        public string EnergyClass { get; set; } = string.Empty;
         public string? TypeOfProperty { get; set; }
-        public string? StateOfTheProperty { get; set; }
+        [Required(ErrorMessage = "Stato dell'immobile obbligatorio")]
+        public string StateOfTheProperty { get; set; } = string.Empty;
+        [Range(1000, 3000, ErrorMessage = "Anno di costruzione obbligatorio")]
         public int YearOfConstruction { get; set; }
         [Required]
         public double Price { get; set; }
@@ -58,7 +63,9 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? VideoUrl { get; set; }
         public DateTime AssignmentEnd { get; set; }
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
+        [Range(1, int.MaxValue, ErrorMessage = "Cliente obbligatorio")]
         public int CustomerId { get; set; }
+        [Required(ErrorMessage = "Agente obbligatorio")]
         public string AgentId { get; set; } = string.Empty;
         public string? TypeOfAssignment { get; set; }
         public int AgreedCommission { get; set; }

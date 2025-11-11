@@ -489,20 +489,40 @@ namespace BackEnd.Services.BusinessServices
                     accessibleUserIds.Add(currentUserId);
                 }
 
+                var accessibleUserIdsSet = accessibleUserIds.ToHashSet();
+
+                // Gli AdminId di riferimento includono tutte le entità raggiungibili e l'eventuale superiore diretto.
+                var accessibleAdminIds = new HashSet<string>(accessibleUserIdsSet);
+                if (!string.IsNullOrEmpty(currentUser.AdminId))
+                {
+                    accessibleAdminIds.Add(currentUser.AdminId);
+                }
+
                 IQueryable<Customer> customerQuery = _unitOfWork.dbContext.Customers
                     .Include(c => c.User)
                     .Where(customer =>
-                        (!string.IsNullOrEmpty(customer.UserId) && accessibleUserIds.Contains(customer.UserId)) ||
-                        (customer.User != null && !string.IsNullOrEmpty(customer.User.AdminId) && accessibleUserIds.Contains(customer.User.AdminId)));
+                        !string.IsNullOrEmpty(customer.UserId) &&
+                        accessibleUserIdsSet.Contains(customer.UserId));
 
                 var agentsInCircle = (await userManager.GetUsersInRoleAsync("Agent"))
-                    .Where(agent => accessibleUserIds.Contains(agent.Id))
+                    .Where(agent =>
+                        !string.IsNullOrEmpty(agent.AdminId) &&
+                        accessibleAdminIds.Contains(agent.AdminId))
                     .ToList();
+
+                var agentModels = _mapper.Map<List<UserSelectModel>>(agentsInCircle);
+
+                var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
+                if (currentUserModel != null)
+                {
+                    agentModels.RemoveAll(agent => agent.Id == currentUserModel.Id);
+                    agentModels.Insert(0, currentUserModel);
+                }
 
                 var result = new RealEstatePropertyCreateViewModel
                 {
                     Customers = _mapper.Map<List<CustomerSelectModel>>(await customerQuery.ToListAsync()),
-                    Agents = _mapper.Map<List<UserSelectModel>>(agentsInCircle)
+                    Agents = agentModels
                 };
 
                 _logger.LogInformation(nameof(GetToInsert));

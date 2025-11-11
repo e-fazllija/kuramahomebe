@@ -14,8 +14,11 @@ namespace BackEnd.Profiles
             CreateMap<RealEstatePropertySelectModel, RealEstatePropertyUpdateModel>();
             CreateMap<RealEstatePropertyUpdateModel, RealEstatePropertySelectModel>();
 
-            CreateMap<RealEstatePropertyCreateModel, RealEstateProperty>();
-            CreateMap<RealEstatePropertyUpdateModel, RealEstateProperty>();
+            CreateMap<RealEstatePropertyCreateModel, RealEstateProperty>()
+                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.AgentId));
+
+            CreateMap<RealEstatePropertyUpdateModel, RealEstateProperty>()
+                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.AgentId));
             CreateMap<RealEstatePropertySelectModel, RealEstateProperty>();
 
             // Mapping per Dashboard - i nomi delle proprietà corrispondono all'entità
