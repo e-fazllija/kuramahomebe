@@ -6,8 +6,6 @@ namespace BackEnd.Models.CustomerModels
     public class CustomerSelectModel
     {
         public int Id { get; set; }
-        [Required]
-        public string Code { get; set; } = string.Empty;
         public bool Buyer { get; set; }
         public bool Seller { get; set; }
         public bool Builder { get; set; }
@@ -32,7 +30,6 @@ namespace BackEnd.Models.CustomerModels
         public ICollection<CustomerNotes>? CustomerNotes { get; set; }
         public string UserId { get; set; } = string.Empty;
         public ApplicationUser? User { get; set; }
-        public string AdminId { get; set; } = string.Empty;
 
     }
 }
