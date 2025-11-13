@@ -984,6 +984,9 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("RealEstatePropertyId")
                         .HasColumnType("integer");
 
