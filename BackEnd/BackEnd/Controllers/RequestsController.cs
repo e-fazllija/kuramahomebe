@@ -241,9 +241,29 @@ namespace BackEnd.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Verifica se export è abilitato
+                bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
+                if (!exportEnabled)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
+                }
+
+                // Verifica limite export mensili
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
+                if (!limitCheck.CanProceed)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
+                }
+
                 var result = await _requestServices.Get(0, null, fromName, toName, userId);
                 DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
                 byte[] fileBytes = Export.GenerateExcelContent(table);
+
+                // Registra l'export
+                await _subscriptionLimitService.RecordExportAsync(userId, "excel", "requests");
 
                 return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
             }
@@ -260,9 +280,29 @@ namespace BackEnd.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Verifica se export è abilitato
+                bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
+                if (!exportEnabled)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
+                }
+
+                // Verifica limite export mensili
+                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
+                if (!limitCheck.CanProceed)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
+                }
+
                 var result = await _requestServices.Get(0, null, fromName, toName, userId);
                 DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
                 byte[] fileBytes = Export.GenerateCsvContent(table);
+
+                // Registra l'export
+                await _subscriptionLimitService.RecordExportAsync(userId, "csv", "requests");
 
                 return File(fileBytes, "text/csv", "Output.csv");
             }

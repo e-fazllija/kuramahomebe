@@ -3,6 +3,7 @@ using System;
 using BackEnd.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEnd.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251118111438_StorageControls")]
+    partial class StorageControls
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -431,10 +434,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("character varying(450)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AgencyId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Documentation");
                 });
@@ -1609,7 +1608,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("User");
                 });
@@ -1629,21 +1628,6 @@ namespace BackEnd.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("BackEnd.Entities.Documentation", b =>
-                {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("AgencyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("FK_Documentation_Agency_AgencyId");
-
-                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("FK_Documentation_User_UserId");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.ExportHistory", b =>
@@ -1667,7 +1651,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Payments")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Subscription");
@@ -1699,7 +1683,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.RealEstateProperty", "RealEstateProperty")
                         .WithMany("RealEstatePropertyNotes")
                         .HasForeignKey("RealEstatePropertyId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
@@ -1735,7 +1719,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Customer");
 
@@ -1785,7 +1769,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("LastPayment");

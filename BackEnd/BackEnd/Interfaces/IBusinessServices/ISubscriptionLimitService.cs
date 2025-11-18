@@ -32,6 +32,22 @@ namespace BackEnd.Interfaces.IBusinessServices
         /// <param name="agencyId">ID dell'agenzia (opzionale)</param>
         /// <returns>Response con compatibilità e dettagli delle features</returns>
         Task<DowngradeCompatibilityResponse> CheckDowngradeCompatibilityAsync(string userId, int targetPlanId, string? agencyId = null);
+
+        /// <summary>
+        /// Verifica se l'export è abilitato per l'utente
+        /// </summary>
+        /// <param name="userId">ID dell'utente</param>
+        /// <param name="agencyId">ID dell'agenzia (opzionale)</param>
+        /// <returns>True se export è abilitato, false altrimenti</returns>
+        Task<bool> IsExportEnabledAsync(string userId, string? agencyId = null);
+
+        /// <summary>
+        /// Registra un export effettuato dall'utente
+        /// </summary>
+        /// <param name="userId">ID dell'utente (Admin root)</param>
+        /// <param name="exportType">Tipo export ("excel", "csv")</param>
+        /// <param name="entityType">Tipo entità esportata (opzionale)</param>
+        Task RecordExportAsync(string userId, string exportType, string? entityType = null);
     }
 }
 

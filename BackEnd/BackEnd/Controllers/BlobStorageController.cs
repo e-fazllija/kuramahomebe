@@ -1,5 +1,6 @@
 ﻿using BackEnd.Entities;
 using BackEnd.Interfaces;
+using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.InputModels;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
@@ -24,18 +25,21 @@ namespace BackEnd.Controllers
         private readonly IUnitOfWork _unitOfWork;
         private readonly AccessControlService _accessControl;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
         private const string FOLDER_PLACEHOLDER_FILE = ".folder_placeholder";
         
         public BlobStorageController(
             IStorageServices storageServices, 
             IUnitOfWork unitOfWork,
             AccessControlService accessControl,
-            UserManager<ApplicationUser> userManager) 
+            UserManager<ApplicationUser> userManager,
+            ISubscriptionLimitService subscriptionLimitService) 
         {
             _storageServices = storageServices;
             _unitOfWork = unitOfWork;
             _accessControl = accessControl;
             _userManager = userManager;
+            _subscriptionLimitService = subscriptionLimitService;
         }
 
         /// <summary>
@@ -149,6 +153,33 @@ namespace BackEnd.Controllers
 
                 var (userId, adminId, user, roles) = await GetCurrentUserInfo();
 
+                // Verifica limite storage prima dell'upload
+                long fileSizeBytes = request.File.Length;
+                var storageLimitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "storage_limit", adminId);
+                
+                if (storageLimitCheck.Limit != null && storageLimitCheck.Limit != "unlimited" && storageLimitCheck.Limit != "-1")
+                {
+                    // Calcola storage attuale in bytes (dalla colonna StorageUsedBytes)
+                    long currentStorageBytes = user.StorageUsedBytes;
+                    int? limitGB = storageLimitCheck.Remaining != null ? 
+                        (storageLimitCheck.CurrentUsage + (storageLimitCheck.Remaining ?? 0)) : null;
+                    
+                    if (limitGB.HasValue)
+                    {
+                        long limitBytes = (long)(limitGB.Value * 1024L * 1024L * 1024L);
+                        if (currentStorageBytes + fileSizeBytes > limitBytes)
+                        {
+                            double currentGB = currentStorageBytes / (1024.0 * 1024.0 * 1024.0);
+                            return StatusCode(StatusCodes.Status403Forbidden, 
+                                new AuthResponseModel() 
+                                { 
+                                    Status = "Error", 
+                                    Message = $"Limite storage raggiunto. Utilizzo attuale: {currentGB:F2} GB su {limitGB} GB. Elimina alcuni file o aggiorna il piano per aumentare lo storage disponibile." 
+                                });
+                        }
+                    }
+                }
+
                 // Costruisci il path del file usando l'ID utente come root
                 // Se è privato, va nella sottocartella "private"
                 string sanitizedFileName = request.File.FileName.Replace(" ", "-");
@@ -195,11 +226,16 @@ namespace BackEnd.Controllers
                     ParentPath = request.ParentPath,
                     AgencyId = adminId,
                     UserId = userId, // Il creatore del file
+                    FileSizeBytes = fileSizeBytes, // Salva la dimensione per quando si elimina
                     CreationDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow
                 };
 
                 await _unitOfWork.dbContext.Documentation.AddAsync(document);
+                
+                // Aggiorna lo storage utilizzato dell'Admin root
+                await UpdateAdminStorageAsync(adminId, fileSizeBytes);
+                
                 _unitOfWork.Save();
                 
                 return Ok(new DocumentationSelectModel
@@ -432,10 +468,30 @@ namespace BackEnd.Controllers
                     }
                 }
 
+                // Recupera la dimensione del file prima di eliminarlo (se salvata)
+                long fileSizeBytes = 0;
+                if (document.FileSizeBytes.HasValue)
+                {
+                    fileSizeBytes = document.FileSizeBytes.Value;
+                }
+                else
+                {
+                    // Se non abbiamo la dimensione salvata, proviamo a recuperarla da Azure Blob Storage
+                    // Nota: Questo richiede un metodo aggiuntivo nell'interfaccia IStorageServices
+                    // Per ora, assumiamo 0 se non disponibile (non ideale ma funzionale)
+                }
+
                 // Elimina il file dal blob storage
                 await _storageServices.DeleteFile(document.FileName);
 
                 _unitOfWork.dbContext.Documentation.Remove(document);
+                
+                // Decrementa lo storage utilizzato dell'Admin root
+                if (fileSizeBytes > 0)
+                {
+                    await UpdateAdminStorageAsync(adminId, -fileSizeBytes);
+                }
+                
                 await _unitOfWork.SaveAsync();
                 
                 return Ok();
@@ -458,6 +514,22 @@ namespace BackEnd.Controllers
 
             var parts = fileName.Split('/');
             return parts.Length > 0 ? parts[^1] : fileName;
+        }
+
+        /// <summary>
+        /// Aggiorna lo storage utilizzato dell'Admin root
+        /// </summary>
+        /// <param name="adminId">ID dell'Admin root</param>
+        /// <param name="bytesToAdd">Bytes da aggiungere (negativo per decrementare)</param>
+        private async Task UpdateAdminStorageAsync(string adminId, long bytesToAdd)
+        {
+            var admin = await _userManager.FindByIdAsync(adminId);
+            if (admin != null)
+            {
+                admin.StorageUsedBytes = Math.Max(0, admin.StorageUsedBytes + bytesToAdd);
+                admin.UpdateDate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(admin);
+            }
         }
     }
 }

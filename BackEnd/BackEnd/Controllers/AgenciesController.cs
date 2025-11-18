@@ -300,6 +300,8 @@ namespace BackEnd.Controllers
                 }
                 
                 // Rimuovi eventuali utenti collegati (es. agenti) per evitare violazioni FK
+                // Nota: anche questi verranno eliminati a cascata se configurato, ma UserManager.DeleteAsync
+                // gestisce anche le tabelle di Identity (AspNetUserRoles, etc.)
                 var dependentUsers = await userManager.Users.Where(u => u.AdminId == id).ToListAsync();
 
                 foreach (var dependent in dependentUsers)
@@ -312,13 +314,21 @@ namespace BackEnd.Controllers
                     }
                 }
 
-                await userManager.DeleteAsync(user);
+                // Elimina l'agenzia stessa
+                // Tutte le entità correlate verranno eliminate automaticamente dal database grazie a DeleteBehavior.Cascade
+                var deleteResult = await userManager.DeleteAsync(user);
+                if (!deleteResult.Succeeded)
+                {
+                    var errorMessage = string.Join(", ", deleteResult.Errors.Select(e => e.Description));
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Impossibile eliminare l'agenzia: {errorMessage}" });
+                }
+                
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+                _logger.LogError(ex, "Errore durante l'eliminazione dell'agenzia {AgencyId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Errore durante l'eliminazione: {ex.Message}" });
             }
         }
         //[HttpGet]
