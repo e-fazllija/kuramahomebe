@@ -144,39 +144,70 @@ namespace BackEnd.Services.BusinessServices
                 if (EntityClasses == null)
                     throw new NullReferenceException("Record non trovato!");
 
-                //if (EntityClasses.RealEstatePropertyNotes != null && EntityClasses.RealEstatePropertyNotes?.Count > 0)
-                //{
-                //    _unitOfWork.dbContext.RealEstatePropertyNotes.RemoveRange(EntityClasses.RealEstatePropertyNotes);
-                //    await _unitOfWork.SaveAsync();
-                //}
+                // Verifica preventiva se ci sono record collegati
+                var hasEvents = await _unitOfWork.dbContext.Calendars.AnyAsync(x => x.RealEstatePropertyId == id);
+                if (hasEvents)
+                {
+                    throw new Exception("Impossibile eliminare l'immobile perché è collegato a uno o più appuntamenti nel calendario.");
+                }
 
-                _unitOfWork.RealEstatePropertyRepository.Delete(EntityClasses);
-                await _unitOfWork.SaveAsync();
+                // Elimina le note collegate (se necessario)
+                if (EntityClasses.RealEstatePropertyNotes != null && EntityClasses.RealEstatePropertyNotes.Count > 0)
+                {
+                    _unitOfWork.dbContext.RealEstatePropertyNotes.RemoveRange(EntityClasses.RealEstatePropertyNotes);
+                    await _unitOfWork.SaveAsync();
+                }
 
+                // Elimina le foto prima di eliminare l'immobile
                 foreach (var photo in EntityClasses.Photos)
                 {
                     await _propertyStorageService.DeletePropertyImage(photo.FileName);
                 }
 
                 _unitOfWork.dbContext.RealEstatePropertyPhotos.RemoveRange(EntityClasses.Photos);
+                await _unitOfWork.SaveAsync();
+
+                _unitOfWork.RealEstatePropertyRepository.Delete(EntityClasses);
+                await _unitOfWork.SaveAsync();
 
                 _logger.LogInformation(nameof(Delete));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                if (ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                _logger.LogError(ex, $"Errore durante l'eliminazione dell'immobile con ID {id}: {ex.Message}");
+                
+                // Se è già un'eccezione con messaggio personalizzato, rilanciala
+                if (ex.Message.Contains("Impossibile eliminare l'immobile"))
                 {
-                    throw new Exception("Impossibile eliminare il record perché è utilizzato come chiave esterna in un'altra tabella.");
+                    throw;
                 }
+
+                // Gestione specifica per DbUpdateException (errori database)
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                {
+                    if (dbEx.InnerException != null && 
+                        (dbEx.InnerException.Message.Contains("DELETE statement conflicted") || 
+                         dbEx.InnerException.Message.Contains("REFERENCE constraint")))
+                    {
+                        throw new Exception("Impossibile eliminare l'immobile perché è utilizzato come chiave esterna in un'altra tabella.");
+                    }
+                }
+
+                // Gestione per InnerException (per compatibilità con codice esistente)
+                if (ex.InnerException != null && 
+                    ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                {
+                    throw new Exception("Impossibile eliminare l'immobile perché è utilizzato come chiave esterna in un'altra tabella.");
+                }
+
+                // Gestione NullReferenceException
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
                 }
-                else
-                {
-                    throw new Exception("Si è verificato un errore in fase di eliminazione");
-                }
+
+                // Errore generico
+                throw new Exception("Si è verificato un errore in fase di eliminazione. Riprova più tardi.");
             }
         }
 

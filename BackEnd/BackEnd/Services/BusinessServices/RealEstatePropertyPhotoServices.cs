@@ -71,19 +71,34 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                if (ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                _logger.LogError(ex, $"Errore durante l'eliminazione della foto con ID {id}: {ex.Message}");
+                
+                // Gestione specifica per DbUpdateException (errori database)
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
                 {
-                    throw new Exception("Impossibile eliminare il record perché è utilizzato come chiave esterna in un'altra tabella.");
+                    if (dbEx.InnerException != null && 
+                        (dbEx.InnerException.Message.Contains("DELETE statement conflicted") || 
+                         dbEx.InnerException.Message.Contains("REFERENCE constraint")))
+                    {
+                        throw new Exception("Impossibile eliminare la foto perché è utilizzata come chiave esterna in un'altra tabella.");
+                    }
                 }
+
+                // Gestione per InnerException (per compatibilità con codice esistente)
+                if (ex.InnerException != null && 
+                    ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                {
+                    throw new Exception("Impossibile eliminare la foto perché è utilizzata come chiave esterna in un'altra tabella.");
+                }
+
+                // Gestione NullReferenceException
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
                 }
-                else
-                {
-                    throw new Exception("Si è verificato un errore in fase di eliminazione");
-                }
+
+                // Errore generico
+                throw new Exception("Si è verificato un errore in fase di eliminazione. Riprova più tardi.");
             }
         }
 

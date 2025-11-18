@@ -63,6 +63,59 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
+        public async Task<RequestDeleteConstraintsModel> CanDelete(int id)
+        {
+            try
+            {
+                var result = new RequestDeleteConstraintsModel
+                {
+                    CanDelete = true,
+                    Message = null,
+                    EventsCount = 0,
+                    RequestNotesCount = 0
+                };
+
+                if (id == 0)
+                {
+                    result.CanDelete = false;
+                    result.Message = "L'id non può essere 0";
+                    return result;
+                }
+
+                var request = await _unitOfWork.dbContext.Requests.FirstOrDefaultAsync(x => x.Id == id);
+                if (request == null)
+                {
+                    result.CanDelete = false;
+                    result.Message = "Record non trovato!";
+                    return result;
+                }
+
+                // Conta i record collegati
+                result.EventsCount = await _unitOfWork.dbContext.Calendars.CountAsync(x => x.RequestId == id);
+                result.RequestNotesCount = await _unitOfWork.dbContext.RequestNotes.CountAsync(x => x.RequestId == id);
+
+                // Se ci sono record collegati, avvisa ma permette comunque l'eliminazione
+                if (result.EventsCount > 0 || result.RequestNotesCount > 0)
+                {
+                    result.CanDelete = true; // Permette comunque l'eliminazione, ma avvisa
+                    result.Message = "Ci sono dati collegati che verranno eliminati insieme alla richiesta.";
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore durante la verifica dei constraint per la richiesta con ID {id}: {ex.Message}");
+                return new RequestDeleteConstraintsModel
+                {
+                    CanDelete = false,
+                    Message = "Si è verificato un errore durante la verifica. Riprova più tardi.",
+                    EventsCount = 0,
+                    RequestNotesCount = 0
+                };
+            }
+        }
+
         public async Task<Request> Delete(int id)
         {
             try
@@ -79,6 +132,48 @@ namespace BackEnd.Services.BusinessServices
                 if (EntityClasses == null)
                     throw new NullReferenceException("Record non trovato!");
 
+                // Elimina prima i Calendar collegati e le loro note
+                var linkedCalendars = await _unitOfWork.dbContext.Calendars
+                    .Where(x => x.RequestId == id)
+                    .ToListAsync();
+
+                if (linkedCalendars.Any())
+                {
+                    var calendarIds = linkedCalendars.Select(c => c.Id).ToList();
+
+                    // Elimina le note collegate ai Calendar
+                    var requestNotes = await _unitOfWork.dbContext.RequestNotes
+                        .Where(x => x.CalendarId.HasValue && calendarIds.Contains(x.CalendarId.Value))
+                        .ToListAsync();
+                    if (requestNotes.Any())
+                    {
+                        _unitOfWork.dbContext.RequestNotes.RemoveRange(requestNotes);
+                    }
+
+                    var propertyNotes = await _unitOfWork.dbContext.RealEstatePropertyNotes
+                        .Where(x => x.CalendarId.HasValue && calendarIds.Contains(x.CalendarId.Value))
+                        .ToListAsync();
+                    if (propertyNotes.Any())
+                    {
+                        _unitOfWork.dbContext.RealEstatePropertyNotes.RemoveRange(propertyNotes);
+                    }
+
+                    var customerNotes = await _unitOfWork.dbContext.CustomerNotes
+                        .Where(x => x.CalendarId.HasValue && calendarIds.Contains(x.CalendarId.Value))
+                        .ToListAsync();
+                    if (customerNotes.Any())
+                    {
+                        _unitOfWork.dbContext.CustomerNotes.RemoveRange(customerNotes);
+                    }
+
+                    // Elimina i Calendar
+                    _unitOfWork.dbContext.Calendars.RemoveRange(linkedCalendars);
+
+                    // Salva le eliminazioni dei Calendar e delle note
+                    await _unitOfWork.SaveAsync();
+                }
+
+                // Elimina la Request (le RequestNotes verranno eliminate automaticamente dal CASCADE del database)
                 _unitOfWork.RequestRepository.Delete(EntityClasses);
                 await _unitOfWork.SaveAsync();
                 _logger.LogInformation(nameof(Delete));
@@ -87,19 +182,40 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                if (ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                _logger.LogError(ex, $"Errore durante l'eliminazione della richiesta con ID {id}: {ex.Message}");
+                
+                // Se è già un'eccezione con messaggio personalizzato, rilanciala
+                if (ex.Message.Contains("Impossibile eliminare la richiesta"))
                 {
-                    throw new Exception("Impossibile eliminare il record perché è utilizzato come chiave esterna in un'altra tabella.");
+                    throw;
                 }
+
+                // Gestione specifica per DbUpdateException (errori database)
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                {
+                    if (dbEx.InnerException != null && 
+                        (dbEx.InnerException.Message.Contains("DELETE statement conflicted") || 
+                         dbEx.InnerException.Message.Contains("REFERENCE constraint")))
+                    {
+                        throw new Exception("Impossibile eliminare la richiesta perché è utilizzata come chiave esterna in un'altra tabella.");
+                    }
+                }
+
+                // Gestione per InnerException (per compatibilità con codice esistente)
+                if (ex.InnerException != null && 
+                    ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                {
+                    throw new Exception("Impossibile eliminare la richiesta perché è utilizzata come chiave esterna in un'altra tabella.");
+                }
+
+                // Gestione NullReferenceException
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
                 }
-                else
-                {
-                    throw new Exception("Si è verificato un errore in fase di eliminazione");
-                }
+
+                // Errore generico
+                throw new Exception("Si è verificato un errore in fase di eliminazione. Riprova più tardi.");
             }
         }
 

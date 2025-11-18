@@ -13,5 +13,6 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<RequestSelectModel> Update(RequestUpdateModel dto);
         Task<RequestSelectModel> GetById(int id);
         Task<Request> Delete(int id);
+        Task<RequestDeleteConstraintsModel> CanDelete(int id);
     }
 }

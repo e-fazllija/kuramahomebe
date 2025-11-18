@@ -175,6 +175,37 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
+        [HttpGet]
+        [Route(nameof(CanDelete))]
+        public async Task<IActionResult> CanDelete(int id)
+        {
+            try
+            {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Recupera la richiesta esistente
+                var request = await _requestServices.GetById(id);
+                if (request == null)
+                    return NotFound(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
+                
+                // Verifica permessi di eliminazione usando AccessControlService
+                bool canModify = await _accessControl.CanModifyEntity(currentUserId, request.UserId);
+                
+                if (!canModify)
+                    return Ok(new { CanDelete = false, Message = "Non hai i permessi per eliminare questa richiesta" });
+                
+                // Verifica i constraint
+                var constraintsResult = await _requestServices.CanDelete(id);
+                
+                return Ok(constraintsResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
         [HttpDelete]
         [Route(nameof(Delete))]
         public async Task<IActionResult> Delete(int id)
