@@ -102,7 +102,7 @@ namespace BackEnd.Controllers
                 
                 if (!currentUserRoles.Contains("Admin"))
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per creare altre agenzie. Solo gli admin possono creare nuove agenzie." });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per creare altre agenzie. Solo gli admin possono creare nuove agenzie." });
                 }
 
                 // Verifica limite subscription PRIMA di creare

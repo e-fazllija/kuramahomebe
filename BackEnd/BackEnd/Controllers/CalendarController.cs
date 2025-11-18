@@ -58,7 +58,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
                     if (!canAccessCustomer)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
                 }
                 
                 if (request.RealEstatePropertyId.HasValue)
@@ -69,7 +69,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
                     if (!canAccessProperty)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
                 }
                 
                 if (request.RequestId.HasValue)
@@ -80,7 +80,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
                     if (!canAccessRequest)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
                 }
                 
                 CalendarSelectModel Result = await _calendarServices.Create(request);
@@ -107,7 +107,7 @@ namespace BackEnd.Controllers
                 
                 bool canModify = await _accessControl.CanModifyEntity(currentUserId, existingEvent.UserId);
                 if (!canModify)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo evento" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo evento" });
                 
                 // Valida che le entità associate siano nella cerchia dell'utente
                 if (request.CustomerId.HasValue)
@@ -118,7 +118,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
                     if (!canAccessCustomer)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
                 }
                 
                 if (request.RealEstatePropertyId.HasValue)
@@ -129,7 +129,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
                     if (!canAccessProperty)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
                 }
                 
                 if (request.RequestId.HasValue)
@@ -140,7 +140,7 @@ namespace BackEnd.Controllers
                     
                     bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
                     if (!canAccessRequest)
-                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
                 }
                 
                 CalendarSelectModel Result = await _calendarServices.Update(request);
@@ -226,7 +226,7 @@ namespace BackEnd.Controllers
                 bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
                 
                 if (!canAccess)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questo evento" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questo evento" });
 
                 return Ok(result);
             }
@@ -252,7 +252,7 @@ namespace BackEnd.Controllers
                 // Verifica permessi di eliminazione
                 bool canDelete = await _accessControl.CanModifyEntity(currentUserId, existingEvent.UserId);
                 if (!canDelete)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questo evento" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questo evento" });
                 
                 Calendar result = await _calendarServices.Delete(id);
                 return Ok();

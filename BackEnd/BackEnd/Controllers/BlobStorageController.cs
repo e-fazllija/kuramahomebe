@@ -151,37 +151,58 @@ namespace BackEnd.Controllers
                 if (request.File == null)
                     return BadRequest("Nessun file selezionato");
 
-                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
+                var (userId, adminId, user, _) = await GetCurrentUserInfo();
 
                 // Verifica limite storage prima dell'upload
                 long fileSizeBytes = request.File.Length;
+                
+                // Ottieni l'admin per verificare e aggiornare lo storage in un'unica query
+                var admin = userId == adminId ? user : await _userManager.FindByIdAsync(adminId);
+                if (admin == null)
+                    return StatusCode(500, new AuthResponseModel() { Status = "Error", Message = "Admin non trovato" });
+
+                // Verifica limite storage prima del caricamento
                 var storageLimitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "storage_limit", adminId);
                 
-                if (storageLimitCheck.Limit != null && storageLimitCheck.Limit != "unlimited" && storageLimitCheck.Limit != "-1")
+                // Se il limite è già stato raggiunto, blocca immediatamente
+                if (storageLimitCheck.LimitReached)
                 {
-                    // Calcola storage attuale in bytes (dalla colonna StorageUsedBytes)
-                    long currentStorageBytes = user.StorageUsedBytes;
-                    int? limitGB = storageLimitCheck.Remaining != null ? 
-                        (storageLimitCheck.CurrentUsage + (storageLimitCheck.Remaining ?? 0)) : null;
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
+                        new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = storageLimitCheck.Message ?? "Limite storage raggiunto. Elimina alcuni file prima di caricarne altri."
+                        });
+                }
+                
+                // Se c'è un limite, verifica che il nuovo file non lo supererebbe
+                if (storageLimitCheck.Limit != null && 
+                    int.TryParse(storageLimitCheck.Limit, out int limitGB) && 
+                    limitGB > 0)
+                {
+                    long limitBytes = (long)limitGB * 1024L * 1024L * 1024L;
+                    long currentStorageBytes = admin.StorageUsedBytes;
+                    long futureStorageBytes = currentStorageBytes + fileSizeBytes;
                     
-                    if (limitGB.HasValue)
+                    // Se dopo il caricamento supererebbe il limite, blocca
+                    if (futureStorageBytes > limitBytes)
                     {
-                        long limitBytes = (long)(limitGB.Value * 1024L * 1024L * 1024L);
-                        if (currentStorageBytes + fileSizeBytes > limitBytes)
-                        {
-                            double currentGB = currentStorageBytes / (1024.0 * 1024.0 * 1024.0);
-                            return StatusCode(StatusCodes.Status403Forbidden, 
-                                new AuthResponseModel() 
-                                { 
-                                    Status = "Error", 
-                                    Message = $"Limite storage raggiunto. Utilizzo attuale: {currentGB:F2} GB su {limitGB} GB. Elimina alcuni file o aggiorna il piano per aumentare lo storage disponibile." 
-                                });
-                        }
+                        double currentGB = currentStorageBytes / (1024.0 * 1024.0 * 1024.0);
+                        double fileGB = fileSizeBytes / (1024.0 * 1024.0 * 1024.0);
+                        double futureGB = futureStorageBytes / (1024.0 * 1024.0 * 1024.0);
+                        
+                        return StatusCode(StatusCodes.Status500InternalServerError, 
+                            new AuthResponseModel() 
+                            { 
+                                Status = "Error", 
+                                Message = $"Limite storage raggiunto. Utilizzo attuale: {currentGB:F2} GB su {limitGB} GB. " +
+                                         $"Il file da caricare ({fileGB:F2} GB) porterebbe il totale a {futureGB:F2} GB, superando il limite. " +
+                                         $"Elimina alcuni file o aggiorna il piano per aumentare lo storage disponibile."
+                            });
                     }
                 }
 
-                // Costruisci il path del file usando l'ID utente come root
-                // Se è privato, va nella sottocartella "private"
+                // Costruisci il path del file
                 string sanitizedFileName = request.File.FileName.Replace(" ", "-");
                 string filePath;
                 
@@ -194,18 +215,19 @@ namespace BackEnd.Controllers
                 }
                 else
                 {
-                    // In una sottocartella
-                    var parentUserId = request.ParentPath.Split('/')[0];
-                    
                     // Verifica permessi sul ParentPath
-                    var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
-                    if (!canAccess && parentUserId != userId)
+                    var parentUserId = request.ParentPath.Split('/')[0];
+                    if (parentUserId != userId)
                     {
-                        return StatusCode(403, new AuthResponseModel() 
-                        { 
-                            Status = "Error", 
-                            Message = "Non hai i permessi per caricare file in questo path" 
-                        });
+                        var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
+                        if (!canAccess)
+                        {
+                            return StatusCode(403, new AuthResponseModel() 
+                            { 
+                                Status = "Error", 
+                                Message = "Non hai i permessi per caricare file in questo path" 
+                            });
+                        }
                     }
                     
                     filePath = request.IsPrivate
@@ -213,9 +235,11 @@ namespace BackEnd.Controllers
                         : $"{request.ParentPath}/{sanitizedFileName}";
                 }
 
+                // Upload del file
                 Stream stream = request.File.OpenReadStream();
                 string fileUrl = await _storageServices.UploadFile(stream, filePath);
 
+                // Crea il documento nel database
                 Documentation document = new Documentation()
                 {
                     FileName = filePath,
@@ -225,16 +249,18 @@ namespace BackEnd.Controllers
                     IsPrivate = request.IsPrivate,
                     ParentPath = request.ParentPath,
                     AgencyId = adminId,
-                    UserId = userId, // Il creatore del file
-                    FileSizeBytes = fileSizeBytes, // Salva la dimensione per quando si elimina
+                    UserId = userId,
+                    FileSizeBytes = fileSizeBytes,
                     CreationDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow
                 };
 
                 await _unitOfWork.dbContext.Documentation.AddAsync(document);
                 
-                // Aggiorna lo storage utilizzato dell'Admin root
-                await UpdateAdminStorageAsync(adminId, fileSizeBytes);
+                // Aggiorna lo storage dell'admin (già caricato in memoria)
+                admin.StorageUsedBytes = Math.Max(0, admin.StorageUsedBytes + fileSizeBytes);
+                admin.UpdateDate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(admin);
                 
                 _unitOfWork.Save();
                 

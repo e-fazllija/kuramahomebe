@@ -81,7 +81,7 @@ namespace BackEnd.Controllers
                 bool canModify = await _accessControl.CanModifyEntity(currentUserId, req.UserId);
                 
                 if (!canModify)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa richiesta" });
                 
                 RequestSelectModel Result = await _requestServices.Update(request);
 
@@ -165,7 +165,7 @@ namespace BackEnd.Controllers
                 bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
                 
                 if (!canAccess)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
 
                 return Ok(result);
             }
@@ -223,7 +223,7 @@ namespace BackEnd.Controllers
                 bool canDelete = await _accessControl.CanModifyEntity(currentUserId, request.UserId);
                 
                 if (!canDelete)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa richiesta" });
                 
                 Request result = await _requestServices.Delete(id);
                 return Ok();
@@ -246,7 +246,7 @@ namespace BackEnd.Controllers
                 bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
                 if (!exportEnabled)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, 
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
                         new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
                 }
 
@@ -254,7 +254,7 @@ namespace BackEnd.Controllers
                 var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
                 if (!limitCheck.CanProceed)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, 
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
                         new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
                 }
 
@@ -285,7 +285,7 @@ namespace BackEnd.Controllers
                 bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
                 if (!exportEnabled)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, 
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
                         new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
                 }
 
@@ -293,7 +293,7 @@ namespace BackEnd.Controllers
                 var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
                 if (!limitCheck.CanProceed)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, 
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
                         new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
                 }
 

@@ -133,7 +133,7 @@ namespace BackEnd.Controllers
 
                 if (!user.EmailConfirmed)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Account temporaneamente bloccato." });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Account temporaneamente bloccato." });
                 }
 
                 if (await userManager.CheckPasswordAsync(user, model.Password))

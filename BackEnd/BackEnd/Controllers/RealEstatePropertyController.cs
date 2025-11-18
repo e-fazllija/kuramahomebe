@@ -129,7 +129,7 @@ namespace BackEnd.Controllers
                 bool canModify = await _accessControl.CanModifyEntity(currentUserId, property.UserId);
                 
                 if (!canModify)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa proprietà" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa proprietà" });
                 
                 RealEstatePropertySelectModel Result = await _realEstatePropertyServices.Update(request);
 
@@ -278,7 +278,7 @@ namespace BackEnd.Controllers
                 bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
                 
                 if (!canAccess)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa proprietà" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa proprietà" });
 
                 return Ok(result);
             }
@@ -305,7 +305,7 @@ namespace BackEnd.Controllers
                 bool canDelete = await _accessControl.CanModifyEntity(currentUserId, property.UserId);
                 
                 if (!canDelete)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa proprietà" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa proprietà" });
                 
                 await _realEstatePropertyServices.Delete(id);
                 return Ok();
