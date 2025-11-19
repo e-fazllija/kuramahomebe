@@ -9,14 +9,16 @@ using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
 using BackEnd.Services;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
-using System.Linq;
 
 namespace BackEnd.Controllers
 {
@@ -102,7 +104,7 @@ namespace BackEnd.Controllers
                 
                 if (!currentUserRoles.Contains("Admin"))
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per creare altre agenzie. Solo gli admin possono creare nuove agenzie." });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per creare altre agenzie. Solo gli admin possono creare nuove agenzie." });
                 }
 
                 // Verifica limite subscription PRIMA di creare
@@ -300,6 +302,8 @@ namespace BackEnd.Controllers
                 }
                 
                 // Rimuovi eventuali utenti collegati (es. agenti) per evitare violazioni FK
+                // Nota: anche questi verranno eliminati a cascata se configurato, ma UserManager.DeleteAsync
+                // gestisce anche le tabelle di Identity (AspNetUserRoles, etc.)
                 var dependentUsers = await userManager.Users.Where(u => u.AdminId == id).ToListAsync();
 
                 foreach (var dependent in dependentUsers)
@@ -312,8 +316,51 @@ namespace BackEnd.Controllers
                     }
                 }
 
-                await userManager.DeleteAsync(user);
+                // Elimina l'agenzia stessa
+                // Tutte le entità correlate verranno eliminate automaticamente dal database grazie a DeleteBehavior.Cascade
+                var deleteResult = await userManager.DeleteAsync(user);
+                if (!deleteResult.Succeeded)
+                {
+                    var errorMessage = string.Join(", ", deleteResult.Errors.Select(e => e.Description));
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Impossibile eliminare l'agenzia: {errorMessage}" });
+                }
+                
                 return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore durante l'eliminazione dell'agenzia {AgencyId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Errore durante l'eliminazione: {ex.Message}" });
+            }
+        }
+        [HttpPost]
+        [Route(nameof(Export))]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Export([FromBody] AgencyExportModel filters)
+        {
+            try
+            {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                var permissionResult = _subscriptionLimitService.EnsureExportPermissions(currentUserId);
+
+                var payload = filters ?? new AgencyExportModel();
+                var agencies = await GetAgenciesForExportAsync(currentUserId, payload);
+
+                var table = BuildAgenciesExportTable(agencies);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(currentUserId, format, "agencies");
+
+                var fileName = $"agenzie_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
             }
             catch (Exception ex)
             {
@@ -321,41 +368,51 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        //[HttpGet]
-        //[Route(nameof(ExportExcel))]
-        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateExcelContent(table);
 
-        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
-        //[HttpGet]
-        //[Route(nameof(ExportCsv))]
-        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateCsvContent(table);
+        private async Task<List<UserSelectModel>> GetAgenciesForExportAsync(string adminId, AgencyExportModel filters)
+        {
+            var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
+            agenciesList = agenciesList.Where(x => x.AdminId == adminId).ToList();
 
-        //        return File(fileBytes, "text/csv", "Output.csv");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
+            if (filters?.OnlyActive == true)
+            {
+                agenciesList = agenciesList.Where(x => x.EmailConfirmed).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(filters?.Search))
+            {
+                var lowered = filters.Search.ToLower();
+                agenciesList = agenciesList.Where(x =>
+                    (x.FirstName ?? string.Empty).ToLower().Contains(lowered) ||
+                    (x.LastName ?? string.Empty).ToLower().Contains(lowered) ||
+                    x.Email.ToLower().Contains(lowered)).ToList();
+            }
+
+            return _mapper.Map<List<UserSelectModel>>(agenciesList);
+        }
+
+        private static DataTable BuildAgenciesExportTable(IEnumerable<UserSelectModel> agencies)
+        {
+            var table = new DataTable("Agenzie");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Nome");
+            table.Columns.Add("Cognome");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Attiva");
+
+            foreach (var agency in agencies)
+            {
+                table.Rows.Add(
+                    agency.Id,
+                    agency.FirstName,
+                    agency.LastName,
+                    agency.Email,
+                    agency.PhoneNumber,
+                    agency.EmailConfirmed ? "Sì" : "No");
+            }
+
+            return table;
+        }
     }
 }

@@ -29,5 +29,10 @@ namespace BackEnd.Entities
         
         [MaxLength(255)]
         public string? DisplayName { get; set; }
+
+        /// <summary>
+        /// Dimensione del file in bytes (salvata per calcolo preciso storage)
+        /// </summary>
+        public long? FileSizeBytes { get; set; }
     }
 }

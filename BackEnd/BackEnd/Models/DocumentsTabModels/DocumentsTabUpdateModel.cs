@@ -122,7 +122,7 @@ namespace BackEnd.Models.DocumentsTabModels
         public bool MiscellaneousDocuments { get; set; }
         public int? MiscellaneousDocumentsDocumentId { get; set; }
         public DateTime UpdateDate { get; set; } = DateTime.Now;
-        public int? RealEstatePropertyId { get; set; }
+        public int? RealEstatePropertyDocumentId { get; set; }
 
     }
 }

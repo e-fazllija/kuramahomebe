@@ -154,19 +154,34 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
-                if (ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                _logger.LogError(ex, $"Errore durante l'eliminazione dell'evento con ID {id}: {ex.Message}");
+                
+                // Gestione specifica per DbUpdateException (errori database)
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
                 {
-                    throw new Exception("Impossibile eliminare il record perché è utilizzato come chiave esterna in un'altra tabella.");
+                    if (dbEx.InnerException != null && 
+                        (dbEx.InnerException.Message.Contains("DELETE statement conflicted") || 
+                         dbEx.InnerException.Message.Contains("REFERENCE constraint")))
+                    {
+                        throw new Exception("Impossibile eliminare l'evento perché è utilizzato come chiave esterna in un'altra tabella.");
+                    }
                 }
+
+                // Gestione per InnerException (per compatibilità con codice esistente)
+                if (ex.InnerException != null && 
+                    ex.InnerException.Message.Contains("DELETE statement conflicted with the REFERENCE constraint"))
+                {
+                    throw new Exception("Impossibile eliminare l'evento perché è utilizzato come chiave esterna in un'altra tabella.");
+                }
+
+                // Gestione NullReferenceException
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
                 }
-                else
-                {
-                    throw new Exception("Si è verificato un errore in fase di eliminazione");
-                }
+
+                // Errore generico
+                throw new Exception("Si è verificato un errore in fase di eliminazione. Riprova più tardi.");
             }
         }
 
@@ -312,6 +327,81 @@ namespace BackEnd.Services.BusinessServices
             {
                 _logger.LogError(ex.Message);
                 throw new Exception("Si è verificato un errore");
+            }
+        }
+
+        public async Task<List<CalendarSelectModel>> GetForExportAsync(string userId, CalendarExportModel filters)
+        {
+            try
+            {
+                filters ??= new CalendarExportModel();
+
+                IQueryable<Calendar> query = _unitOfWork.dbContext.Calendars
+                    .Include(x => x.User)
+                    .OrderByDescending(x => x.EventStartDate);
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
+
+                if (filters.FromDate.HasValue)
+                {
+                    var from = DateTime.SpecifyKind(filters.FromDate.Value.Date, DateTimeKind.Utc);
+                    query = query.Where(x => x.EventStartDate >= from);
+                }
+
+                if (filters.ToDate.HasValue)
+                {
+                    var to = DateTime.SpecifyKind(filters.ToDate.Value.Date.AddDays(1), DateTimeKind.Utc);
+                    query = query.Where(x => x.EventStartDate < to);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Status))
+                {
+                    switch (filters.Status.ToLower())
+                    {
+                        case "confirmed":
+                            query = query.Where(x => x.Confirmed && !x.Cancelled && !x.Postponed);
+                            break;
+                        case "cancelled":
+                            query = query.Where(x => x.Cancelled);
+                            break;
+                        case "postponed":
+                            query = query.Where(x => x.Postponed);
+                            break;
+                        case "pending":
+                            query = query.Where(x => !x.Confirmed && !x.Cancelled && !x.Postponed);
+                            break;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(filters.AgentId))
+                {
+                    query = query.Where(x => x.UserId == filters.AgentId);
+                }
+
+                if (!string.IsNullOrEmpty(filters.AgencyId))
+                {
+                    query = query.Where(x => x.User.AdminId == filters.AgencyId);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Filter))
+                {
+                    var lowered = filters.Filter.ToLower();
+                    query = query.Where(x =>
+                        x.EventName.ToLower().Contains(lowered) ||
+                        (x.EventDescription != null && x.EventDescription.ToLower().Contains(lowered)));
+                }
+
+                var data = await query.AsNoTracking().ToListAsync();
+                return _mapper.Map<List<CalendarSelectModel>>(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                throw new Exception("Si è verificato un errore durante l'esportazione del calendario");
             }
         }
 

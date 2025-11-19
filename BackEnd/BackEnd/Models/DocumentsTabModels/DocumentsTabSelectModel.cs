@@ -121,6 +121,6 @@
         public int? MiscellaneousDocumentsDocumentId { get; set; }
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }
-        public int? RealEstatePropertyId { get; set; }
+        public int? RealEstatePropertyDocumentId { get; set; }
     }
 }

@@ -26,7 +26,5 @@ namespace BackEnd.Models.CustomerModels
         public bool OngoingAssignment { get; set; }
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
         public string? UserId { get; set; }
-        [Required(ErrorMessage = "L'AdminId è obbligatorio")]
-        public string AdminId { get; set; } = string.Empty;
     }
 }
