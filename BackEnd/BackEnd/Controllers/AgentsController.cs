@@ -14,6 +14,7 @@ using BackEnd.Models.AuthModels;
 using BackEnd.Models.MailModels;
 using System.Security.Claims;
 using BackEnd.Interfaces;
+using System.Globalization;
 
 namespace BackEnd.Controllers
 {
@@ -409,41 +410,148 @@ namespace BackEnd.Controllers
             }
         }
 
-        //[HttpGet]
-        //[Route(nameof(ExportExcel))]
-        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateExcelContent(table);
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] AgentExportModel filters)
+        {
+            try
+            {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var currentUser = await userManager.FindByIdAsync(currentUserId);
+                if (currentUser == null)
+                {
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Utente non trovato" });
+                }
 
-        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
-        //[HttpGet]
-        //[Route(nameof(ExportCsv))]
-        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateCsvContent(table);
+                var permissionResult = await EnsureExportPermissions(currentUserId);
+                if (permissionResult != null)
+                {
+                    return permissionResult;
+                }
 
-        //        return File(fileBytes, "text/csv", "Output.csv");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
+                var userRoles = await userManager.GetRolesAsync(currentUser);
+                if (userRoles.Contains("Agent"))
+                {
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Gli agenti non possono esportare la lista agenti" });
+                }
+
+                var payload = filters ?? new AgentExportModel();
+                var agents = await GetAgentsForExportAsync(currentUser, userRoles, payload);
+
+                var table = BuildAgentsExportTable(agents);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(currentUserId, format, "agents");
+
+                var fileName = $"agenti_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
+        {
+            var currentUser = await userManager.FindByIdAsync(userId);
+            var adminId = currentUser?.AdminId;
+
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
+            if (!exportEnabled)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
+            }
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
+            if (!limitCheck.CanProceed)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+            }
+
+            return null;
+        }
+
+        private async Task<List<UserSelectModel>> GetAgentsForExportAsync(ApplicationUser currentUser, IList<string> currentUserRoles, AgentExportModel filters)
+        {
+            var usersList = await userManager.GetUsersInRoleAsync("Agent");
+
+            if (currentUserRoles.Contains("Admin"))
+            {
+                var adminAgencies = await userManager.GetUsersInRoleAsync("Agency");
+                var myAgencies = adminAgencies.Where(x => x.AdminId == currentUser.Id).Select(x => x.Id).ToList();
+                var validAgencyIds = new List<string> { currentUser.Id };
+                validAgencyIds.AddRange(myAgencies);
+                usersList = usersList.Where(x => validAgencyIds.Contains(x.AdminId)).ToList();
+
+                if (!string.IsNullOrEmpty(filters?.AgencyId))
+                {
+                    usersList = usersList.Where(x => x.AdminId == filters.AgencyId).ToList();
+                }
+            }
+            else if (currentUserRoles.Contains("Agency"))
+            {
+                usersList = usersList.Where(x => x.AdminId == currentUser.Id).ToList();
+            }
+            else
+            {
+                usersList = new List<ApplicationUser>();
+            }
+
+            if (!string.IsNullOrEmpty(filters?.Search))
+            {
+                var lowered = filters.Search.ToLower();
+                usersList = usersList.Where(x =>
+                    (x.FirstName ?? string.Empty).ToLower().Contains(lowered) ||
+                    (x.LastName ?? string.Empty).ToLower().Contains(lowered) ||
+                    x.Email.ToLower().Contains(lowered)).ToList();
+            }
+
+            if (filters?.OnlyActive == true)
+            {
+                usersList = usersList.Where(x => x.EmailConfirmed).ToList();
+            }
+
+            return _mapper.Map<List<UserSelectModel>>(usersList);
+        }
+
+        private static DataTable BuildAgentsExportTable(IEnumerable<UserSelectModel> agents)
+        {
+            var table = new DataTable("Agenti");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Nome");
+            table.Columns.Add("Cognome");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Cellulare");
+            table.Columns.Add("Attivo");
+
+            foreach (var agent in agents)
+            {
+                table.Rows.Add(
+                    agent.Id,
+                    agent.FirstName,
+                    agent.LastName,
+                    agent.Email,
+                    agent.PhoneNumber,
+                    agent.MobilePhone,
+                    agent.EmailConfirmed ? "Sì" : "No");
+            }
+
+            return table;
+        }
     }
 }

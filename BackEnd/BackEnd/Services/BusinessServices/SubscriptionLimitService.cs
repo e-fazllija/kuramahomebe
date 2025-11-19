@@ -270,8 +270,8 @@ namespace BackEnd.Services.BusinessServices
         /// </summary>
         private async Task<int> CountExportsThisMonthAsync(string adminId)
         {
-            var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-            
+            var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0,0,DateTimeKind.Utc);
+
             return await _unitOfWork.dbContext.ExportHistory
                 .Where(e => e.UserId == adminId && e.ExportDate >= startOfMonth)
                 .CountAsync();

@@ -4,6 +4,7 @@ using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.RequestModels;
 using BackEnd.Services;
 using System.Data;
+using System.Globalization;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
@@ -234,38 +235,37 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        [HttpGet]
-        [Route(nameof(ExportExcel))]
-        public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] RequestExportModel filters)
         {
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                
-                // Verifica se export è abilitato
-                bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
-                if (!exportEnabled)
+
+                var permissionResult = await EnsureExportPermissions(userId);
+                if (permissionResult != null)
                 {
-                    return StatusCode(StatusCodes.Status500InternalServerError, 
-                        new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
+                    return permissionResult;
                 }
 
-                // Verifica limite export mensili
-                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
-                if (!limitCheck.CanProceed)
-                {
-                    return StatusCode(StatusCodes.Status500InternalServerError, 
-                        new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
-                }
+                var payload = filters ?? new RequestExportModel();
+                var data = await _requestServices.GetForExportAsync(payload, userId);
 
-                var result = await _requestServices.Get(0, null, fromName, toName, userId);
-                DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateExcelContent(table);
+                var table = BuildRequestExportTable(data);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
 
-                // Registra l'export
-                await _subscriptionLimitService.RecordExportAsync(userId, "excel", "requests");
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
 
-                return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
+                await _subscriptionLimitService.RecordExportAsync(userId, format, "requests");
+
+                var fileName = $"richieste_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
             }
             catch (Exception ex)
             {
@@ -273,44 +273,82 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        [HttpGet]
-        [Route(nameof(ExportCsv))]
-        public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
         {
-            try
+            var currentUser = await _userManager.FindByIdAsync(userId);
+            var adminId = currentUser?.AdminId;
+
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
+            if (!exportEnabled)
             {
-                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                
-                // Verifica se export è abilitato
-                bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
-                if (!exportEnabled)
-                {
-                    return StatusCode(StatusCodes.Status500InternalServerError, 
-                        new AuthResponseModel() { Status = "Error", Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna al piano Pro o Premium per utilizzare questa funzionalità." });
-                }
-
-                // Verifica limite export mensili
-                var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
-                if (!limitCheck.CanProceed)
-                {
-                    return StatusCode(StatusCodes.Status500InternalServerError, 
-                        new AuthResponseModel() { Status = "Error", Message = limitCheck.Message ?? "Hai raggiunto il limite di export mensili. Il limite si resetta all'inizio del mese prossimo." });
-                }
-
-                var result = await _requestServices.Get(0, null, fromName, toName, userId);
-                DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateCsvContent(table);
-
-                // Registra l'export
-                await _subscriptionLimitService.RecordExportAsync(userId, "csv", "requests");
-
-                return File(fileBytes, "text/csv", "Output.csv");
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
             }
-            catch (Exception ex)
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
+            if (!limitCheck.CanProceed)
             {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
             }
+
+            return null;
+        }
+
+        private static DataTable BuildRequestExportTable(IEnumerable<RequestListModel> data)
+        {
+            var culture = CultureInfo.GetCultureInfo("it-IT");
+            var table = new DataTable("Richieste");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Cliente");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Contratto");
+            table.Columns.Add("Tipologia Immobile");
+            table.Columns.Add("Città");
+            table.Columns.Add("Località");
+            table.Columns.Add("Budget Min (€)");
+            table.Columns.Add("Budget Max (€)");
+            table.Columns.Add("Data Creazione");
+            table.Columns.Add("Stato");
+
+            foreach (var item in data)
+            {
+                table.Rows.Add(
+                    item.Id,
+                    $"{item.CustomerName} {item.CustomerLastName}".Trim(),
+                    item.CustomerEmail,
+                    item.CustomerPhone,
+                    item.Contract,
+                    item.PropertyType,
+                    item.City,
+                    item.Location,
+                    item.PriceFrom.ToString("N0", culture),
+                    item.PriceTo.ToString("N0", culture),
+                    item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
+                    ResolveRequestStatus(item));
+            }
+
+            return table;
+        }
+
+        private static string ResolveRequestStatus(RequestListModel item)
+        {
+            if (item.Archived)
+            {
+                return "Archiviata";
+            }
+
+            if (item.Closed)
+            {
+                return "Chiusa";
+            }
+
+            return "Aperta";
         }
     }
 }

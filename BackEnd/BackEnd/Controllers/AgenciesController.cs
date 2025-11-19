@@ -17,6 +17,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using System.Globalization;
 
 namespace BackEnd.Controllers
 {
@@ -331,41 +332,112 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Errore durante l'eliminazione: {ex.Message}" });
             }
         }
-        //[HttpGet]
-        //[Route(nameof(ExportExcel))]
-        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateExcelContent(table);
+        [HttpPost]
+        [Route(nameof(Export))]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Export([FromBody] AgencyExportModel filters)
+        {
+            try
+            {
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
-        //[HttpGet]
-        //[Route(nameof(ExportCsv))]
-        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _agentServices.Get(0, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<AgentSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateCsvContent(table);
+                var permissionResult = await EnsureExportPermissions(currentUserId);
+                if (permissionResult != null)
+                {
+                    return permissionResult;
+                }
 
-        //        return File(fileBytes, "text/csv", "Output.csv");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
+                var payload = filters ?? new AgencyExportModel();
+                var agencies = await GetAgenciesForExportAsync(currentUserId, payload);
+
+                var table = BuildAgenciesExportTable(agencies);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(currentUserId, format, "agencies");
+
+                var fileName = $"agenzie_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
+        {
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
+            if (!exportEnabled)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
+            }
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
+            if (!limitCheck.CanProceed)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+            }
+
+            return null;
+        }
+
+        private async Task<List<UserSelectModel>> GetAgenciesForExportAsync(string adminId, AgencyExportModel filters)
+        {
+            var agenciesList = await userManager.GetUsersInRoleAsync("Agency");
+            agenciesList = agenciesList.Where(x => x.AdminId == adminId).ToList();
+
+            if (filters?.OnlyActive == true)
+            {
+                agenciesList = agenciesList.Where(x => x.EmailConfirmed).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(filters?.Search))
+            {
+                var lowered = filters.Search.ToLower();
+                agenciesList = agenciesList.Where(x =>
+                    (x.FirstName ?? string.Empty).ToLower().Contains(lowered) ||
+                    (x.LastName ?? string.Empty).ToLower().Contains(lowered) ||
+                    x.Email.ToLower().Contains(lowered)).ToList();
+            }
+
+            return _mapper.Map<List<UserSelectModel>>(agenciesList);
+        }
+
+        private static DataTable BuildAgenciesExportTable(IEnumerable<UserSelectModel> agencies)
+        {
+            var table = new DataTable("Agenzie");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Nome");
+            table.Columns.Add("Cognome");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Attiva");
+
+            foreach (var agency in agencies)
+            {
+                table.Rows.Add(
+                    agency.Id,
+                    agency.FirstName,
+                    agency.LastName,
+                    agency.Email,
+                    agency.PhoneNumber,
+                    agency.EmailConfirmed ? "Sì" : "No");
+            }
+
+            return table;
+        }
     }
 }

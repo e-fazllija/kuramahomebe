@@ -3,10 +3,13 @@ using BackEnd.Entities;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CalendarModels;
 using BackEnd.Services;
+using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
 
 namespace BackEnd.Controllers
@@ -23,6 +26,8 @@ namespace BackEnd.Controllers
         private readonly ICustomerServices _customerServices;
         private readonly IRealEstatePropertyServices _realEstatePropertyServices;
         private readonly IRequestServices _requestServices;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public CalendarController(
            IConfiguration configuration,
@@ -31,7 +36,9 @@ namespace BackEnd.Controllers
             AccessControlService accessControl,
             ICustomerServices customerServices,
             IRealEstatePropertyServices realEstatePropertyServices,
-            IRequestServices requestServices)
+            IRequestServices requestServices,
+            ISubscriptionLimitService subscriptionLimitService,
+            UserManager<ApplicationUser> userManager)
         {
             _configuration = configuration;
             _calendarServices = calendarServices;
@@ -40,6 +47,8 @@ namespace BackEnd.Controllers
             _customerServices = customerServices;
             _realEstatePropertyServices = realEstatePropertyServices;
             _requestServices = requestServices;
+            _subscriptionLimitService = subscriptionLimitService;
+            _userManager = userManager;
         }
         [HttpPost]
         [Route(nameof(Create))]
@@ -254,7 +263,7 @@ namespace BackEnd.Controllers
                 if (!canDelete)
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questo evento" });
                 
-                Calendar result = await _calendarServices.Delete(id);
+                BackEnd.Entities.Calendar result = await _calendarServices.Delete(id);
                 return Ok();
             }
             catch (Exception ex)
@@ -263,5 +272,103 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }        
+
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] CalendarExportModel filters)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                var permissionResult = await EnsureExportPermissions(userId);
+                if (permissionResult != null)
+                {
+                    return permissionResult;
+                }
+
+                var payload = filters ?? new CalendarExportModel();
+                var data = await _calendarServices.GetForExportAsync(userId, payload);
+
+                var table = BuildCalendarExportTable(data);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(userId, format, "calendar");
+
+                var fileName = $"calendario_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
+        {
+            var currentUser = await _userManager.FindByIdAsync(userId);
+            var adminId = currentUser?.AdminId;
+
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
+            if (!exportEnabled)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
+            }
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
+            if (!limitCheck.CanProceed)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+            }
+
+            return null;
+        }
+
+        private static DataTable BuildCalendarExportTable(IEnumerable<CalendarSelectModel> data)
+        {
+            var table = new DataTable("Eventi");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Titolo");
+            table.Columns.Add("Data Inizio");
+            table.Columns.Add("Data Fine");
+            table.Columns.Add("Stato");
+            table.Columns.Add("Agente");
+            table.Columns.Add("Descrizione");
+
+            foreach (var item in data)
+            {
+                table.Rows.Add(
+                    item.Id,
+                    item.EventName,
+                    item.EventStartDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
+                    item.EventEndDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
+                    ResolveEventStatus(item),
+                    $"{item.User?.FirstName} {item.User?.LastName}".Trim(),
+                    item.EventDescription);
+            }
+
+            return table;
+        }
+
+        private static string ResolveEventStatus(CalendarSelectModel item)
+        {
+            if (item.Cancelled) return "Disdetto";
+            if (item.Postponed) return "Rimandato";
+            if (item.Confirmed) return "Confermato";
+            return "In attesa";
+        }
     }
 }

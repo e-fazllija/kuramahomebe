@@ -11,6 +11,8 @@ using BackEnd.Entities;
 using System.Security.Claims;
 using BackEnd.Models.SubscriptionLimitModels;
 using BackEnd.Services;
+using System.Data;
+using System.Globalization;
 
 namespace BackEnd.Controllers
 {
@@ -401,41 +403,107 @@ namespace BackEnd.Controllers
             }
         }
 
-        //[HttpGet]
-        //[Route(nameof(ExportExcel))]
-        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _realEstatePropertyServices.Get(0, null, null, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<RealEstatePropertySelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateExcelContent(table);
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] RealEstatePropertyExportModel filters)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
-        //[HttpGet]
-        //[Route(nameof(ExportCsv))]
-        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _realEstatePropertyServices.Get(0, null, null, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<RealEstatePropertySelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateCsvContent(table);
+                var permissionResult = await EnsureExportPermissions(userId);
+                if (permissionResult != null)
+                {
+                    return permissionResult;
+                }
 
-        //        return File(fileBytes, "text/csv", "Output.csv");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
+                var payload = filters ?? new RealEstatePropertyExportModel();
+                var data = await _realEstatePropertyServices.GetListForExportAsync(payload, userId);
+
+                var table = BuildPropertyExportTable(data);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(userId, format, "properties");
+
+                var fileName = $"immobili_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
+        {
+            var currentUser = await _userManager.FindByIdAsync(userId);
+            var adminId = currentUser?.AdminId;
+
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
+            if (!exportEnabled)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
+            }
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
+            if (!limitCheck.CanProceed)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+            }
+
+            return null;
+        }
+
+        private static DataTable BuildPropertyExportTable(IEnumerable<RealEstatePropertyListModel> data)
+        {
+            var culture = CultureInfo.GetCultureInfo("it-IT");
+            var table = new DataTable("Immobili");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Data Inserimento");
+            table.Columns.Add("Fine Incarico");
+            table.Columns.Add("Indirizzo");
+            table.Columns.Add("Città");
+            table.Columns.Add("Provincia");
+            table.Columns.Add("Prezzo (€)");
+            table.Columns.Add("Categoria");
+            table.Columns.Add("Tipologia");
+            table.Columns.Add("Stato Immobile");
+            table.Columns.Add("Stato Incarico");
+            table.Columns.Add("Asta");
+            table.Columns.Add("Venduto");
+
+            foreach (var item in data)
+            {
+                table.Rows.Add(
+                    item.Id,
+                    item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy"),
+                    item.AssignmentEnd.ToLocalTime().ToString("dd/MM/yyyy"),
+                    item.AddressLine,
+                    item.City,
+                    item.State,
+                    item.Price.ToString("N0", culture),
+                    item.Category,
+                    item.Typology,
+                    item.StateOfTheProperty,
+                    item.Status,
+                    item.Auction ? "Sì" : "No",
+                    item.Sold ? "Sì" : "No");
+            }
+
+            return table;
+        }
     }
 }

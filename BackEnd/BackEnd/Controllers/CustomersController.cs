@@ -3,7 +3,9 @@ using BackEnd.Entities;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CustomerModels;
 using BackEnd.Services;
+using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
@@ -171,41 +173,116 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        //[HttpGet]
-        //[Route(nameof(ExportExcel))]
-        //public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _customerServices.Get(0, null, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateExcelContent(table);
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] CustomerExportModel filters)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        //        return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
-        //[HttpGet]
-        //[Route(nameof(ExportCsv))]
-        //public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        //{
-        //    try
-        //    {
-        //        var result = await _customerServices.Get(0, null, null, fromName, toName);
-        //        DataTable table = Export.ToDataTable<CustomerSelectModel>(result.Data);
-        //        byte[] fileBytes = Export.GenerateCsvContent(table);
+                var permissionResult = await EnsureExportPermissions(userId);
+                if (permissionResult != null)
+                {
+                    return permissionResult;
+                }
 
-        //        return File(fileBytes, "text/csv", "Output.csv");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-        //    }
-        //}
+                var payload = filters ?? new CustomerExportModel();
+                var data = await _customerServices.GetForExportAsync(payload, userId);
+
+                var table = BuildCustomerExportTable(data);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(userId, format, "customers");
+
+                var fileName = $"clienti_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<IActionResult?> EnsureExportPermissions(string userId)
+        {
+            var currentUser = await _userManager.FindByIdAsync(userId);
+            var adminId = currentUser?.AdminId;
+
+            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
+            if (!exportEnabled)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
+                    });
+            }
+
+            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
+            if (!limitCheck.CanProceed)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
+            }
+
+            return null;
+        }
+
+        private static DataTable BuildCustomerExportTable(IEnumerable<CustomerSelectModel> data)
+        {
+            var culture = CultureInfo.GetCultureInfo("it-IT");
+            var table = new DataTable("Clienti");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Nome");
+            table.Columns.Add("Cognome");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Tipologie");
+            table.Columns.Add("Città");
+            table.Columns.Add("Provincia");
+            table.Columns.Add("Cliente Gold");
+            table.Columns.Add("Data Creazione");
+            table.Columns.Add("Acquisizione");
+            table.Columns.Add("Incarico in corso");
+
+            foreach (var item in data)
+            {
+                table.Rows.Add(
+                    item.Id,
+                    item.FirstName,
+                    item.LastName,
+                    item.Email,
+                    item.Phone.ToString(culture),
+                    BuildCustomerTypes(item),
+                    item.City,
+                    item.State,
+                    item.GoldCustomer ? "Sì" : "No",
+                    item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy"),
+                    item.AcquisitionDone ? "Confermata" : "In corso",
+                    item.OngoingAssignment ? "Sì" : "No");
+            }
+
+            return table;
+        }
+
+        private static string BuildCustomerTypes(CustomerSelectModel customer)
+        {
+            var tags = new List<string>();
+            if (customer.Buyer) tags.Add("Compratore");
+            if (customer.Seller) tags.Add("Venditore");
+            if (customer.Builder) tags.Add("Costruttore");
+            if (customer.GoldCustomer) tags.Add("Cliente gold");
+
+            return string.Join(", ", tags);
+        }
     }
 }
