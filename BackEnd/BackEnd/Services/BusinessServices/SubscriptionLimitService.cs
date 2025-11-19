@@ -1,9 +1,12 @@
 using BackEnd.Data;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
+using BackEnd.Models.ResponseModel;
 using BackEnd.Models.SubscriptionLimitModels;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Linq;
 
 namespace BackEnd.Services.BusinessServices
@@ -518,6 +521,19 @@ namespace BackEnd.Services.BusinessServices
 
             await _unitOfWork.dbContext.ExportHistory.AddAsync(exportHistory);
             await _unitOfWork.SaveAsync();
+        }
+
+        public async Task<bool?> EnsureExportPermissions(string userId)
+        {
+            bool exportEnabled = await IsExportEnabledAsync(userId);
+            if (!exportEnabled)
+                throw new Exception("L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità.");
+
+            var limitCheck = await CheckFeatureLimitAsync(userId, "max_exports");
+            if (!limitCheck.CanProceed)
+                throw new RetryLimitExceededException($"{limitCheck}");
+
+            return null;
         }
     }
 }

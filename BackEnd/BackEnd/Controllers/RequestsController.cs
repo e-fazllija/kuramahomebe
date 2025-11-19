@@ -243,11 +243,7 @@ namespace BackEnd.Controllers
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                var permissionResult = await EnsureExportPermissions(userId);
-                if (permissionResult != null)
-                {
-                    return permissionResult;
-                }
+                var permissionResult = _subscriptionLimitService.EnsureExportPermissions(userId);
 
                 var payload = filters ?? new RequestExportModel();
                 var data = await _requestServices.GetForExportAsync(payload, userId);
@@ -272,31 +268,6 @@ namespace BackEnd.Controllers
                 _logger.LogError(ex.Message);
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
-        }
-
-        private async Task<IActionResult?> EnsureExportPermissions(string userId)
-        {
-            var currentUser = await _userManager.FindByIdAsync(userId);
-            var adminId = currentUser?.AdminId;
-
-            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId, adminId);
-            if (!exportEnabled)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                    new AuthResponseModel()
-                    {
-                        Status = "Error",
-                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
-                    });
-            }
-
-            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports", adminId);
-            if (!limitCheck.CanProceed)
-            {
-                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
-            }
-
-            return null;
         }
 
         private static DataTable BuildRequestExportTable(IEnumerable<RequestListModel> data)

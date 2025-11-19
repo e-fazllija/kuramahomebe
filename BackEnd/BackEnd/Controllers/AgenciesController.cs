@@ -9,15 +9,16 @@ using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
 using BackEnd.Services;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
-using System.Linq;
-using System.Globalization;
 
 namespace BackEnd.Controllers
 {
@@ -341,11 +342,7 @@ namespace BackEnd.Controllers
             {
                 var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                var permissionResult = await EnsureExportPermissions(currentUserId);
-                if (permissionResult != null)
-                {
-                    return permissionResult;
-                }
+                var permissionResult = _subscriptionLimitService.EnsureExportPermissions(currentUserId);
 
                 var payload = filters ?? new AgencyExportModel();
                 var agencies = await GetAgenciesForExportAsync(currentUserId, payload);
@@ -370,28 +367,6 @@ namespace BackEnd.Controllers
                 _logger.LogError(ex.Message);
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
-        }
-
-        private async Task<IActionResult?> EnsureExportPermissions(string userId)
-        {
-            bool exportEnabled = await _subscriptionLimitService.IsExportEnabledAsync(userId);
-            if (!exportEnabled)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                    new AuthResponseModel()
-                    {
-                        Status = "Error",
-                        Message = "L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità."
-                    });
-            }
-
-            var limitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "max_exports");
-            if (!limitCheck.CanProceed)
-            {
-                return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
-            }
-
-            return null;
         }
 
         private async Task<List<UserSelectModel>> GetAgenciesForExportAsync(string adminId, AgencyExportModel filters)
