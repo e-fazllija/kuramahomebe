@@ -38,11 +38,7 @@ namespace BackEnd.Services
             // ==================== INDICI ====================
 
             // Customer - Indici per ricerche frequenti
-            builder.Entity<Customer>()
-                .HasIndex(c => c.Email)
-                .IsUnique()
-                .HasDatabaseName("IX_Customer_Email");
-
+            // Rimosso indice unico su Email (ora può essere duplicata)
             // Rimosso indice unico su Code (campo eliminato)
 
             builder.Entity<Customer>()

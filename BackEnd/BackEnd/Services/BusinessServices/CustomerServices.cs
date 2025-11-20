@@ -48,7 +48,7 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.LogError(ex, $"Errore durante la creazione del cliente: {ex.Message}");
                 throw new Exception("Si è verificato un errore in fase creazione");
             }
         }
@@ -233,15 +233,12 @@ namespace BackEnd.Services.BusinessServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.LogError(ex, $"Errore durante l'aggiornamento del cliente: {ex.Message}");
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
                 }
-                else
-                {
-                    throw new Exception("Si è verificato un errore in fase di modifica");
-                }
+                throw new Exception("Si è verificato un errore in fase di modifica");
             }
         }
     }
