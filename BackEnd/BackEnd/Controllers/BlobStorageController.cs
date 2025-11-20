@@ -1,5 +1,6 @@
 ﻿using BackEnd.Entities;
 using BackEnd.Interfaces;
+using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.InputModels;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
@@ -24,18 +25,21 @@ namespace BackEnd.Controllers
         private readonly IUnitOfWork _unitOfWork;
         private readonly AccessControlService _accessControl;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
         private const string FOLDER_PLACEHOLDER_FILE = ".folder_placeholder";
         
         public BlobStorageController(
             IStorageServices storageServices, 
             IUnitOfWork unitOfWork,
             AccessControlService accessControl,
-            UserManager<ApplicationUser> userManager) 
+            UserManager<ApplicationUser> userManager,
+            ISubscriptionLimitService subscriptionLimitService) 
         {
             _storageServices = storageServices;
             _unitOfWork = unitOfWork;
             _accessControl = accessControl;
             _userManager = userManager;
+            _subscriptionLimitService = subscriptionLimitService;
         }
 
         /// <summary>
@@ -147,10 +151,58 @@ namespace BackEnd.Controllers
                 if (request.File == null)
                     return BadRequest("Nessun file selezionato");
 
-                var (userId, adminId, user, roles) = await GetCurrentUserInfo();
+                var (userId, adminId, user, _) = await GetCurrentUserInfo();
 
-                // Costruisci il path del file usando l'ID utente come root
-                // Se è privato, va nella sottocartella "private"
+                // Verifica limite storage prima dell'upload
+                long fileSizeBytes = request.File.Length;
+                
+                // Ottieni l'admin per verificare e aggiornare lo storage in un'unica query
+                var admin = userId == adminId ? user : await _userManager.FindByIdAsync(adminId);
+                if (admin == null)
+                    return StatusCode(500, new AuthResponseModel() { Status = "Error", Message = "Admin non trovato" });
+
+                // Verifica limite storage prima del caricamento
+                var storageLimitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "storage_limit", adminId);
+                
+                // Se il limite è già stato raggiunto, blocca immediatamente
+                if (storageLimitCheck.LimitReached)
+                {
+                    return StatusCode(StatusCodes.Status500InternalServerError, 
+                        new AuthResponseModel() 
+                        { 
+                            Status = "Error", 
+                            Message = storageLimitCheck.Message ?? "Limite storage raggiunto. Elimina alcuni file prima di caricarne altri."
+                        });
+                }
+                
+                // Se c'è un limite, verifica che il nuovo file non lo supererebbe
+                if (storageLimitCheck.Limit != null && 
+                    int.TryParse(storageLimitCheck.Limit, out int limitGB) && 
+                    limitGB > 0)
+                {
+                    long limitBytes = (long)limitGB * 1024L * 1024L * 1024L;
+                    long currentStorageBytes = admin.StorageUsedBytes;
+                    long futureStorageBytes = currentStorageBytes + fileSizeBytes;
+                    
+                    // Se dopo il caricamento supererebbe il limite, blocca
+                    if (futureStorageBytes > limitBytes)
+                    {
+                        double currentGB = currentStorageBytes / (1024.0 * 1024.0 * 1024.0);
+                        double fileGB = fileSizeBytes / (1024.0 * 1024.0 * 1024.0);
+                        double futureGB = futureStorageBytes / (1024.0 * 1024.0 * 1024.0);
+                        
+                        return StatusCode(StatusCodes.Status500InternalServerError, 
+                            new AuthResponseModel() 
+                            { 
+                                Status = "Error", 
+                                Message = $"Limite storage raggiunto. Utilizzo attuale: {currentGB:F2} GB su {limitGB} GB. " +
+                                         $"Il file da caricare ({fileGB:F2} GB) porterebbe il totale a {futureGB:F2} GB, superando il limite. " +
+                                         $"Elimina alcuni file o aggiorna il piano per aumentare lo storage disponibile."
+                            });
+                    }
+                }
+
+                // Costruisci il path del file
                 string sanitizedFileName = request.File.FileName.Replace(" ", "-");
                 string filePath;
                 
@@ -163,18 +215,19 @@ namespace BackEnd.Controllers
                 }
                 else
                 {
-                    // In una sottocartella
-                    var parentUserId = request.ParentPath.Split('/')[0];
-                    
                     // Verifica permessi sul ParentPath
-                    var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
-                    if (!canAccess && parentUserId != userId)
+                    var parentUserId = request.ParentPath.Split('/')[0];
+                    if (parentUserId != userId)
                     {
-                        return StatusCode(403, new AuthResponseModel() 
-                        { 
-                            Status = "Error", 
-                            Message = "Non hai i permessi per caricare file in questo path" 
-                        });
+                        var canAccess = await _accessControl.CanAccessEntity(userId, parentUserId);
+                        if (!canAccess)
+                        {
+                            return StatusCode(403, new AuthResponseModel() 
+                            { 
+                                Status = "Error", 
+                                Message = "Non hai i permessi per caricare file in questo path" 
+                            });
+                        }
                     }
                     
                     filePath = request.IsPrivate
@@ -182,9 +235,11 @@ namespace BackEnd.Controllers
                         : $"{request.ParentPath}/{sanitizedFileName}";
                 }
 
+                // Upload del file
                 Stream stream = request.File.OpenReadStream();
                 string fileUrl = await _storageServices.UploadFile(stream, filePath);
 
+                // Crea il documento nel database
                 Documentation document = new Documentation()
                 {
                     FileName = filePath,
@@ -194,12 +249,19 @@ namespace BackEnd.Controllers
                     IsPrivate = request.IsPrivate,
                     ParentPath = request.ParentPath,
                     AgencyId = adminId,
-                    UserId = userId, // Il creatore del file
+                    UserId = userId,
+                    FileSizeBytes = fileSizeBytes,
                     CreationDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow
                 };
 
                 await _unitOfWork.dbContext.Documentation.AddAsync(document);
+                
+                // Aggiorna lo storage dell'admin (già caricato in memoria)
+                admin.StorageUsedBytes = Math.Max(0, admin.StorageUsedBytes + fileSizeBytes);
+                admin.UpdateDate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(admin);
+                
                 _unitOfWork.Save();
                 
                 return Ok(new DocumentationSelectModel
@@ -432,10 +494,30 @@ namespace BackEnd.Controllers
                     }
                 }
 
+                // Recupera la dimensione del file prima di eliminarlo (se salvata)
+                long fileSizeBytes = 0;
+                if (document.FileSizeBytes.HasValue)
+                {
+                    fileSizeBytes = document.FileSizeBytes.Value;
+                }
+                else
+                {
+                    // Se non abbiamo la dimensione salvata, proviamo a recuperarla da Azure Blob Storage
+                    // Nota: Questo richiede un metodo aggiuntivo nell'interfaccia IStorageServices
+                    // Per ora, assumiamo 0 se non disponibile (non ideale ma funzionale)
+                }
+
                 // Elimina il file dal blob storage
                 await _storageServices.DeleteFile(document.FileName);
 
                 _unitOfWork.dbContext.Documentation.Remove(document);
+                
+                // Decrementa lo storage utilizzato dell'Admin root
+                if (fileSizeBytes > 0)
+                {
+                    await UpdateAdminStorageAsync(adminId, -fileSizeBytes);
+                }
+                
                 await _unitOfWork.SaveAsync();
                 
                 return Ok();
@@ -458,6 +540,22 @@ namespace BackEnd.Controllers
 
             var parts = fileName.Split('/');
             return parts.Length > 0 ? parts[^1] : fileName;
+        }
+
+        /// <summary>
+        /// Aggiorna lo storage utilizzato dell'Admin root
+        /// </summary>
+        /// <param name="adminId">ID dell'Admin root</param>
+        /// <param name="bytesToAdd">Bytes da aggiungere (negativo per decrementare)</param>
+        private async Task UpdateAdminStorageAsync(string adminId, long bytesToAdd)
+        {
+            var admin = await _userManager.FindByIdAsync(adminId);
+            if (admin != null)
+            {
+                admin.StorageUsedBytes = Math.Max(0, admin.StorageUsedBytes + bytesToAdd);
+                admin.UpdateDate = DateTime.UtcNow;
+                await _userManager.UpdateAsync(admin);
+            }
         }
     }
 }

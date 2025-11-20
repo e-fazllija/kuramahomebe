@@ -19,5 +19,6 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task SetHighlighted(int realEstatePropertyId);
         Task SetInHome(int realEstatePropertyId);
         Task<CalendarSearchModel> GetSearchItems(string userId, string? agencyId);
+        Task<List<RealEstatePropertyListModel>> GetListForExportAsync(RealEstatePropertyExportModel filters, string userId);
     }
 }

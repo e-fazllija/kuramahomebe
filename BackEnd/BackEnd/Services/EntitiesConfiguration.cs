@@ -15,25 +15,60 @@ namespace BackEnd.Services
                 .HasOne(c => c.Customer).WithMany(c => c.RealEstateProperties);
 
             builder.Entity<RealEstateProperty>()
-                .HasOne(c => c.User).WithMany(c => c.RealEstateProperties).HasForeignKey(p => p.UserId);
+                .HasOne(c => c.User).WithMany(c => c.RealEstateProperties).HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             builder.Entity<RealEstateProperty>()
                 .HasMany(c => c.Photos).WithOne(e => e.RealEstateProperty);
 
             builder.Entity<RealEstateProperty>()
-                .HasMany(c => c.RealEstatePropertyNotes).WithOne(e => e.RealEstateProperty).HasForeignKey(e => e.RealEstatePropertyId).OnDelete(DeleteBehavior.NoAction);
+                .HasMany(c => c.RealEstatePropertyNotes).WithOne(e => e.RealEstateProperty);
 
             builder.Entity<Request>()
                 .HasMany(c => c.RequestNotes);
 
             builder.Entity<Customer>()
                 .HasMany(c => c.CustomerNotes);
+            
+            // Configurazione OnDelete per le relazioni uno-a-molti (dalla parte HasOne)
+            builder.Entity<RealEstatePropertyPhoto>()
+                .HasOne(p => p.RealEstateProperty)
+                .WithMany(p => p.Photos)
+                .HasForeignKey(p => p.RealEstatePropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<RequestNotes>()
+                .HasOne<Request>()
+                .WithMany(r => r.RequestNotes)
+                .HasForeignKey(n => n.RequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<CustomerNotes>()
+                .HasOne<Customer>()
+                .WithMany(c => c.CustomerNotes)
+                .HasForeignKey(n => n.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<RealEstatePropertyNotes>()
+                .HasOne(n => n.RealEstateProperty)
+                .WithMany(p => p.RealEstatePropertyNotes)
+                .HasForeignKey(n => n.RealEstatePropertyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             builder.Entity<Customer>()
-                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             builder.Entity<Request>()
-                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.NoAction);
+                .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Calendar -> User
+            builder.Entity<Calendar>()
+                .HasOne(c => c.User)
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // ==================== INDICI ====================
 
@@ -108,7 +143,7 @@ namespace BackEnd.Services
                 .HasOne(us => us.User)
                 .WithMany(u => u.Subscriptions)
                 .HasForeignKey(us => us.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Cascade);
 
             builder.Entity<UserSubscription>()
                 .HasOne(us => us.SubscriptionPlan)
@@ -121,7 +156,7 @@ namespace BackEnd.Services
                 .HasOne(p => p.User)
                 .WithMany(u => u.Payments)
                 .HasForeignKey(p => p.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Cascade);
 
             builder.Entity<Payment>()
                 .HasOne(p => p.Subscription)
@@ -159,6 +194,53 @@ namespace BackEnd.Services
             builder.Entity<UserSubscription>()
                 .HasIndex(u => new { u.UserId, u.Status })
                 .HasDatabaseName("IX_UserSubscription_UserId_Status");
+
+            // ==================== NOTES RELATIONSHIPS ====================
+            // RealEstatePropertyNotes -> User
+            builder.Entity<RealEstatePropertyNotes>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // RequestNotes -> User
+            builder.Entity<RequestNotes>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // CustomerNotes -> User
+            builder.Entity<CustomerNotes>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ==================== DOCUMENTATION ====================
+            // Documentation -> User (UserId) e Agency (AgencyId)
+            // Configuriamo le foreign key senza navigation properties per evitare conflitti
+            builder.Entity<Documentation>()
+                .HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Documentation_User_UserId");
+
+            builder.Entity<Documentation>()
+                .HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(d => d.AgencyId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Documentation_Agency_AgencyId");
+
+            // ==================== EXPORT HISTORY ====================
+            // ExportHistory -> User
+            builder.Entity<ExportHistory>()
+                .HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             return builder;
         }

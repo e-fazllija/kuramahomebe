@@ -1,9 +1,12 @@
 using BackEnd.Data;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
+using BackEnd.Models.ResponseModel;
 using BackEnd.Models.SubscriptionLimitModels;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Linq;
 
 namespace BackEnd.Services.BusinessServices
@@ -172,6 +175,14 @@ namespace BackEnd.Services.BusinessServices
                 lowerFeatureName == "max_requests")
                 return await CountRequestsAsync(adminRootId);
             
+            if (normalized.Equals("MaxExports", StringComparison.OrdinalIgnoreCase) || 
+                lowerFeatureName == "max_exports")
+                return await CountExportsThisMonthAsync(adminRootId);
+            
+            if (normalized.Equals("StorageLimit", StringComparison.OrdinalIgnoreCase) || 
+                lowerFeatureName == "storage_limit")
+                return await CalculateStorageUsedAsync(adminRootId);
+            
             return 0;
         }
 
@@ -258,6 +269,34 @@ namespace BackEnd.Services.BusinessServices
         }
 
         /// <summary>
+        /// Conta gli export effettuati questo mese dall'Admin
+        /// </summary>
+        private async Task<int> CountExportsThisMonthAsync(string adminId)
+        {
+            var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0,0,DateTimeKind.Utc);
+
+            return await _unitOfWork.dbContext.ExportHistory
+                .Where(e => e.UserId == adminId && e.ExportDate >= startOfMonth)
+                .CountAsync();
+        }
+
+        /// <summary>
+        /// Calcola lo storage utilizzato in GB per la gerarchia dell'Admin
+        /// Usa la colonna StorageUsedBytes dell'Admin root (più efficiente e preciso)
+        /// </summary>
+        private async Task<int> CalculateStorageUsedAsync(string adminId)
+        {
+            // Recupera l'Admin root e usa il valore StorageUsedBytes già calcolato
+            var admin = await _userManager.FindByIdAsync(adminId);
+            if (admin == null)
+                return 0;
+
+            // Converti bytes in GB (1 GB = 1024^3 bytes)
+            double storageGB = admin.StorageUsedBytes / (1024.0 * 1024.0 * 1024.0);
+            return (int)Math.Ceiling(storageGB);
+        }
+
+        /// <summary>
         /// Converte FeatureValue in int? (null se unlimited)
         /// </summary>
         private int? ParseLimit(string? featureValue)
@@ -325,6 +364,8 @@ namespace BackEnd.Services.BusinessServices
                 "maxagents" => "agenti",
                 "maxcustomers" => "clienti",
                 "maxrequests" => "richieste",
+                "maxexports" => "export",
+                "storagelimit" => "storage (GB)",
                 _ => featureName.ToLower() switch
                 {
                     "max_agencies" => "agenzie",
@@ -332,6 +373,8 @@ namespace BackEnd.Services.BusinessServices
                     "max_agents" => "agenti",
                     "max_customers" => "clienti",
                     "max_requests" => "richieste",
+                    "max_exports" => "export",
+                    "storage_limit" => "storage (GB)",
                     _ => "entità"
                 }
             };
@@ -431,6 +474,66 @@ namespace BackEnd.Services.BusinessServices
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Verifica se l'export è abilitato per l'utente
+        /// </summary>
+        public async Task<bool> IsExportEnabledAsync(string userId, string? agencyId = null)
+        {
+            var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, agencyId);
+            
+            if (subscription == null || subscription.SubscriptionPlan?.Features == null)
+                return false;
+
+            // Cerca feature "export_enabled"
+            var exportEnabledFeature = subscription.SubscriptionPlan.Features
+                .FirstOrDefault(f => 
+                    string.Equals(f.FeatureName, "export_enabled", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(f.FeatureName, "ExportEnabled", StringComparison.OrdinalIgnoreCase));
+
+            if (exportEnabledFeature == null)
+                return false;
+
+            // Verifica se il valore è "true", "1", "yes", etc.
+            var value = exportEnabledFeature.FeatureValue?.Trim().ToLower();
+            return value == "true" || value == "1" || value == "yes" || value == "enabled";
+        }
+
+        /// <summary>
+        /// Registra un export effettuato dall'utente
+        /// </summary>
+        public async Task RecordExportAsync(string userId, string exportType, string? entityType = null)
+        {
+            // Identifica l'Admin root
+            var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, null);
+            string adminRootId = subscription?.UserId ?? userId;
+
+            var exportHistory = new Entities.ExportHistory
+            {
+                UserId = adminRootId,
+                ExportType = exportType,
+                EntityType = entityType,
+                ExportDate = DateTime.UtcNow,
+                CreationDate = DateTime.UtcNow,
+                UpdateDate = DateTime.UtcNow
+            };
+
+            await _unitOfWork.dbContext.ExportHistory.AddAsync(exportHistory);
+            await _unitOfWork.SaveAsync();
+        }
+
+        public async Task<bool?> EnsureExportPermissions(string userId)
+        {
+            bool exportEnabled = await IsExportEnabledAsync(userId);
+            if (!exportEnabled)
+                throw new Exception("L'export dei dati non è disponibile nel tuo piano. Aggiorna l'abbonamento per utilizzare questa funzionalità.");
+
+            var limitCheck = await CheckFeatureLimitAsync(userId, "max_exports");
+            if (!limitCheck.CanProceed)
+                throw new RetryLimitExceededException($"{limitCheck}");
+
+            return null;
         }
     }
 }

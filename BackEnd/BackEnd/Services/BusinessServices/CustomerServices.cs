@@ -182,6 +182,76 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
+        public async Task<List<CustomerSelectModel>> GetForExportAsync(CustomerExportModel filters, string userId)
+        {
+            try
+            {
+                filters ??= new CustomerExportModel();
+
+                IQueryable<Customer> query = _unitOfWork.dbContext.Customers
+                    .Include(x => x.User)
+                    .OrderByDescending(x => x.Id);
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
+
+                if (!string.IsNullOrEmpty(filters.Filter))
+                {
+                    var lowered = filters.Filter.ToLower();
+                    query = query.Where(x =>
+                        x.FirstName.ToLower().Contains(lowered) ||
+                        x.LastName.ToLower().Contains(lowered) ||
+                        x.Email.ToLower().Contains(lowered));
+                }
+
+                if (filters.FromDate.HasValue)
+                {
+                    var from = DateTime.SpecifyKind(filters.FromDate.Value.Date, DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate >= from);
+                }
+
+                if (filters.ToDate.HasValue)
+                {
+                    var to = DateTime.SpecifyKind(filters.ToDate.Value.Date.AddDays(1), DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate < to);
+                }
+
+                if (!string.IsNullOrEmpty(filters.OwnerId))
+                {
+                    query = query.Where(x => x.UserId == filters.OwnerId);
+                }
+
+                if (filters.GoldCustomer.HasValue)
+                {
+                    query = query.Where(x => x.GoldCustomer == filters.GoldCustomer.Value);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Type))
+                {
+                    var typeLower = filters.Type.ToLower();
+                    query = typeLower switch
+                    {
+                        "compratore" => query.Where(x => x.Buyer),
+                        "venditore" => query.Where(x => x.Seller),
+                        "costruttore" => query.Where(x => x.Builder),
+                        "cliente gold" => query.Where(x => x.GoldCustomer),
+                        _ => query
+                    };
+                }
+
+                var customers = await query.ToListAsync();
+                return _mapper.Map<List<CustomerSelectModel>>(customers);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                throw new Exception("Si è verificato un errore durante l'esportazione dei clienti");
+            }
+        }
+
         public async Task<CustomerSelectModel> GetById(int id)
         {
             try

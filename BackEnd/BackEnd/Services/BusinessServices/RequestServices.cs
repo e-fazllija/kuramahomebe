@@ -402,6 +402,127 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
+        public async Task<List<RequestListModel>> GetForExportAsync(RequestExportModel filters, string userId)
+        {
+            try
+            {
+                filters ??= new RequestExportModel();
+
+                IQueryable<Request> query = _unitOfWork.dbContext.Requests
+                    .Include(x => x.Customer)
+                    .OrderByDescending(x => x.Id);
+
+                query = await ApplyRoleBasedFilter(query, userId);
+
+                if (!string.IsNullOrWhiteSpace(filters.Search))
+                {
+                    var lowered = filters.Search.ToLower();
+                    query = query.Where(x =>
+                        x.Customer.FirstName.ToLower().Contains(lowered) ||
+                        x.Customer.LastName.ToLower().Contains(lowered) ||
+                        x.Customer.Email.ToLower().Contains(lowered));
+                }
+
+                if (filters.FromDate.HasValue)
+                {
+                    var from = DateTime.SpecifyKind(filters.FromDate.Value.Date, DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate >= from);
+                }
+
+                if (filters.ToDate.HasValue)
+                {
+                    var to = DateTime.SpecifyKind(filters.ToDate.Value.Date.AddDays(1), DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate < to);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Contract))
+                {
+                    query = query.Where(x => x.Contract == filters.Contract);
+                }
+
+                if (filters.PriceFrom.HasValue && filters.PriceFrom.Value > 0)
+                {
+                    query = query.Where(x => x.PriceFrom >= filters.PriceFrom.Value);
+                }
+
+                if (filters.PriceTo.HasValue && filters.PriceTo.Value > 0)
+                {
+                    query = query.Where(x => x.PriceTo <= filters.PriceTo.Value);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Province))
+                {
+                    var provinceLower = filters.Province.ToLower();
+                    query = query.Where(x => x.Province != null && x.Province.ToLower().Contains(provinceLower));
+                }
+
+                if (!string.IsNullOrEmpty(filters.City))
+                {
+                    var cityLower = filters.City.ToLower();
+                    query = query.Where(x => x.City != null && x.City.ToLower().Contains(cityLower));
+                }
+
+                if (!string.IsNullOrEmpty(filters.Status))
+                {
+                    switch (filters.Status)
+                    {
+                        case "Aperta":
+                            query = query.Where(x => !x.Archived && !x.Closed);
+                            break;
+                        case "Chiusa":
+                            query = query.Where(x => x.Closed);
+                            break;
+                        case "Archiviata":
+                            query = query.Where(x => x.Archived);
+                            break;
+                    }
+                }
+
+                if (filters.PropertyTypes != null && filters.PropertyTypes.Any())
+                {
+                    var loweredPropertyTypes = filters.PropertyTypes
+                        .Where(pt => !string.IsNullOrWhiteSpace(pt))
+                        .Select(pt => pt.ToLower())
+                        .ToList();
+
+                    if (loweredPropertyTypes.Any())
+                    {
+                        query = query.Where(x =>
+                            !string.IsNullOrEmpty(x.PropertyType) &&
+                            loweredPropertyTypes.Any(pt => x.PropertyType.ToLower().Contains(pt)));
+                    }
+                }
+
+                var data = await query
+                    .Select(x => new RequestListModel
+                    {
+                        Id = x.Id,
+                        CustomerName = x.Customer.FirstName,
+                        CustomerLastName = x.Customer.LastName,
+                        CustomerEmail = x.Customer.Email,
+                        CustomerPhone = x.Customer.Phone.ToString(),
+                        Contract = x.Contract,
+                        CreationDate = x.CreationDate,
+                        Location = x.Location,
+                        City = x.City,
+                        PriceTo = x.PriceTo,
+                        PriceFrom = x.PriceFrom,
+                        PropertyType = x.PropertyType,
+                        Archived = x.Archived,
+                        Closed = x.Closed,
+                        UserId = x.UserId
+                    })
+                    .ToListAsync();
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                throw new Exception("Si è verificato un errore durante l'esportazione delle richieste");
+            }
+        }
+
         private async Task<IQueryable<Request>> ApplyRoleBasedFilter(IQueryable<Request> query, string? userId)
         {
             if (string.IsNullOrEmpty(userId))

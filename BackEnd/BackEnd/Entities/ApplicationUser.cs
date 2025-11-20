@@ -48,6 +48,12 @@ namespace BackEnd.Entities
         [MaxLength(20, ErrorMessage = "Il colore non può superare i 20 caratteri")]
         public string Color { get; set; } = "#ffffff";
 
+        /// <summary>
+        /// Storage utilizzato in bytes per la gerarchia dell'Admin (somma di tutti i file)
+        /// Aggiornato automaticamente quando si caricano/eliminano file
+        /// </summary>
+        public long StorageUsedBytes { get; set; } = 0;
+
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
         public DateTime UpdateDate { get; set; } = DateTime.UtcNow;
 

@@ -502,6 +502,144 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
+        public async Task<List<RealEstatePropertyListModel>> GetListForExportAsync(RealEstatePropertyExportModel filters, string userId)
+        {
+            try
+            {
+                filters ??= new RealEstatePropertyExportModel();
+
+                IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
+                    .Include(x => x.Photos.OrderBy(p => p.Position))
+                    .Include(x => x.User)
+                    .OrderByDescending(x => x.Id);
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
+
+                if (!string.IsNullOrEmpty(filters.Filter))
+                {
+                    var lowered = filters.Filter.ToLower();
+                    query = query.Where(x =>
+                        x.AddressLine.ToLower().Contains(lowered) ||
+                        x.Id.ToString().Contains(lowered));
+                }
+
+                if (filters.FromDate.HasValue)
+                {
+                    var from = DateTime.SpecifyKind(filters.FromDate.Value.Date, DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate >= from);
+                }
+
+                if (filters.ToDate.HasValue)
+                {
+                    var to = DateTime.SpecifyKind(filters.ToDate.Value.Date.AddDays(1), DateTimeKind.Utc);
+                    query = query.Where(x => x.CreationDate < to);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Contract))
+                {
+                    if (filters.Contract == "Aste")
+                    {
+                        query = query.Where(x => x.Status == "Vendita" && x.Auction);
+                    }
+                    else
+                    {
+                        query = query.Where(x => x.Status == filters.Contract && !x.Auction);
+                    }
+                }
+
+                if (filters.PriceFrom.HasValue && filters.PriceFrom.Value > 0)
+                {
+                    query = query.Where(x => x.Price >= filters.PriceFrom.Value);
+                }
+
+                if (filters.PriceTo.HasValue && filters.PriceTo.Value > 0)
+                {
+                    query = query.Where(x => x.Price <= filters.PriceTo.Value);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Category))
+                {
+                    query = query.Where(x => x.Category == filters.Category);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Typologie))
+                {
+                    query = query.Where(x => x.Typology == filters.Typologie);
+                }
+
+                if (!string.IsNullOrEmpty(filters.City))
+                {
+                    var cityLower = filters.City.ToLower();
+                    query = query.Where(x => x.City.ToLower().Contains(cityLower));
+                }
+
+                if (!string.IsNullOrEmpty(filters.Province))
+                {
+                    var provinceLower = filters.Province.ToLower();
+                    query = query.Where(x => x.State != null && x.State.ToLower().Contains(provinceLower));
+                }
+
+                if (!string.IsNullOrEmpty(filters.AgentId))
+                {
+                    query = query.Where(x => x.UserId == filters.AgentId);
+                }
+
+                if (!string.IsNullOrEmpty(filters.AgencyId))
+                {
+                    query = query.Where(x => x.User.AdminId == filters.AgencyId);
+                }
+
+                if (!string.IsNullOrEmpty(filters.Status))
+                {
+                    query = query.Where(x => x.Status == filters.Status);
+                }
+
+                if (filters.Sold.HasValue)
+                {
+                    query = query.Where(x => x.Sold == filters.Sold.Value);
+                }
+
+                if (filters.Auction.HasValue)
+                {
+                    query = query.Where(x => x.Auction == filters.Auction.Value);
+                }
+
+                var data = await query
+                    .Select(x => new RealEstatePropertyListModel
+                    {
+                        Id = x.Id,
+                        CreationDate = x.CreationDate,
+                        AssignmentEnd = x.AssignmentEnd,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        AddressLine = x.AddressLine,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        StateOfTheProperty = x.StateOfTheProperty,
+                        Status = x.Status,
+                        Auction = x.Auction,
+                        Sold = x.Sold,
+                        FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
+                        AgencyId = x.User.AdminId,
+                        AgentId = x.UserId
+                    })
+                    .ToListAsync();
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                throw new Exception("Si è verificato un errore durante l'esportazione degli immobili");
+            }
+        }
+
         public async Task<RealEstatePropertyCreateViewModel> GetToInsert(string currentUserId)
         {
             try

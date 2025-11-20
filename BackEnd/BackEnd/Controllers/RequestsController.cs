@@ -4,6 +4,7 @@ using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.RequestModels;
 using BackEnd.Services;
 using System.Data;
+using System.Globalization;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using Microsoft.AspNetCore.Authorization;
@@ -81,7 +82,7 @@ namespace BackEnd.Controllers
                 bool canModify = await _accessControl.CanModifyEntity(currentUserId, req.UserId);
                 
                 if (!canModify)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questa richiesta" });
                 
                 RequestSelectModel Result = await _requestServices.Update(request);
 
@@ -165,7 +166,7 @@ namespace BackEnd.Controllers
                 bool canAccess = await _accessControl.CanAccessEntity(currentUserId, result.UserId);
                 
                 if (!canAccess)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
 
                 return Ok(result);
             }
@@ -223,7 +224,7 @@ namespace BackEnd.Controllers
                 bool canDelete = await _accessControl.CanModifyEntity(currentUserId, request.UserId);
                 
                 if (!canDelete)
-                    return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa richiesta" });
+                    return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per eliminare questa richiesta" });
                 
                 Request result = await _requestServices.Delete(id);
                 return Ok();
@@ -234,18 +235,33 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        [HttpGet]
-        [Route(nameof(ExportExcel))]
-        public async Task<IActionResult> ExportExcel(char? fromName, char? toName)
+        [HttpPost]
+        [Route(nameof(Export))]
+        public async Task<IActionResult> Export([FromBody] RequestExportModel filters)
         {
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var result = await _requestServices.Get(0, null, fromName, toName, userId);
-                DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateExcelContent(table);
 
-                return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Output.xlsx");
+                var permissionResult = _subscriptionLimitService.EnsureExportPermissions(userId);
+
+                var payload = filters ?? new RequestExportModel();
+                var data = await _requestServices.GetForExportAsync(payload, userId);
+
+                var table = BuildRequestExportTable(data);
+                var format = payload.Format?.ToLowerInvariant() == "csv" ? "csv" : "excel";
+                var (contentType, extension) = format == "csv"
+                    ? ("text/csv", "csv")
+                    : ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
+
+                byte[] fileBytes = format == "csv"
+                    ? BackEnd.Services.Export.GenerateCsvContent(table)
+                    : BackEnd.Services.Export.GenerateExcelContent(table);
+
+                await _subscriptionLimitService.RecordExportAsync(userId, format, "requests");
+
+                var fileName = $"richieste_{DateTime.UtcNow:yyyyMMddHHmmss}.{extension}";
+                return File(fileBytes, contentType, fileName);
             }
             catch (Exception ex)
             {
@@ -253,24 +269,57 @@ namespace BackEnd.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
             }
         }
-        [HttpGet]
-        [Route(nameof(ExportCsv))]
-        public async Task<IActionResult> ExportCsv(char? fromName, char? toName)
-        {
-            try
-            {
-                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var result = await _requestServices.Get(0, null, fromName, toName, userId);
-                DataTable table = Export.ToDataTable<RequestSelectModel>(result.Data);
-                byte[] fileBytes = Export.GenerateCsvContent(table);
 
-                return File(fileBytes, "text/csv", "Output.csv");
-            }
-            catch (Exception ex)
+        private static DataTable BuildRequestExportTable(IEnumerable<RequestListModel> data)
+        {
+            var culture = CultureInfo.GetCultureInfo("it-IT");
+            var table = new DataTable("Richieste");
+            table.Columns.Add("Codice");
+            table.Columns.Add("Cliente");
+            table.Columns.Add("Email");
+            table.Columns.Add("Telefono");
+            table.Columns.Add("Contratto");
+            table.Columns.Add("Tipologia Immobile");
+            table.Columns.Add("Città");
+            table.Columns.Add("Località");
+            table.Columns.Add("Budget Min (€)");
+            table.Columns.Add("Budget Max (€)");
+            table.Columns.Add("Data Creazione");
+            table.Columns.Add("Stato");
+
+            foreach (var item in data)
             {
-                _logger.LogError(ex.Message);
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+                table.Rows.Add(
+                    item.Id,
+                    $"{item.CustomerName} {item.CustomerLastName}".Trim(),
+                    item.CustomerEmail,
+                    item.CustomerPhone,
+                    item.Contract,
+                    item.PropertyType,
+                    item.City,
+                    item.Location,
+                    item.PriceFrom.ToString("N0", culture),
+                    item.PriceTo.ToString("N0", culture),
+                    item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
+                    ResolveRequestStatus(item));
             }
+
+            return table;
+        }
+
+        private static string ResolveRequestStatus(RequestListModel item)
+        {
+            if (item.Archived)
+            {
+                return "Archiviata";
+            }
+
+            if (item.Closed)
+            {
+                return "Chiusa";
+            }
+
+            return "Aperta";
         }
     }
 }
