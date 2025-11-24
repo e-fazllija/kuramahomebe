@@ -38,6 +38,9 @@ namespace BackEnd.Models.UserModel
         
         public string Color { get; set; } = "#ffffff";
 
+        // --- AGENZIA ---
+        public string? AgencyId { get; set; }
+
         // --- TIPO UTENTE ---
         [Required(ErrorMessage = "User type is required")]
         public UserType UserType { get; set; }
