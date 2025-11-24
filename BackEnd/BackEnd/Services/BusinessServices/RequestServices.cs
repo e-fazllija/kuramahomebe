@@ -63,59 +63,6 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
-        public async Task<RequestDeleteConstraintsModel> CanDelete(int id)
-        {
-            try
-            {
-                var result = new RequestDeleteConstraintsModel
-                {
-                    CanDelete = true,
-                    Message = null,
-                    EventsCount = 0,
-                    RequestNotesCount = 0
-                };
-
-                if (id == 0)
-                {
-                    result.CanDelete = false;
-                    result.Message = "L'id non può essere 0";
-                    return result;
-                }
-
-                var request = await _unitOfWork.dbContext.Requests.FirstOrDefaultAsync(x => x.Id == id);
-                if (request == null)
-                {
-                    result.CanDelete = false;
-                    result.Message = "Record non trovato!";
-                    return result;
-                }
-
-                // Conta i record collegati
-                result.EventsCount = await _unitOfWork.dbContext.Calendars.CountAsync(x => x.RequestId == id);
-                result.RequestNotesCount = await _unitOfWork.dbContext.RequestNotes.CountAsync(x => x.RequestId == id);
-
-                // Se ci sono record collegati, avvisa ma permette comunque l'eliminazione
-                if (result.EventsCount > 0 || result.RequestNotesCount > 0)
-                {
-                    result.CanDelete = true; // Permette comunque l'eliminazione, ma avvisa
-                    result.Message = "Ci sono dati collegati che verranno eliminati insieme alla richiesta.";
-                }
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Errore durante la verifica dei constraint per la richiesta con ID {id}: {ex.Message}");
-                return new RequestDeleteConstraintsModel
-                {
-                    CanDelete = false,
-                    Message = "Si è verificato un errore durante la verifica. Riprova più tardi.",
-                    EventsCount = 0,
-                    RequestNotesCount = 0
-                };
-            }
-        }
-
         public async Task<Request> Delete(int id)
         {
             try

@@ -96,6 +96,16 @@ namespace BackEnd.Controllers
                             return StatusCode(403, "Accesso negato: puoi modificare solo i tuoi agenti o quelli delle tue agenzie");
                         }
                     }
+                    
+                    // Se Admin ha specificato un nuovo AgencyId, verifica e aggiorna
+                    if (!string.IsNullOrEmpty(request.AdminId) && request.AdminId != user.AdminId)
+                    {
+                        var newAgency = await userManager.FindByIdAsync(request.AdminId);
+                        if (newAgency == null || newAgency.AdminId != currentUserId)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Agenzia non valida o non appartenente all'admin corrente" });
+                        }
+                    }
                 }
 
                 _mapper.Map(request, user);
@@ -150,7 +160,25 @@ namespace BackEnd.Controllers
                 ApplicationUser user = _mapper.Map<ApplicationUser>(model);
                 user.SecurityStamp = Guid.NewGuid().ToString();
                 user.UserName = user.Email;
-                user.AdminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                // Se l'utente è Admin e ha specificato un AgencyId, usa quello, altrimenti usa l'ID dell'utente corrente
+                var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (currentUserRoles.Contains("Admin") && !string.IsNullOrEmpty(model.AgencyId))
+                {
+                    // Verifica che l'AgencyId appartenga all'Admin corrente
+                    var agency = await userManager.FindByIdAsync(model.AgencyId);
+                    if (agency == null || agency.AdminId != currentUserId)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "Agenzia non valida o non appartenente all'admin corrente" });
+                    }
+                    user.AdminId = model.AgencyId;
+                }
+                else
+                {
+                    // Per Agency o Admin senza AgencyId specificato, usa l'ID dell'utente corrente
+                    user.AdminId = currentUserId;
+                }
+                
                 user.EmailConfirmed = true;
 
                 var result = await userManager.CreateAsync(user, randomPassword);
