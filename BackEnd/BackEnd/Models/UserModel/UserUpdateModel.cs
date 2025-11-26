@@ -36,5 +36,14 @@ namespace BackEnd.Models.UserModel
         public string? VATNumber { get; set; }
         public string? PEC { get; set; }
         public string? SDICode { get; set; }
+
+        // --- CONFIGURAZIONE IDEALISTA ---
+        [MaxLength(200, ErrorMessage = "Il Client ID non può superare i 200 caratteri")]
+        public string? ClientId { get; set; }
+
+        [MaxLength(500, ErrorMessage = "Il Client Secret non può superare i 500 caratteri")]
+        public string? ClientSecret { get; set; }
+
+        public bool? SyncToIdealista { get; set; }
     }
 }
