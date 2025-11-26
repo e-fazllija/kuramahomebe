@@ -2,8 +2,6 @@ using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using BackEnd.Interfaces;
 using BackEnd.Models.OutputModels;
-using Azure.Identity;
-using Azure.Security.KeyVault.Secrets;
 
 namespace BackEnd.Services
 {
@@ -20,14 +18,19 @@ namespace BackEnd.Services
         private readonly CloudBlobClient _blobClient;
         private readonly CloudBlobContainer _container;
         private readonly ILogger<PropertyStorageService> _logger;
+        private readonly IKeyVaultSecretProvider _secretProvider;
 
-        public PropertyStorageService(IConfiguration configuration, ILogger<PropertyStorageService> logger)
+        public PropertyStorageService(IConfiguration configuration, ILogger<PropertyStorageService> logger, IKeyVaultSecretProvider secretProvider)
         {
             _configuration = configuration;
             _logger = logger;
+            _secretProvider = secretProvider;
 
-            // Carica connection string (può venire da KeyVault in produzione)
-            _blobStorageConnection = _configuration.GetValue<string>("Storage:LocalConnectionString")!;
+            var secretName = _configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString");
+            var fallbackKey = "Storage:LocalConnectionString";
+            _blobStorageConnection = _secretProvider.GetSecret(secretName, fallbackKey)
+                ?? _configuration.GetValue<string>(fallbackKey)
+                ?? throw new InvalidOperationException("Storage connection string not configured.");
             
             _cloudStorageAccount = CloudStorageAccount.Parse(_blobStorageConnection);
             _blobClient = _cloudStorageAccount.CreateCloudBlobClient();

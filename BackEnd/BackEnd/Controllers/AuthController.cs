@@ -1,6 +1,4 @@
 ﻿using AutoMapper;
-using Azure.Identity;
-using Azure.Security.KeyVault.Secrets;
 using BackEnd.Entities;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
@@ -29,13 +27,20 @@ namespace BackEnd.Controllers
     {
         private readonly UserManager<ApplicationUser> userManager;
         private readonly RoleManager<IdentityRole> roleManager;
-        private SecretClient secretClient;
         private readonly IMailService _mailService;
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
         private readonly IUserSubscriptionServices _userSubscriptionServices;
+        private readonly IKeyVaultSecretProvider _secretProvider;
         private string SecretForKey;
-        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper, IUserSubscriptionServices userSubscriptionServices)
+        public AuthController(
+            UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
+            IMailService mailService,
+            IConfiguration configuration,
+            IMapper mapper,
+            IUserSubscriptionServices userSubscriptionServices,
+            IKeyVaultSecretProvider secretProvider)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
@@ -43,9 +48,12 @@ namespace BackEnd.Controllers
             _configuration = configuration;
             _mapper = mapper;
             _userSubscriptionServices = userSubscriptionServices;
-            //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
-            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
-            SecretForKey = _configuration.GetValue<string>("Authentication:DevelopmentKey");//secret.Value;
+            _secretProvider = secretProvider;
+
+            var secretName = _configuration.GetValue<string>("KeyVault:Secrets:AuthKey");
+            SecretForKey = _secretProvider.GetSecret(secretName, "Authentication:DevelopmentKey")
+                ?? _configuration.GetValue<string>("Authentication:DevelopmentKey")
+                ?? throw new InvalidOperationException("Key di firma JWT non configurata.");
         }
 
         [HttpPost]
@@ -215,7 +223,7 @@ namespace BackEnd.Controllers
                 var validationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
-                    ValidateIssuer = false,
+                    ValidateIssuer = true,
                     ValidateAudience = false,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidIssuer = _configuration["Authentication:Issuer"],

@@ -3,8 +3,6 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using System.IO.Compression;
 using BackEnd.Interfaces;
 using BackEnd.Models.OutputModels;
-using Azure.Identity;
-using Azure.Security.KeyVault.Secrets;
 
 namespace BackEnd.Services
 {
@@ -17,20 +15,23 @@ namespace BackEnd.Services
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<StorageServices> _logger;
+        private readonly IKeyVaultSecretProvider _secretProvider;
         private string blobstorageconnection;
         private CloudStorageAccount cloudStorageAccount;
         private CloudBlobClient blobClient;
         private CloudBlobContainer container;
-        private SecretClient secretClient;
         
-        public StorageServices(IConfiguration configuration, ILogger<StorageServices> logger)
+        public StorageServices(IConfiguration configuration, ILogger<StorageServices> logger, IKeyVaultSecretProvider secretProvider)
         {
             _configuration = configuration;
             _logger = logger;
-            
-            //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
-            //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString")); 
-            blobstorageconnection = _configuration.GetValue<string>("Storage:LocalConnectionString")!;//secret.Value;
+            _secretProvider = secretProvider;
+
+            var secretName = _configuration.GetValue<string>("KeyVault:Secrets:StorageConnectionString");
+            var fallbackKey = "Storage:LocalConnectionString";
+            blobstorageconnection = _secretProvider.GetSecret(secretName, fallbackKey)
+                ?? _configuration.GetValue<string>(fallbackKey)
+                ?? throw new InvalidOperationException("Storage connection string not configured.");
             cloudStorageAccount = CloudStorageAccount.Parse(blobstorageconnection);
             blobClient = cloudStorageAccount.CreateCloudBlobClient();
             

@@ -11,6 +11,7 @@ namespace BackEnd.Services
         public static void ConfigureServices(this WebApplicationBuilder builder)
         {
 
+            builder.Services.AddSingleton<IKeyVaultSecretProvider, KeyVaultSecretProvider>();
             builder.Services.AddTransient<IUnitOfWork, UnitOfWork>();
             builder.Services.AddTransient<IStorageServices, StorageServices>();
             builder.Services.AddTransient<IPropertyStorageService, PropertyStorageService>();
