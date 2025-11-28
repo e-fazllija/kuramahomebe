@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BackEnd.Entities
 {
@@ -91,5 +92,6 @@ namespace BackEnd.Entities
         public string UserId { get; set; } = string.Empty;
         public ApplicationUser User { get; set; }
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
+        public int? IdealistaPropertyId { get; set; }
     }
 }

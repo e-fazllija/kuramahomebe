@@ -23,6 +23,7 @@ namespace BackEnd.Services.BusinessServices
         private readonly IPropertyStorageService _propertyStorageService;
         private readonly UserManager<ApplicationUser> userManager;
         private readonly AccessControlService _accessControl;
+        private readonly IIdealistaService _idealistaService;
         
         public RealEstatePropertyServices(
             IUnitOfWork unitOfWork,
@@ -31,7 +32,8 @@ namespace BackEnd.Services.BusinessServices
             IOptionsMonitor<PaginationOptions> options,
             IPropertyStorageService propertyStorageService,
             UserManager<ApplicationUser> userManager,
-            AccessControlService accessControl
+            AccessControlService accessControl,
+            IIdealistaService idealistaService
             )
         {
             _unitOfWork = unitOfWork;
@@ -41,6 +43,7 @@ namespace BackEnd.Services.BusinessServices
             _propertyStorageService = propertyStorageService;
             this.userManager = userManager;
             _accessControl = accessControl;
+            _idealistaService = idealistaService;
         }
         public async Task<RealEstatePropertySelectModel> Create(RealEstatePropertyCreateModel dto)
         {
@@ -72,6 +75,49 @@ namespace BackEnd.Services.BusinessServices
                 
                 var propertyAdded = await _unitOfWork.RealEstatePropertyRepository.InsertAsync(entityClass);
                 _unitOfWork.Save();
+
+                // Sincronizzazione con Idealista
+                try
+                {
+                    var user = await userManager.FindByIdAsync(entityClass.UserId);
+                    if (user != null)
+                    {
+                        var shouldSync = await IdealistaHelper.ShouldSyncToIdealistaAsync(user, userManager);
+                        if (shouldSync)
+                        {
+                            var (clientId, clientSecret, feedKey) = await IdealistaHelper.GetIdealistaCredentialsAsync(user, userManager);
+                            if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(feedKey))
+                            {
+                                var accessToken = await _idealistaService.GetAccessTokenAsync(clientId, clientSecret);
+                                if (!string.IsNullOrEmpty(accessToken))
+                                {
+                                    var idealistaData = IdealistaMappingHelper.MapPropertyToIdealistaFormat(propertyAdded.Entity);
+                                    var idealistaPropertyId = await _idealistaService.CreatePropertyAsync(accessToken, feedKey, idealistaData);
+                                    
+                                    if (idealistaPropertyId.HasValue)
+                                    {
+                                        propertyAdded.Entity.IdealistaPropertyId = idealistaPropertyId.Value;
+                                        _unitOfWork.RealEstatePropertyRepository.Update(propertyAdded.Entity);
+                                        _unitOfWork.Save();
+                                        
+                                        // Aggiorna le immagini se presenti
+                                        if (propertyAdded.Entity.Photos != null && propertyAdded.Entity.Photos.Any())
+                                        {
+                                            var imageUrls = propertyAdded.Entity.Photos.OrderBy(p => p.Position).Select(p => p.Url).ToList();
+                                            var propertyType = IdealistaMappingHelper.MapTypology(propertyAdded.Entity.Typology);
+                                            await _idealistaService.UpdatePropertyImagesAsync(accessToken, feedKey, idealistaPropertyId.Value, imageUrls, propertyType);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception idealistaEx)
+                {
+                    // Log dell'errore ma non bloccare la creazione dell'immobile
+                    _logger.LogWarning(idealistaEx, "Errore durante la sincronizzazione con Idealista per l'immobile {PropertyId}", propertyAdded.Entity.Id);
+                }
 
                 RealEstatePropertySelectModel response = new RealEstatePropertySelectModel();
                 _mapper.Map(propertyAdded.Entity, response);
@@ -117,6 +163,48 @@ namespace BackEnd.Services.BusinessServices
 
                     await _unitOfWork.RealEstatePropertyPhotoRepository.InsertAsync(photo);
                     _unitOfWork.Save();
+                }
+
+                // Sincronizza le immagini con Idealista se l'immobile è già sincronizzato
+                try
+                {
+                    var property = await _unitOfWork.RealEstatePropertyRepository.FirstOrDefaultAsync(q => q.Where(x => x.Id == dto.PropertyId));
+                    if (property != null && property.IdealistaPropertyId.HasValue)
+                    {
+                        var user = await userManager.FindByIdAsync(property.UserId);
+                        if (user != null)
+                        {
+                            var shouldSync = await IdealistaHelper.ShouldSyncToIdealistaAsync(user, userManager);
+                            if (shouldSync)
+                            {
+                                var (clientId, clientSecret, feedKey) = await IdealistaHelper.GetIdealistaCredentialsAsync(user, userManager);
+                                if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(feedKey))
+                                {
+                                    var accessToken = await _idealistaService.GetAccessTokenAsync(clientId, clientSecret);
+                                    if (!string.IsNullOrEmpty(accessToken))
+                                    {
+                                        // Recupera tutte le foto dell'immobile
+                                        var photos = await _unitOfWork.dbContext.RealEstatePropertyPhotos
+                                            .Where(p => p.RealEstatePropertyId == dto.PropertyId)
+                                            .OrderBy(p => p.Position)
+                                            .ToListAsync();
+                                        
+                                        if (photos.Any())
+                                        {
+                                            var imageUrls = photos.Select(p => p.Url).ToList();
+                                            var propertyType = IdealistaMappingHelper.MapTypology(property.Typology);
+                                            await _idealistaService.UpdatePropertyImagesAsync(accessToken, feedKey, property.IdealistaPropertyId.Value, imageUrls, propertyType);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception idealistaEx)
+                {
+                    // Log dell'errore ma non bloccare l'inserimento delle foto
+                    _logger.LogWarning(idealistaEx, "Errore durante la sincronizzazione delle immagini con Idealista per l'immobile {PropertyId}", dto.PropertyId);
                 }
 
                 _logger.LogInformation(nameof(Create));
@@ -166,6 +254,36 @@ namespace BackEnd.Services.BusinessServices
 
                 _unitOfWork.dbContext.RealEstatePropertyPhotos.RemoveRange(EntityClasses.Photos);
                 await _unitOfWork.SaveAsync();
+
+                // Disattiva su Idealista se sincronizzato
+                if (EntityClasses.IdealistaPropertyId.HasValue)
+                {
+                    try
+                    {
+                        var user = await userManager.FindByIdAsync(EntityClasses.UserId);
+                        if (user != null)
+                        {
+                            var shouldSync = await IdealistaHelper.ShouldSyncToIdealistaAsync(user, userManager);
+                            if (shouldSync)
+                            {
+                                var (clientId, clientSecret, feedKey) = await IdealistaHelper.GetIdealistaCredentialsAsync(user, userManager);
+                                if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(feedKey))
+                                {
+                                    var accessToken = await _idealistaService.GetAccessTokenAsync(clientId, clientSecret);
+                                    if (!string.IsNullOrEmpty(accessToken))
+                                    {
+                                        await _idealistaService.DeactivatePropertyAsync(accessToken, feedKey, EntityClasses.IdealistaPropertyId.Value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception idealistaEx)
+                    {
+                        // Log dell'errore ma non bloccare l'eliminazione
+                        _logger.LogWarning(idealistaEx, "Errore durante la disattivazione su Idealista per l'immobile {PropertyId}", EntityClasses.Id);
+                    }
+                }
 
                 _unitOfWork.RealEstatePropertyRepository.Delete(EntityClasses);
                 await _unitOfWork.SaveAsync();
@@ -896,6 +1014,42 @@ namespace BackEnd.Services.BusinessServices
 
                 _unitOfWork.RealEstatePropertyRepository.Update(EntityClass);
                 await _unitOfWork.SaveAsync();
+
+                // Sincronizzazione con Idealista
+                try
+                {
+                    var user = await userManager.FindByIdAsync(EntityClass.UserId);
+                    if (user != null)
+                    {
+                        var shouldSync = await IdealistaHelper.ShouldSyncToIdealistaAsync(user, userManager);
+                        if (shouldSync && EntityClass.IdealistaPropertyId.HasValue)
+                        {
+                            var (clientId, clientSecret, feedKey) = await IdealistaHelper.GetIdealistaCredentialsAsync(user, userManager);
+                            if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(feedKey))
+                            {
+                                var accessToken = await _idealistaService.GetAccessTokenAsync(clientId, clientSecret);
+                                if (!string.IsNullOrEmpty(accessToken))
+                                {
+                                    var idealistaData = IdealistaMappingHelper.MapPropertyToIdealistaFormat(EntityClass);
+                                    await _idealistaService.UpdatePropertyAsync(accessToken, feedKey, EntityClass.IdealistaPropertyId.Value, idealistaData);
+                                    
+                                    // Aggiorna le immagini se presenti
+                                    if (EntityClass.Photos != null && EntityClass.Photos.Any())
+                                    {
+                                        var imageUrls = EntityClass.Photos.OrderBy(p => p.Position).Select(p => p.Url).ToList();
+                                        var propertyType = IdealistaMappingHelper.MapTypology(EntityClass.Typology);
+                                        await _idealistaService.UpdatePropertyImagesAsync(accessToken, feedKey, EntityClass.IdealistaPropertyId.Value, imageUrls, propertyType);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception idealistaEx)
+                {
+                    // Log dell'errore ma non bloccare l'aggiornamento
+                    _logger.LogWarning(idealistaEx, "Errore durante la sincronizzazione con Idealista per l'immobile {PropertyId}", EntityClass.Id);
+                }
 
                 RealEstatePropertySelectModel response = new RealEstatePropertySelectModel();
                 _mapper.Map(EntityClass, response);

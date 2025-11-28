@@ -75,5 +75,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string UserId { get; set; }
         public virtual ApplicationUser User { get; set; } = new ApplicationUser();
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
+        public int? IdealistaPropertyId { get; set; }
     }
 }
