@@ -16,10 +16,9 @@ namespace BackEnd.Entities
         [Required(ErrorMessage = "Il cognome è obbligatorio")]
         [MaxLength(100, ErrorMessage = "Il cognome non può superare i 100 caratteri")]
         public string LastName { get; set; } = string.Empty;
-        [Required(ErrorMessage = "L'email è obbligatoria")]
         [MaxLength(256, ErrorMessage = "L'email non può superare i 256 caratteri")]
         [EmailAddress(ErrorMessage = "Formato email non valido")]
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
         [Required(ErrorMessage = "Il telefono è obbligatorio")]
         public long Phone { get; set; } 
         [MaxLength(1000, ErrorMessage = "La descrizione non può superare i 1000 caratteri")]

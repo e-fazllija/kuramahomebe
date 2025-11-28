@@ -31,5 +31,10 @@ namespace BackEnd.Models.UserModel
         public string? VATNumber { get; set; }
         public string? PEC { get; set; }
         public string? SDICode { get; set; }
+
+        // --- CONFIGURAZIONE IDEALISTA ---
+        public string? ClientId { get; set; }
+        public string? ClientSecret { get; set; }
+        public bool? SyncToIdealista { get; set; }
     }
 }

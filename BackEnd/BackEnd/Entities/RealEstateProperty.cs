@@ -80,6 +80,7 @@ namespace BackEnd.Entities
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
         public int CommissionReversal { get; set; }
+        public double EffectiveCommission { get; set; }
         [MaxLength(100, ErrorMessage = "Il tipo di incarico non può superare i 100 caratteri")]
         public string? TypeOfAssignment { get; set; }
         public DateTime AssignmentEnd { get; set; }

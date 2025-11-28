@@ -467,7 +467,7 @@ namespace BackEnd.Services.BusinessServices
 
                 // Proiezione ottimizzata per la lista
                 var queryList = await query
-                    .Select(x => new RealEstatePropertyListModel
+                    .Select(x => new
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
@@ -485,11 +485,58 @@ namespace BackEnd.Services.BusinessServices
                         Sold = x.Sold,
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
-                        AgentId = x.UserId
+                        AgentId = x.UserId,
+                        AgreedCommission = x.AgreedCommission,
+                        FlatRateCommission = x.FlatRateCommission,
+                        CommissionReversal = x.CommissionReversal
                     })
                     .ToListAsync();
 
-                result.Data = queryList;
+                // Mappa e calcola EffectiveCommission
+                var mappedList = queryList.Select(x =>
+                {
+                    double grossCommission = 0;
+                    
+                    // Calcola la provvigione lorda
+                    if (x.AgreedCommission > 0 && x.Price > 0)
+                    {
+                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
+                    }
+                    else if (x.FlatRateCommission > 0)
+                    {
+                        grossCommission = x.FlatRateCommission;
+                    }
+                    
+                    // Calcola la provvigione netta (lorda - storno)
+                    double netCommission = grossCommission - x.CommissionReversal;
+                    
+                    // Il risultato non può essere negativo (minimo 0)
+                    double effectiveCommission = Math.Max(0, netCommission);
+                    
+                    return new RealEstatePropertyListModel
+                    {
+                        Id = x.Id,
+                        CreationDate = x.CreationDate,
+                        AssignmentEnd = x.AssignmentEnd,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        AddressLine = x.AddressLine,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        StateOfTheProperty = x.StateOfTheProperty,
+                        Status = x.Status,
+                        Auction = x.Auction,
+                        Sold = x.Sold,
+                        FirstPhotoUrl = x.FirstPhotoUrl,
+                        AgencyId = x.AgencyId,
+                        AgentId = x.AgentId,
+                        EffectiveCommission = effectiveCommission
+                    };
+                }).ToList();
+
+                result.Data = mappedList;
 
                 _logger.LogInformation(nameof(GetList));
 
@@ -608,8 +655,8 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.Auction == filters.Auction.Value);
                 }
 
-                var data = await query
-                    .Select(x => new RealEstatePropertyListModel
+                var queryList = await query
+                    .Select(x => new
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
@@ -627,9 +674,56 @@ namespace BackEnd.Services.BusinessServices
                         Sold = x.Sold,
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
-                        AgentId = x.UserId
+                        AgentId = x.UserId,
+                        AgreedCommission = x.AgreedCommission,
+                        FlatRateCommission = x.FlatRateCommission,
+                        CommissionReversal = x.CommissionReversal
                     })
                     .ToListAsync();
+
+                // Mappa e calcola EffectiveCommission
+                var data = queryList.Select(x =>
+                {
+                    double grossCommission = 0;
+                    
+                    // Calcola la provvigione lorda
+                    if (x.AgreedCommission > 0 && x.Price > 0)
+                    {
+                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
+                    }
+                    else if (x.FlatRateCommission > 0)
+                    {
+                        grossCommission = x.FlatRateCommission;
+                    }
+                    
+                    // Calcola la provvigione netta (lorda - storno)
+                    double netCommission = grossCommission - x.CommissionReversal;
+                    
+                    // Il risultato non può essere negativo (minimo 0)
+                    double effectiveCommission = Math.Max(0, netCommission);
+                    
+                    return new RealEstatePropertyListModel
+                    {
+                        Id = x.Id,
+                        CreationDate = x.CreationDate,
+                        AssignmentEnd = x.AssignmentEnd,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        AddressLine = x.AddressLine,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        StateOfTheProperty = x.StateOfTheProperty,
+                        Status = x.Status,
+                        Auction = x.Auction,
+                        Sold = x.Sold,
+                        FirstPhotoUrl = x.FirstPhotoUrl,
+                        AgencyId = x.AgencyId,
+                        AgentId = x.AgentId,
+                        EffectiveCommission = effectiveCommission
+                    };
+                }).ToList();
 
                 return data;
             }

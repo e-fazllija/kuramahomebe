@@ -72,6 +72,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
         public int CommissionReversal { get; set; }
+        public double EffectiveCommission { get; set; }
 
     }
 }

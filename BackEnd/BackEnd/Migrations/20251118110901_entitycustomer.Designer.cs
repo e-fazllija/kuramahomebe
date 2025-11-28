@@ -3,6 +3,7 @@ using System;
 using BackEnd.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEnd.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251118110901_entitycustomer")]
+    partial class entitycustomer
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -43,14 +46,6 @@ namespace BackEnd.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ClientId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ClientSecret")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Color")
                         .IsRequired()
@@ -138,12 +133,6 @@ namespace BackEnd.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
-
-                    b.Property<long>("StorageUsedBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<bool?>("SyncToIdealista")
-                        .HasColumnType("boolean");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
@@ -411,9 +400,6 @@ namespace BackEnd.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
-                    b.Property<long?>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("FileUrl")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -437,10 +423,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("character varying(450)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AgencyId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Documentation");
                 });
@@ -701,47 +683,6 @@ namespace BackEnd.Migrations
                     b.ToTable("DocumentsTabs");
                 });
 
-            modelBuilder.Entity("BackEnd.Entities.ExportHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreationDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EntityType")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("ExportDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ExportType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("ExportHistory");
-                });
-
             modelBuilder.Entity("BackEnd.Entities.Payment", b =>
                 {
                     b.Property<int>("Id")
@@ -876,9 +817,6 @@ namespace BackEnd.Migrations
                         .IsRequired()
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)");
-
-                    b.Property<double>("EffectiveCommission")
-                        .HasColumnType("double precision");
 
                     b.Property<int>("Elevators")
                         .HasColumnType("integer");
@@ -1618,7 +1556,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("User");
                 });
@@ -1640,32 +1578,6 @@ namespace BackEnd.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("BackEnd.Entities.Documentation", b =>
-                {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("AgencyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("FK_Documentation_Agency_AgencyId");
-
-                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("FK_Documentation_User_UserId");
-                });
-
-            modelBuilder.Entity("BackEnd.Entities.ExportHistory", b =>
-                {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("BackEnd.Entities.Payment", b =>
                 {
                     b.HasOne("BackEnd.Entities.UserSubscription", "Subscription")
@@ -1676,7 +1588,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Payments")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Subscription");
@@ -1708,7 +1620,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.RealEstateProperty", "RealEstateProperty")
                         .WithMany("RealEstatePropertyNotes")
                         .HasForeignKey("RealEstatePropertyId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
@@ -1744,7 +1656,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Customer");
 
@@ -1794,7 +1706,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("LastPayment");
