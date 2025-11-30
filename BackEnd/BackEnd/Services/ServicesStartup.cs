@@ -32,7 +32,9 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ISubscriptionFeatureServices, SubscriptionFeatureServices>();
             builder.Services.AddTransient<ISubscriptionLimitService, SubscriptionLimitService>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
-
+            
+            // Idealista Service
+            builder.Services.AddHttpClient<IIdealistaService, IdealistaService>();
             
             // Access Control Service
             builder.Services.AddScoped<AccessControlService>();

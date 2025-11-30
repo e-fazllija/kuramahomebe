@@ -39,7 +39,10 @@ namespace BackEnd.Profiles
 
             CreateMap<ApplicationUser, UserSelectModel>()
                 .ForMember(dest => dest.Province, opt => opt.MapFrom(src => src.Province)) // Mappa Province esplicitamente
-                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)); // Mappa Color esplicitamente
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color)) // Mappa Color esplicitamente
+                .ForMember(dest => dest.ClientId, opt => opt.MapFrom(src => src.ClientId)) // Mappa ClientId esplicitamente
+                .ForMember(dest => dest.ClientSecret, opt => opt.MapFrom(src => src.ClientSecret)) // Mappa ClientSecret esplicitamente
+                .ForMember(dest => dest.SyncToIdealista, opt => opt.MapFrom(src => src.SyncToIdealista)); // Mappa SyncToIdealista esplicitamente
             CreateMap<UserSelectModel, ApplicationUser>();
         }
     }

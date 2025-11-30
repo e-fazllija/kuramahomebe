@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEnd.Migrations
 {
     /// <inheritdoc />
-    public partial class firstDb : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -37,11 +37,23 @@ namespace BackEnd.Migrations
                     Referent = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Address = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
                     City = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Region = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    AgencyId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    Province = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    ZipCode = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: true),
+                    Country = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    AdminId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
                     Color = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ClientId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ClientSecret = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    SyncToIdealista = table.Column<bool>(type: "boolean", nullable: true),
+                    StorageUsedBytes = table.Column<long>(type: "bigint", nullable: false),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UserType = table.Column<int>(type: "integer", nullable: false),
+                    CompanyName = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
+                    FiscalCode = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    VATNumber = table.Column<string>(type: "character varying(11)", maxLength: 11, nullable: true),
+                    PEC = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
+                    SDICode = table.Column<string>(type: "character varying(7)", maxLength: 7, nullable: true),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -61,26 +73,10 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_AspNetUsers_AspNetUsers_AgencyId",
-                        column: x => x.AgencyId,
+                        name: "FK_AspNetUsers_AspNetUsers_AdminId",
+                        column: x => x.AdminId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Documentation",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    FileName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    FileUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Documentation", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -177,20 +173,6 @@ namespace BackEnd.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Provinces",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
-                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Provinces", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "StripeWebhookEvents",
                 columns: table => new
                 {
@@ -219,8 +201,6 @@ namespace BackEnd.Migrations
                     Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     Price = table.Column<decimal>(type: "numeric", nullable: false),
                     BillingPeriod = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    MaxUsers = table.Column<int>(type: "integer", nullable: true),
-                    MaxProperties = table.Column<int>(type: "integer", nullable: true),
                     Active = table.Column<bool>(type: "boolean", nullable: false),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -342,7 +322,6 @@ namespace BackEnd.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     Buyer = table.Column<bool>(type: "boolean", nullable: false),
                     Seller = table.Column<bool>(type: "boolean", nullable: false),
                     Builder = table.Column<bool>(type: "boolean", nullable: false),
@@ -350,7 +329,7 @@ namespace BackEnd.Migrations
                     GoldCustomer = table.Column<bool>(type: "boolean", nullable: false),
                     FirstName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     LastName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Phone = table.Column<long>(type: "bigint", nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     Address = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
@@ -358,7 +337,7 @@ namespace BackEnd.Migrations
                     State = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     AcquisitionDone = table.Column<bool>(type: "boolean", nullable: false),
                     OngoingAssignment = table.Column<bool>(type: "boolean", nullable: false),
-                    AgencyId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -366,29 +345,69 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_Customers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Customers_AspNetUsers_AgencyId",
-                        column: x => x.AgencyId,
+                        name: "FK_Customers_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
-                        principalColumn: "Id");
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "Cities",
+                name: "Documentation",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
-                    ProvinceId = table.Column<int>(type: "integer", nullable: false)
+                    FileName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    FileUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    AgencyId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    IsFolder = table.Column<bool>(type: "boolean", nullable: false),
+                    IsPrivate = table.Column<bool>(type: "boolean", nullable: false),
+                    ParentPath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    DisplayName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    FileSizeBytes = table.Column<long>(type: "bigint", nullable: true),
+                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Cities", x => x.Id);
+                    table.PrimaryKey("PK_Documentation", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Cities_Provinces_ProvinceId",
-                        column: x => x.ProvinceId,
-                        principalTable: "Provinces",
+                        name: "FK_Documentation_Agency_AgencyId",
+                        column: x => x.AgencyId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Documentation_User_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ExportHistory",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ExportType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    EntityType = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ExportDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ExportHistory", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ExportHistory_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -402,6 +421,7 @@ namespace BackEnd.Migrations
                     SubscriptionPlanId = table.Column<int>(type: "integer", nullable: false),
                     FeatureName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     FeatureValue = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    Description = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -422,7 +442,7 @@ namespace BackEnd.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
                     CalendarId = table.Column<int>(type: "integer", nullable: true),
                     CustomerId = table.Column<int>(type: "integer", nullable: false),
                     Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
@@ -433,8 +453,8 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_CustomerNotes", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_CustomerNotes_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
+                        name: "FK_CustomerNotes_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -472,6 +492,7 @@ namespace BackEnd.Migrations
                     TotalBuildingfloors = table.Column<int>(type: "integer", nullable: false),
                     Elevators = table.Column<int>(type: "integer", nullable: false),
                     MoreDetails = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    MoreFeatures = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     Bedrooms = table.Column<int>(type: "integer", nullable: false),
                     WarehouseRooms = table.Column<int>(type: "integer", nullable: false),
                     Kitchens = table.Column<int>(type: "integer", nullable: false),
@@ -491,14 +512,16 @@ namespace BackEnd.Migrations
                     CondominiumExpenses = table.Column<double>(type: "double precision", nullable: false),
                     Availability = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Description = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: false),
-                    VideoUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    VideoUrl = table.Column<string>(type: "text", nullable: true),
                     AgreedCommission = table.Column<int>(type: "integer", nullable: false),
                     FlatRateCommission = table.Column<int>(type: "integer", nullable: false),
                     CommissionReversal = table.Column<int>(type: "integer", nullable: false),
+                    EffectiveCommission = table.Column<double>(type: "double precision", nullable: false),
                     TypeOfAssignment = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     AssignmentEnd = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CustomerId = table.Column<int>(type: "integer", nullable: false),
-                    AgentId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    IdealistaPropertyId = table.Column<int>(type: "integer", nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -506,8 +529,8 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_RealEstateProperties", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_RealEstateProperties_AspNetUsers_AgentId",
-                        column: x => x.AgentId,
+                        name: "FK_RealEstateProperties_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -545,7 +568,7 @@ namespace BackEnd.Migrations
                     Notes = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     Archived = table.Column<bool>(type: "boolean", nullable: false),
                     MortgageAdviceRequired = table.Column<bool>(type: "boolean", nullable: false),
-                    AgencyId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -553,37 +576,15 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_Requests", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Requests_AspNetUsers_AgencyId",
-                        column: x => x.AgencyId,
+                        name: "FK_Requests_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
-                        principalColumn: "Id");
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_Requests_Customers_CustomerId",
                         column: x => x.CustomerId,
                         principalTable: "Customers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Locations",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    CityId = table.Column<int>(type: "integer", nullable: false),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
-                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Locations", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Locations_Cities_CityId",
-                        column: x => x.CityId,
-                        principalTable: "Cities",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -594,7 +595,7 @@ namespace BackEnd.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
                     CalendarId = table.Column<int>(type: "integer", nullable: true),
                     RealEstatePropertyId = table.Column<int>(type: "integer", nullable: false),
                     Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
@@ -605,8 +606,8 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_RealEstatePropertyNotes", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_RealEstatePropertyNotes_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
+                        name: "FK_RealEstatePropertyNotes_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -614,7 +615,8 @@ namespace BackEnd.Migrations
                         name: "FK_RealEstatePropertyNotes_RealEstateProperties_RealEstateProp~",
                         column: x => x.RealEstatePropertyId,
                         principalTable: "RealEstateProperties",
-                        principalColumn: "Id");
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -649,7 +651,7 @@ namespace BackEnd.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
                     EventName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     CustomerId = table.Column<int>(type: "integer", nullable: true),
@@ -670,8 +672,8 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_Calendars", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Calendars_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
+                        name: "FK_Calendars_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -698,7 +700,7 @@ namespace BackEnd.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ApplicationUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
                     CalendarId = table.Column<int>(type: "integer", nullable: true),
                     RequestId = table.Column<int>(type: "integer", nullable: false),
                     Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
@@ -709,8 +711,8 @@ namespace BackEnd.Migrations
                 {
                     table.PrimaryKey("PK_RequestNotes", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_RequestNotes_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
+                        name: "FK_RequestNotes_AspNetUsers_UserId",
+                        column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -750,7 +752,7 @@ namespace BackEnd.Migrations
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -779,7 +781,7 @@ namespace BackEnd.Migrations
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_UserSubscriptions_Payments_LastPaymentId",
                         column: x => x.LastPaymentId,
@@ -830,9 +832,9 @@ namespace BackEnd.Migrations
                 column: "CreationDate");
 
             migrationBuilder.CreateIndex(
-                name: "IX_AspNetUsers_AgencyId",
+                name: "IX_AspNetUsers_AdminId",
                 table: "AspNetUsers",
-                column: "AgencyId");
+                column: "AdminId");
 
             migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
@@ -853,7 +855,7 @@ namespace BackEnd.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Calendar_UserId_StartDate",
                 table: "Calendars",
-                columns: new[] { "ApplicationUserId", "EventStartDate" });
+                columns: new[] { "UserId", "EventStartDate" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Calendars_CustomerId",
@@ -871,53 +873,34 @@ namespace BackEnd.Migrations
                 column: "RequestId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Cities_ProvinceId",
-                table: "Cities",
-                column: "ProvinceId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_City_Name_ProvinceId",
-                table: "Cities",
-                columns: new[] { "Name", "ProvinceId" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CustomerNotes_ApplicationUserId",
-                table: "CustomerNotes",
-                column: "ApplicationUserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_CustomerNotes_CustomerId",
                 table: "CustomerNotes",
                 column: "CustomerId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Customer_AgencyId_CreationDate",
+                name: "IX_CustomerNotes_UserId",
+                table: "CustomerNotes",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Customer_UserId_CreationDate",
                 table: "Customers",
-                columns: new[] { "AgencyId", "CreationDate" });
+                columns: new[] { "UserId", "CreationDate" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Customer_Code",
-                table: "Customers",
-                column: "Code",
-                unique: true);
+                name: "IX_Documentation_AgencyId",
+                table: "Documentation",
+                column: "AgencyId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Customer_Email",
-                table: "Customers",
-                column: "Email",
-                unique: true);
+                name: "IX_Documentation_UserId",
+                table: "Documentation",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Location_Name_CityId",
-                table: "Locations",
-                columns: new[] { "Name", "CityId" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Locations_CityId",
-                table: "Locations",
-                column: "CityId");
+                name: "IX_ExportHistory_UserId",
+                table: "ExportHistory",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Payment_StripePaymentIntentId",
@@ -935,12 +918,6 @@ namespace BackEnd.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Province_Name",
-                table: "Provinces",
-                column: "Name",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_RealEstateProperties_CustomerId",
                 table: "RealEstateProperties",
                 column: "CustomerId");
@@ -948,7 +925,7 @@ namespace BackEnd.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_RealEstateProperty_AgentId_CreationDate",
                 table: "RealEstateProperties",
-                columns: new[] { "AgentId", "CreationDate" });
+                columns: new[] { "UserId", "CreationDate" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_RealEstateProperty_Archived",
@@ -976,14 +953,14 @@ namespace BackEnd.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RealEstatePropertyNotes_ApplicationUserId",
-                table: "RealEstatePropertyNotes",
-                column: "ApplicationUserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_RealEstatePropertyNotes_RealEstatePropertyId",
                 table: "RealEstatePropertyNotes",
                 column: "RealEstatePropertyId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RealEstatePropertyNotes_UserId",
+                table: "RealEstatePropertyNotes",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RealEstatePropertyPhotos_RealEstatePropertyId",
@@ -991,14 +968,14 @@ namespace BackEnd.Migrations
                 column: "RealEstatePropertyId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RequestNotes_ApplicationUserId",
-                table: "RequestNotes",
-                column: "ApplicationUserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_RequestNotes_RequestId",
                 table: "RequestNotes",
                 column: "RequestId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RequestNotes_UserId",
+                table: "RequestNotes",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Request_Archived",
@@ -1016,14 +993,14 @@ namespace BackEnd.Migrations
                 columns: new[] { "Province", "City" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Requests_AgencyId",
-                table: "Requests",
-                column: "AgencyId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Requests_CustomerId",
                 table: "Requests",
                 column: "CustomerId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Requests_UserId",
+                table: "Requests",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_StripeWebhookEvent_EventId",
@@ -1113,7 +1090,7 @@ namespace BackEnd.Migrations
                 name: "DocumentsTabs");
 
             migrationBuilder.DropTable(
-                name: "Locations");
+                name: "ExportHistory");
 
             migrationBuilder.DropTable(
                 name: "RealEstatePropertyNotes");
@@ -1134,16 +1111,10 @@ namespace BackEnd.Migrations
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
-                name: "Cities");
-
-            migrationBuilder.DropTable(
                 name: "RealEstateProperties");
 
             migrationBuilder.DropTable(
                 name: "Requests");
-
-            migrationBuilder.DropTable(
-                name: "Provinces");
 
             migrationBuilder.DropTable(
                 name: "Customers");

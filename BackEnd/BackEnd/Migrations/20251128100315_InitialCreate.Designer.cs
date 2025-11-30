@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEnd.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251016142827_Logup")]
-    partial class Logup
+    [Migration("20251128100315_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -38,7 +38,7 @@ namespace BackEnd.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("AgencyId")
+                    b.Property<string>("AdminId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
@@ -46,6 +46,14 @@ namespace BackEnd.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ClientId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ClientSecret")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Color")
                         .IsRequired()
@@ -119,11 +127,11 @@ namespace BackEnd.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Referent")
+                    b.Property<string>("Province")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("Region")
+                    b.Property<string>("Referent")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -133,6 +141,12 @@ namespace BackEnd.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
+
+                    b.Property<long>("StorageUsedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool?>("SyncToIdealista")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
@@ -157,7 +171,7 @@ namespace BackEnd.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgencyId");
+                    b.HasIndex("AdminId");
 
                     b.HasIndex("CreationDate")
                         .HasDatabaseName("IX_ApplicationUser_CreationDate");
@@ -179,11 +193,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<bool>("Cancelled")
                         .HasColumnType("boolean");
@@ -237,6 +246,11 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
@@ -248,44 +262,13 @@ namespace BackEnd.Migrations
 
                     b.HasIndex("RequestId");
 
-                    b.HasIndex("ApplicationUserId", "EventStartDate")
-                        .HasDatabaseName("IX_Calendar_UserId_StartDate");
-
                     b.HasIndex("EventStartDate", "EventEndDate")
                         .HasDatabaseName("IX_Calendar_StartDate_EndDate");
 
+                    b.HasIndex("UserId", "EventStartDate")
+                        .HasDatabaseName("IX_Calendar_UserId_StartDate");
+
                     b.ToTable("Calendars");
-                });
-
-            modelBuilder.Entity("BackEnd.Entities.City", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("ProvinceId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProvinceId");
-
-                    b.HasIndex("Name", "ProvinceId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_City_Name_ProvinceId");
-
-                    b.ToTable("Cities");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.Customer", b =>
@@ -303,10 +286,6 @@ namespace BackEnd.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("AgencyId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
                     b.Property<bool>("Builder")
                         .HasColumnType("boolean");
 
@@ -317,11 +296,6 @@ namespace BackEnd.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -330,7 +304,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
@@ -366,18 +339,14 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Customer_Code");
-
-                    b.HasIndex("Email")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Customer_Email");
-
-                    b.HasIndex("AgencyId", "CreationDate")
-                        .HasDatabaseName("IX_Customer_AgencyId_CreationDate");
+                    b.HasIndex("UserId", "CreationDate")
+                        .HasDatabaseName("IX_Customer_UserId_CreationDate");
 
                     b.ToTable("Customers");
                 });
@@ -389,11 +358,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<int?>("CalendarId")
                         .HasColumnType("integer");
@@ -412,11 +376,16 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("CustomerNotes");
                 });
@@ -429,23 +398,52 @@ namespace BackEnd.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AgencyId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("FileUrl")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<bool>("IsFolder")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ParentPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("AgencyId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Documentation");
                 });
@@ -706,7 +704,7 @@ namespace BackEnd.Migrations
                     b.ToTable("DocumentsTabs");
                 });
 
-            modelBuilder.Entity("BackEnd.Entities.Location", b =>
+            modelBuilder.Entity("BackEnd.Entities.ExportHistory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -714,33 +712,37 @@ namespace BackEnd.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("ApplicationUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<int>("CityId")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ExportDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExportType")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CityId");
+                    b.HasIndex("UserId");
 
-                    b.HasIndex("Name", "CityId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Location_Name_CityId");
-
-                    b.ToTable("Locations");
+                    b.ToTable("ExportHistory");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.Payment", b =>
@@ -813,32 +815,6 @@ namespace BackEnd.Migrations
                     b.ToTable("Payments");
                 });
 
-            modelBuilder.Entity("BackEnd.Entities.Province", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Province_Name");
-
-                    b.ToTable("Provinces");
-                });
-
             modelBuilder.Entity("BackEnd.Entities.RealEstateProperty", b =>
                 {
                     b.Property<int>("Id")
@@ -851,11 +827,6 @@ namespace BackEnd.Migrations
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
-
-                    b.Property<string>("AgentId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<int>("AgreedCommission")
                         .HasColumnType("integer");
@@ -909,6 +880,9 @@ namespace BackEnd.Migrations
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)");
 
+                    b.Property<double>("EffectiveCommission")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("Elevators")
                         .HasColumnType("integer");
 
@@ -938,6 +912,9 @@ namespace BackEnd.Migrations
                     b.Property<bool>("Highlighted")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("IdealistaPropertyId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("InHome")
                         .HasColumnType("boolean");
 
@@ -952,6 +929,10 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("MoreDetails")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("MoreFeatures")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
@@ -1016,9 +997,13 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("VideoUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<int>("WarehouseRooms")
                         .HasColumnType("integer");
@@ -1042,7 +1027,7 @@ namespace BackEnd.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("IX_RealEstateProperty_Status");
 
-                    b.HasIndex("AgentId", "CreationDate")
+                    b.HasIndex("UserId", "CreationDate")
                         .HasDatabaseName("IX_RealEstateProperty_AgentId_CreationDate");
 
                     b.HasIndex("City", "Category", "Status")
@@ -1058,11 +1043,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<int?>("CalendarId")
                         .HasColumnType("integer");
@@ -1081,11 +1061,16 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("RealEstatePropertyId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("RealEstatePropertyNotes");
                 });
@@ -1140,10 +1125,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AgencyId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<bool>("Archived")
                         .HasColumnType("boolean");
@@ -1224,9 +1205,11 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("Id");
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
 
-                    b.HasIndex("AgencyId");
+                    b.HasKey("Id");
 
                     b.HasIndex("Archived")
                         .HasDatabaseName("IX_Request_Archived");
@@ -1235,6 +1218,8 @@ namespace BackEnd.Migrations
                         .HasDatabaseName("IX_Request_Closed");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("Province", "City")
                         .HasDatabaseName("IX_Request_Province_City");
@@ -1249,11 +1234,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApplicationUserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<int?>("CalendarId")
                         .HasColumnType("integer");
@@ -1272,11 +1252,16 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationUserId");
-
                     b.HasIndex("RequestId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("RequestNotes");
                 });
@@ -1335,6 +1320,10 @@ namespace BackEnd.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("FeatureName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1379,12 +1368,6 @@ namespace BackEnd.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<int?>("MaxProperties")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MaxUsers")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1600,21 +1583,15 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.ApplicationUser", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agency")
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "Admin")
                         .WithMany()
-                        .HasForeignKey("AgencyId");
+                        .HasForeignKey("AdminId");
 
-                    b.Navigation("Agency");
+                    b.Navigation("Admin");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.Calendar", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
-                        .WithMany()
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("BackEnd.Entities.Customer", "Customer")
                         .WithMany()
                         .HasForeignKey("CustomerId");
@@ -1627,62 +1604,72 @@ namespace BackEnd.Migrations
                         .WithMany()
                         .HasForeignKey("RequestId");
 
-                    b.Navigation("ApplicationUser");
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Customer");
 
                     b.Navigation("RealEstateProperty");
 
                     b.Navigation("Request");
-                });
 
-            modelBuilder.Entity("BackEnd.Entities.City", b =>
-                {
-                    b.HasOne("BackEnd.Entities.Province", "Province")
-                        .WithMany("Cities")
-                        .HasForeignKey("ProvinceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Province");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.Customer", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agency")
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany()
-                        .HasForeignKey("AgencyId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
-                    b.Navigation("Agency");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.CustomerNotes", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
-                        .WithMany()
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("BackEnd.Entities.Customer", null)
                         .WithMany("CustomerNotes")
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
-                });
-
-            modelBuilder.Entity("BackEnd.Entities.Location", b =>
-                {
-                    b.HasOne("BackEnd.Entities.City", "City")
-                        .WithMany("Locations")
-                        .HasForeignKey("CityId")
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("City");
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BackEnd.Entities.Documentation", b =>
+                {
+                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AgencyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("FK_Documentation_Agency_AgencyId");
+
+                    b.HasOne("BackEnd.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("FK_Documentation_User_UserId");
+                });
+
+            modelBuilder.Entity("BackEnd.Entities.ExportHistory", b =>
+                {
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.Payment", b =>
@@ -1695,7 +1682,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Payments")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Subscription");
@@ -1705,40 +1692,40 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.RealEstateProperty", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agent")
-                        .WithMany("RealEstateProperties")
-                        .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("BackEnd.Entities.Customer", "Customer")
                         .WithMany("RealEstateProperties")
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Agent");
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany("RealEstateProperties")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Customer");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.RealEstatePropertyNotes", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
-                        .WithMany()
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("BackEnd.Entities.RealEstateProperty", "RealEstateProperty")
                         .WithMany("RealEstatePropertyNotes")
                         .HasForeignKey("RealEstatePropertyId")
-                        .OnDelete(DeleteBehavior.NoAction)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("RealEstateProperty");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.RealEstatePropertyPhoto", b =>
@@ -1754,37 +1741,37 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.Request", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "Agency")
-                        .WithMany()
-                        .HasForeignKey("AgencyId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("BackEnd.Entities.Customer", "Customer")
                         .WithMany()
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Agency");
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Customer");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.RequestNotes", b =>
                 {
-                    b.HasOne("BackEnd.Entities.ApplicationUser", "ApplicationUser")
-                        .WithMany()
-                        .HasForeignKey("ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("BackEnd.Entities.Request", null)
                         .WithMany("RequestNotes")
                         .HasForeignKey("RequestId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ApplicationUser");
+                    b.HasOne("BackEnd.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.SubscriptionFeature", b =>
@@ -1813,7 +1800,7 @@ namespace BackEnd.Migrations
                     b.HasOne("BackEnd.Entities.ApplicationUser", "User")
                         .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("LastPayment");
@@ -1883,21 +1870,11 @@ namespace BackEnd.Migrations
                     b.Navigation("Subscriptions");
                 });
 
-            modelBuilder.Entity("BackEnd.Entities.City", b =>
-                {
-                    b.Navigation("Locations");
-                });
-
             modelBuilder.Entity("BackEnd.Entities.Customer", b =>
                 {
                     b.Navigation("CustomerNotes");
 
                     b.Navigation("RealEstateProperties");
-                });
-
-            modelBuilder.Entity("BackEnd.Entities.Province", b =>
-                {
-                    b.Navigation("Cities");
                 });
 
             modelBuilder.Entity("BackEnd.Entities.RealEstateProperty", b =>

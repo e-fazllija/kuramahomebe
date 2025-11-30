@@ -21,5 +21,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? FirstPhotoUrl { get; set; }
         public string? AgencyId { get; set; }
         public string? AgentId { get; set; }
+        public double EffectiveCommission { get; set; }
     }
 } 

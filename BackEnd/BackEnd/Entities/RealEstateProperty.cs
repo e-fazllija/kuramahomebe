@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BackEnd.Entities
 {
@@ -80,6 +81,7 @@ namespace BackEnd.Entities
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
         public int CommissionReversal { get; set; }
+        public double EffectiveCommission { get; set; }
         [MaxLength(100, ErrorMessage = "Il tipo di incarico non può superare i 100 caratteri")]
         public string? TypeOfAssignment { get; set; }
         public DateTime AssignmentEnd { get; set; }
@@ -90,5 +92,6 @@ namespace BackEnd.Entities
         public string UserId { get; set; } = string.Empty;
         public ApplicationUser User { get; set; }
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
+        public int? IdealistaPropertyId { get; set; }
     }
 }

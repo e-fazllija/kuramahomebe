@@ -44,6 +44,14 @@ namespace BackEnd.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("ClientId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ClientSecret")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -133,6 +141,9 @@ namespace BackEnd.Migrations
 
                     b.Property<long>("StorageUsedBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<bool?>("SyncToIdealista")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
@@ -290,7 +301,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
@@ -331,10 +341,6 @@ namespace BackEnd.Migrations
                         .HasColumnType("character varying(450)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Customer_Email");
 
                     b.HasIndex("UserId", "CreationDate")
                         .HasDatabaseName("IX_Customer_UserId_CreationDate");
@@ -871,6 +877,9 @@ namespace BackEnd.Migrations
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)");
 
+                    b.Property<double>("EffectiveCommission")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("Elevators")
                         .HasColumnType("integer");
 
@@ -899,6 +908,9 @@ namespace BackEnd.Migrations
 
                     b.Property<bool>("Highlighted")
                         .HasColumnType("boolean");
+
+                    b.Property<int?>("IdealistaPropertyId")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("InHome")
                         .HasColumnType("boolean");

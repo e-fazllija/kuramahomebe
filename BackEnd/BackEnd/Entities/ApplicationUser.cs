@@ -48,6 +48,14 @@ namespace BackEnd.Entities
         [MaxLength(20, ErrorMessage = "Il colore non può superare i 20 caratteri")]
         public string Color { get; set; } = "#ffffff";
 
+        [MaxLength(200, ErrorMessage = "Il Client ID non può superare i 200 caratteri")]
+        public string? ClientId { get; set; }
+
+        [MaxLength(500, ErrorMessage = "Il Client Secret non può superare i 500 caratteri")]
+        public string? ClientSecret { get; set; }
+
+        public bool? SyncToIdealista { get; set; }
+
         /// <summary>
         /// Storage utilizzato in bytes per la gerarchia dell'Admin (somma di tutti i file)
         /// Aggiornato automaticamente quando si caricano/eliminano file
