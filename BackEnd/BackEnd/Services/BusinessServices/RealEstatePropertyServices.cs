@@ -1072,6 +1072,235 @@ namespace BackEnd.Services.BusinessServices
             }
         }
 
+        public async Task<ListViewModel<RealEstatePropertyPublicListItemModel>> SearchPublicAsync(RealEstatePropertyPublicSearchRequest filters)
+        {
+            try
+            {
+                var request = filters ?? new RealEstatePropertyPublicSearchRequest();
+                var page = request.Page <= 0 ? 1 : request.Page;
+                var pageSize = request.PageSize <= 0 ? 12 : request.PageSize;
+                pageSize = Math.Min(pageSize, 24);
+
+                var query = _unitOfWork.dbContext.RealEstateProperties
+                    .AsNoTracking()
+                    .Where(x => !x.Archived && !x.Sold);
+
+                if (!string.IsNullOrWhiteSpace(request.Province))
+                {
+                    var normalizedProvince = request.Province.Trim().ToLower();
+                    query = query.Where(x =>
+                        x.State != null &&
+                        x.State.ToLower() == normalizedProvince);
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.City))
+                {
+                    var normalizedCity = request.City.Trim().ToLower();
+                    query = query.Where(x =>
+                        x.City != null &&
+                        x.City.ToLower() == normalizedCity);
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Category))
+                {
+                    var normalizedCategory = request.Category.Trim().ToLower();
+                    query = query.Where(x =>
+                        x.Category != null &&
+                        x.Category.ToLower() == normalizedCategory);
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Typology))
+                {
+                    var normalizedTypology = request.Typology.Trim().ToLower();
+                    query = query.Where(x =>
+                        x.Typology != null &&
+                        x.Typology.ToLower().Contains(normalizedTypology));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Status))
+                {
+                    var normalizedStatus = request.Status.Trim().ToLower();
+                    query = query.Where(x =>
+                        x.Status != null &&
+                        x.Status.ToLower() == normalizedStatus);
+                }
+
+                if (request.PriceMin.HasValue && request.PriceMin.Value > 0)
+                {
+                    query = query.Where(x => x.Price >= request.PriceMin.Value);
+                }
+
+                if (request.PriceMax.HasValue && request.PriceMax.Value > 0)
+                {
+                    query = query.Where(x => x.Price <= request.PriceMax.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Keyword))
+                {
+                    var keyword = request.Keyword.Trim().ToLower();
+                    query = query.Where(x =>
+                        (x.Title != null && x.Title.ToLower().Contains(keyword)) ||
+                        (x.Description != null && x.Description.ToLower().Contains(keyword)) ||
+                        (x.AddressLine != null && x.AddressLine.ToLower().Contains(keyword)) ||
+                        (x.City != null && x.City.ToLower().Contains(keyword)));
+                }
+
+                var orderedQuery = query
+                    .OrderByDescending(x => x.Highlighted)
+                    .ThenByDescending(x => x.CreationDate);
+
+                var total = await orderedQuery.CountAsync();
+
+                var data = await orderedQuery
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(x => new RealEstatePropertyPublicListItemModel
+                    {
+                        Id = x.Id,
+                        Title = x.Title,
+                        Category = x.Category,
+                        Typology = x.Typology,
+                        City = x.City,
+                        State = x.State,
+                        Price = x.Price,
+                        CommercialSurfaceate = x.CommercialSurfaceate,
+                        Bedrooms = x.Bedrooms,
+                        Bathrooms = x.Bathrooms,
+                        Highlighted = x.Highlighted,
+                        Auction = x.Auction,
+                        Status = x.Status,
+                        MainPhotoUrl = x.Photos
+                            .OrderBy(p => p.Position)
+                            .Select(p => p.Url)
+                            .FirstOrDefault()
+                    })
+                    .ToListAsync();
+
+                return new ListViewModel<RealEstatePropertyPublicListItemModel>
+                {
+                    Data = data,
+                    Total = total
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore durante la ricerca pubblica degli immobili");
+                throw;
+            }
+        }
+
+        public async Task<RealEstatePropertyPublicDetailModel?> GetPublicDetailByIdAsync(int id)
+        {
+            try
+            {
+                var property = await _unitOfWork.dbContext.RealEstateProperties
+                    .AsNoTracking()
+                    .Include(x => x.Photos.OrderBy(p => p.Position))
+                    .Include(x => x.User)
+                        .ThenInclude(u => u.Admin)
+                    .Where(x => !x.Archived && !x.Sold && x.Id == id)
+                    .FirstOrDefaultAsync();
+
+                if (property == null)
+                {
+                    return null;
+                }
+
+                var detail = new RealEstatePropertyPublicDetailModel
+                {
+                    Id = property.Id,
+                    Title = property.Title,
+                    Category = property.Category,
+                    Typology = property.Typology,
+                    Status = property.Status,
+                    AddressLine = property.AddressLine,
+                    City = property.City,
+                    Location = property.Location,
+                    State = property.State,
+                    PostCode = property.PostCode,
+                    CommercialSurfaceate = property.CommercialSurfaceate,
+                    Floor = property.Floor,
+                    TotalBuildingfloors = property.TotalBuildingfloors,
+                    Elevators = property.Elevators,
+                    MoreDetails = property.MoreDetails,
+                    MoreFeatures = property.MoreFeatures,
+                    Bedrooms = property.Bedrooms,
+                    WarehouseRooms = property.WarehouseRooms,
+                    Kitchens = property.Kitchens,
+                    Bathrooms = property.Bathrooms,
+                    Furniture = property.Furniture,
+                    OtherFeatures = property.OtherFeatures,
+                    ParkingSpaces = property.ParkingSpaces,
+                    Heating = property.Heating,
+                    Exposure = property.Exposure,
+                    EnergyClass = property.EnergyClass,
+                    TypeOfProperty = property.TypeOfProperty,
+                    StateOfTheProperty = property.StateOfTheProperty,
+                    YearOfConstruction = property.YearOfConstruction,
+                    Price = property.Price,
+                    PriceReduced = property.PriceReduced,
+                    MQGarden = property.MQGarden,
+                    CondominiumExpenses = property.CondominiumExpenses,
+                    Availability = property.Availability,
+                    Description = property.Description,
+                    VideoUrl = property.VideoUrl,
+                    Highlighted = property.Highlighted,
+                    Auction = property.Auction,
+                    CreationDate = property.CreationDate,
+                    Photos = property.Photos.Select(p => new PropertyPhotoModel
+                    {
+                        Url = p.Url,
+                        Position = p.Position
+                    }).ToList()
+                };
+
+                // Agenzia: se l'utente ha un Admin, quello è l'agenzia
+                // Se l'utente stesso è un'agenzia (AdminId == null), allora l'utente è l'agenzia
+                if (property.User != null)
+                {
+                    var agency = property.User.Admin ?? (property.User.AdminId == null ? property.User : null);
+                    
+                    if (agency != null)
+                    {
+                        detail.Agency = new AgencyContactModel
+                        {
+                            Id = agency.Id,
+                            Name = $"{agency.FirstName} {agency.LastName}".Trim(),
+                            CompanyName = agency.CompanyName,
+                            Email = agency.Email,
+                            PhoneNumber = agency.PhoneNumber,
+                            MobilePhone = agency.MobilePhone,
+                            Address = agency.Address,
+                            City = agency.City,
+                            Province = agency.Province,
+                            ZipCode = agency.ZipCode
+                        };
+                    }
+
+                    // Agente: se l'utente ha un AdminId, allora l'utente è l'agente
+                    if (property.User.AdminId != null)
+                    {
+                        detail.Agent = new AgentContactModel
+                        {
+                            Id = property.User.Id,
+                            FirstName = property.User.FirstName,
+                            LastName = property.User.LastName,
+                            Email = property.User.Email,
+                            PhoneNumber = property.User.PhoneNumber,
+                            MobilePhone = property.User.MobilePhone
+                        };
+                    }
+                }
+
+                return detail;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore durante il recupero dei dettagli pubblici dell'immobile");
+                throw;
+            }
+        }
+
         public async Task<CalendarSearchModel> GetSearchItems(string userId, string? agencyId)
         {
             try

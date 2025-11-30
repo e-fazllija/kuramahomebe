@@ -20,5 +20,7 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task SetInHome(int realEstatePropertyId);
         Task<CalendarSearchModel> GetSearchItems(string userId, string? agencyId);
         Task<List<RealEstatePropertyListModel>> GetListForExportAsync(RealEstatePropertyExportModel filters, string userId);
+        Task<ListViewModel<RealEstatePropertyPublicListItemModel>> SearchPublicAsync(RealEstatePropertyPublicSearchRequest filters);
+        Task<RealEstatePropertyPublicDetailModel?> GetPublicDetailByIdAsync(int id);
     }
 }
