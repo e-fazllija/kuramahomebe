@@ -11,7 +11,6 @@ namespace BackEnd.Models.RequestModels
         public string CustomerPhone { get; set; } = string.Empty;
         public string Contract { get; set; } = string.Empty;
         public DateTime CreationDate { get; set; }
-        public string? Location { get; set; }
         public string City { get; set; } = string.Empty;
         public double PriceTo { get; set; }
         public double PriceFrom { get; set; }

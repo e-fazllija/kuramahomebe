@@ -251,7 +251,6 @@ namespace BackEnd.Controllers
             table.Columns.Add("Contratto");
             table.Columns.Add("Tipologia Immobile");
             table.Columns.Add("Città");
-            table.Columns.Add("Località");
             table.Columns.Add("Budget Min (€)");
             table.Columns.Add("Budget Max (€)");
             table.Columns.Add("Data Creazione");
@@ -267,7 +266,6 @@ namespace BackEnd.Controllers
                     item.Contract,
                     item.PropertyType,
                     item.City,
-                    item.Location,
                     item.PriceFrom.ToString("N0", culture),
                     item.PriceTo.ToString("N0", culture),
                     item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),

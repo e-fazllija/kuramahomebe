@@ -20,16 +20,22 @@ namespace BackEnd.Entities
         [Required(ErrorMessage = "La città è obbligatoria")]
         [MaxLength(100, ErrorMessage = "La città non può superare i 100 caratteri")]
         public string City { get; set; } = string.Empty;
-        [MaxLength(100, ErrorMessage = "La località non può superare i 100 caratteri")]
-        public string? Location { get; set; }
-        [MaxLength(50, ErrorMessage = "Il numero di stanze non può superare i 50 caratteri")]
-        public string? RoomsNumber { get; set; }
+        public int RoomsFrom { get; set; }
+        public int RoomsTo { get; set; }
+        public int Bathrooms { get; set; }
+        [MaxLength(20, ErrorMessage = "Il piano non può superare i 20 caratteri")]
+        public string? Floor { get; set; }
         public int MQFrom { get; set; }
         public int MQTo { get; set; }
         [MaxLength(100, ErrorMessage = "Lo stato della proprietà non può superare i 100 caratteri")]
         public string? PropertyState { get; set; }
         [MaxLength(100, ErrorMessage = "Il riscaldamento non può superare i 100 caratteri")]
         public string? Heating { get; set; }
+        [MaxLength(100, ErrorMessage = "L'arredamento non può superare i 100 caratteri")]
+        public string? Furniture { get; set; }
+        [MaxLength(10, ErrorMessage = "La classe energetica non può superare i 10 caratteri")]
+        public string? EnergyClass { get; set; }
+        public bool Auction { get; set; }
         public int ParkingSpaces { get; set; }
         [Required(ErrorMessage = "Il prezzo massimo è obbligatorio")]
         public double PriceTo { get; set; }
