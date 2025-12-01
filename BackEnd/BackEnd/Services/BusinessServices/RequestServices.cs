@@ -248,27 +248,24 @@ namespace BackEnd.Services.BusinessServices
 
                     if (!string.IsNullOrEmpty(item.PropertyType))
                     {
-                        realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(item.PropertyType));
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(item.PropertyType));
                     }
 
-                    if (!string.IsNullOrEmpty(item.RoomsNumber))
-                    {
-                        realEstatePropertiesQuery.Where(x => x.WarehouseRooms == Convert.ToInt32(item.RoomsNumber));
-                    }
+                    // RoomsNumber rimosso dal filtro - viene calcolato solo nella percentuale di match lato frontend
 
                     if (item.MQFrom > 0)
                     {
-                        realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > item.MQFrom);
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > item.MQFrom);
                     }
 
                     if (item.MQTo > 0)
                     {
-                        realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < item.MQTo);
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < item.MQTo);
                     }
 
                     if (item.ParkingSpaces > 0)
                     {
-                        realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= item.ParkingSpaces);
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= item.ParkingSpaces);
                     }
 
                     List<RealEstateProperty> realEstateProperty = await realEstatePropertiesQuery.ToListAsync();
@@ -516,27 +513,24 @@ namespace BackEnd.Services.BusinessServices
 
                 if (!string.IsNullOrEmpty(request.PropertyType))
                 {
-                    realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(request.PropertyType));
+                    realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(request.PropertyType));
                 }
 
-                if (!string.IsNullOrEmpty(request.RoomsNumber))
-                {
-                    realEstatePropertiesQuery.Where(x => x.WarehouseRooms == Convert.ToInt32(request.RoomsNumber));
-                }
+                // RoomsNumber rimosso dal filtro - viene calcolato solo nella percentuale di match lato frontend
 
                 if (request.MQFrom > 0)
                 {
-                    realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > request.MQFrom);
+                    realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > request.MQFrom);
                 }
 
                 if (request.MQTo > 0)
                 {
-                    realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < request.MQTo);
+                    realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < request.MQTo);
                 }
 
                 if (request.ParkingSpaces > 0)
                 {
-                    realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= request.ParkingSpaces);
+                    realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= request.ParkingSpaces);
                 }
 
                 List<RealEstateProperty> realEstateProperty = await realEstatePropertiesQuery.ToListAsync();
