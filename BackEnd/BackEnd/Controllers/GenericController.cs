@@ -75,23 +75,6 @@ namespace BackEnd.Controllers
             }
         }
 
-        [Authorize(Policy = "ActiveSubscription")]
-        [HttpGet]
-        [Route(nameof(GetDashboardAggregatedData))]
-        public async Task<IActionResult> GetDashboardAggregatedData(string? agencyId, int? year)
-        {
-            try
-            {
-                // Aggrega tutti i dati necessari per la dashboard in una singola chiamata
-                DashboardAggregatedDataModel result = await _genericService.GetDashboardAggregatedData(agencyId, year);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Errore in GetDashboardAggregatedData");
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
-            }
-        }
 
         [HttpPost]
         [Route(nameof(SendEvaluationRequest))]

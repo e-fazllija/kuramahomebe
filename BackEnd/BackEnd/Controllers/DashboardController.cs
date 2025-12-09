@@ -1,0 +1,365 @@
+using BackEnd.Interfaces.IBusinessServices;
+using BackEnd.Models.ResponseModel;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using BackEnd.Entities;
+using System.Security.Claims;
+
+namespace BackEnd.Controllers
+{
+    [Authorize(Policy = "ActiveSubscription")]
+    [ApiController]
+    [Route("/api/[controller]/")]
+    public class DashboardController : ControllerBase
+    {
+        private readonly IDashboardService _dashboardService;
+        private readonly ILogger<DashboardController> _logger;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IUserSubscriptionServices _userSubscriptionServices;
+
+        public DashboardController(
+            IDashboardService dashboardService,
+            ILogger<DashboardController> logger,
+            UserManager<ApplicationUser> userManager,
+            IUserSubscriptionServices userSubscriptionServices)
+        {
+            _dashboardService = dashboardService;
+            _logger = logger;
+            _userManager = userManager;
+            _userSubscriptionServices = userSubscriptionServices;
+        }
+
+        /// <summary>
+        /// Recupera i dati necessari per il widget mappa (Widget13)
+        /// </summary>
+        /// <param name="agencyId">ID dell'agenzia o agente per filtrare (formato: "agency_xxx" o "agent_xxx" o "all")</param>
+        /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
+        /// <returns>Dati della mappa con totali KPI, agenzie e agenti</returns>
+        [HttpGet]
+        [Route(nameof(GetMapData))]
+        public async Task<IActionResult> GetMapData(string? agencyId = null, int? year = null)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                var result = await _dashboardService.GetMapData(userId, agencyId, year);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore in GetMapData");
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati necessari per il widget grafici immobili (Widget3)
+        /// </summary>
+        /// <param name="agencyId">ID dell'agenzia o agente per filtrare (formato: "agency_xxx" o "agent_xxx" o "all")</param>
+        /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
+        /// <returns>Dati per i grafici con immobili inseriti/venduti e provvigioni</returns>
+        [HttpGet]
+        [Route(nameof(GetWidget3Data))]
+        public async Task<IActionResult> GetWidget3Data(string? agencyId = null, int? year = null)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                var result = await _dashboardService.GetWidget3Data(userId, agencyId, year);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore in GetWidget3Data");
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati delle Top Agenzie per Widget7
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
+        /// <param name="sortBy">Campo per ordinare (properties, customers, requests, soldProperties, appointments, commissions)</param>
+        /// <param name="sortOrder">Ordine di ordinamento (asc o desc, default desc)</param>
+        /// <returns>Dati aggregati delle agenzie con statistiche (Top 5)</returns>
+        [HttpGet]
+        [Route(nameof(GetTopAgenciesData))]
+        public async Task<IActionResult> GetTopAgenciesData(int? year = null, string? sortBy = null, string? sortOrder = "desc")
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetTopAgenciesData(userId, year, sortBy, sortOrder);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetTopAgenciesData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati dei Top Agenti per Widget7
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
+        /// <param name="sortBy">Campo per ordinare (soldProperties, loadedProperties, requests, appointments, commissions)</param>
+        /// <param name="sortOrder">Ordine di ordinamento (asc o desc, default desc)</param>
+        /// <returns>Dati aggregati degli agenti con statistiche (Top 5)</returns>
+        [HttpGet]
+        [Route(nameof(GetTopAgentsData))]
+        public async Task<IActionResult> GetTopAgentsData(int? year = null, string? sortBy = null, string? sortOrder = "desc")
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetTopAgentsData(userId, year, sortBy, sortOrder);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetTopAgentsData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati delle Top Zone per Widget7
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <returns>Dati aggregati delle zone (Top 5 per immobili e richieste)</returns>
+        [HttpGet]
+        [Route(nameof(GetTopZonesData))]
+        public async Task<IActionResult> GetTopZonesData()
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetTopZonesData(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetTopZonesData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati delle Top Tipologie per Widget7
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <returns>Dati aggregati delle tipologie (Top 5 per immobili e richieste)</returns>
+        [HttpGet]
+        [Route(nameof(GetTopTypologiesData))]
+        public async Task<IActionResult> GetTopTypologiesData()
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetTopTypologiesData(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetTopTypologiesData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati Top Guadagni (portafoglio e vendite anno) per Widget7
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <param name="year">Anno per filtrare le vendite</param>
+        [HttpGet]
+        [Route(nameof(GetTopEarningsData))]
+        public async Task<IActionResult> GetTopEarningsData(int? year = null)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetTopEarningsData(userId, year);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetTopEarningsData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Recupera i dati Analytics per Widget11 (richieste, immobili, clienti, appuntamenti)
+        /// </summary>
+        /// <param name="year">Anno per filtrare i dati (obbligatorio)</param>
+        /// <param name="agencyId">ID dell'agenzia o agente per filtrare (opzionale, formato: "agency_xxx" o "agent_xxx")</param>
+        /// <returns>Dati analytics mensili per tutte le categorie</returns>
+        [HttpGet]
+        [Route(nameof(GetAnalyticsData))]
+        public async Task<IActionResult> GetAnalyticsData(int year, string? agencyId = null)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetAnalyticsData(userId, year, agencyId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetAnalyticsData: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Verifica se l'utente è Admin con piano Premium
+        /// </summary>
+        private async Task<bool> IsAdminPremiumAsync(string userId)
+        {
+            try
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return false;
+
+                var roles = await _userManager.GetRolesAsync(user);
+                if (!roles.Contains("Admin"))
+                    return false;
+
+                return await _userSubscriptionServices.HasPremiumPlanAsync(userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in IsAdminPremiumAsync per userId {userId}: {ex.Message}");
+                return false;
+            }
+        }
+    }
+}
+
+
