@@ -337,6 +337,47 @@ namespace BackEnd.Controllers
         }
 
         /// <summary>
+        /// Recupera gli immobili con incarico in scadenza (meno di 30 giorni)
+        /// Solo Admin con piano Premium può accedere
+        /// </summary>
+        /// <param name="daysThreshold">Soglia in giorni per considerare un incarico in scadenza (default: 30)</param>
+        /// <returns>Lista di immobili con incarico in scadenza, ordinati per scadenza più imminente</returns>
+        [HttpGet]
+        [Route(nameof(GetExpiringAssignments))]
+        public async Task<IActionResult> GetExpiringAssignments(int? daysThreshold = 30)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin con piano Premium
+                if (!await IsAdminPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetExpiringAssignments(userId, daysThreshold);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetExpiringAssignments: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Verifica se l'utente è Admin con piano Premium
         /// </summary>
         private async Task<bool> IsAdminPremiumAsync(string userId)

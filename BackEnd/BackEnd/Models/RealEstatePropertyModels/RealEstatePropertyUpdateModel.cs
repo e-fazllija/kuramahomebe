@@ -55,6 +55,8 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int YearOfConstruction { get; set; }
         [Required]
         public double Price { get; set; }
+        [Range(0, double.MaxValue, ErrorMessage = "Il prezzo ribassato non può essere negativo")]
+        [CustomValidation(typeof(RealEstatePropertyUpdateModel), "ValidatePriceReduced")]
         public double PriceReduced { get; set; }
         public int MQGarden { get; set; }
         public double CondominiumExpenses { get; set; }
@@ -74,5 +76,17 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int CommissionReversal { get; set; }
         public double EffectiveCommission { get; set; }
 
+        /// <summary>
+        /// Valida che PriceReduced non sia maggiore di Price
+        /// </summary>
+        public static ValidationResult? ValidatePriceReduced(double priceReduced, ValidationContext context)
+        {
+            var model = (RealEstatePropertyUpdateModel)context.ObjectInstance;
+            if (priceReduced > 0 && priceReduced > model.Price)
+            {
+                return new ValidationResult("Il prezzo ribassato non può essere maggiore del prezzo originale");
+            }
+            return ValidationResult.Success;
+        }
     }
 }

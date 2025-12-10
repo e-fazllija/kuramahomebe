@@ -14,6 +14,7 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<TopTypologiesDataModel> GetTopTypologiesData(string? userId);
         Task<TopEarningsDataModel> GetTopEarningsData(string? userId, int? year);
         Task<AnalyticsDataModel> GetAnalyticsData(string? userId, int year, string? agencyId = null);
+        Task<ExpiringAssignmentsDataModel> GetExpiringAssignments(string? userId, int? daysThreshold = 30);
     }
 }
 

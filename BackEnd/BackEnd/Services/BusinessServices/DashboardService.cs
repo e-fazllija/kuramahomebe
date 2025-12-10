@@ -747,16 +747,22 @@ namespace BackEnd.Services.BusinessServices
                     
                     var agencyAgentIds = agencyAgents.Select(a => a.Id).ToList();
 
+                    var nowDateOnly = DateTime.UtcNow.Date;
+                    
                     // Recupera immobili dell'agenzia (include anche immobili dell'admin se è l'agenzia admin)
+                    // Escludi immobili scaduti (solo incarichi validi)
                     var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
                         .Include(p => p.User)
                         .Where(p => !string.IsNullOrEmpty(p.UserId) && 
                                    circleUserIds.Contains(p.UserId) && 
-                                   ((p.User != null && !string.IsNullOrEmpty(p.User.AdminId) && p.User.AdminId == agencyId) || p.UserId == agencyId));
+                                   ((p.User != null && !string.IsNullOrEmpty(p.User.AdminId) && p.User.AdminId == agencyId) || p.UserId == agencyId) &&
+                                   (p.AssignmentEnd == default(DateTime) || 
+                                    p.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                    p.AssignmentEnd.Date >= nowDateOnly));
                     
                     var allAgencyProperties = await propertiesQuery.ToListAsync();
 
-                    // Properties: totale immobili dell'agenzia creati nell'anno
+                    // Properties: totale immobili dell'agenzia creati nell'anno (già filtrati per incarico valido)
                     var properties = allAgencyProperties
                         .Where(p => p.CreationDate.Year == currentYear)
                         .Count();
@@ -767,7 +773,7 @@ namespace BackEnd.Services.BusinessServices
                         .Where(c => c.CreationDate.Year == currentYear)
                         .CountAsync();
 
-                    // SoldProperties: immobili venduti nell'anno
+                    // SoldProperties: immobili venduti nell'anno (già filtrati per incarico valido)
                     var soldProperties = allAgencyProperties
                         .Where(p => p.Sold)
                         .Where(p =>
@@ -794,6 +800,7 @@ namespace BackEnd.Services.BusinessServices
                         .CountAsync();
 
                     // Commissions: guadagni totali (somma EffectiveCommission degli immobili venduti)
+                    // Solo immobili con incarico valido (già filtrati nella query principale)
                     var commissions = allAgencyProperties
                         .Where(p => p.Sold)
                         .Where(p =>
@@ -968,16 +975,22 @@ namespace BackEnd.Services.BusinessServices
                 {
                     var agentId = agent.Id;
                     
+                    var nowDateOnly = DateTime.UtcNow.Date;
+                    
                     // Recupera immobili dell'agente
+                    // Escludi immobili scaduti (solo incarichi validi)
                     var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
                         .Include(p => p.User)
                         .Where(p => !string.IsNullOrEmpty(p.UserId) && 
                                    circleUserIds.Contains(p.UserId) && 
-                                   p.UserId == agentId);
+                                   p.UserId == agentId &&
+                                   (p.AssignmentEnd == default(DateTime) || 
+                                    p.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                    p.AssignmentEnd.Date >= nowDateOnly));
                     
                     var allAgentProperties = await propertiesQuery.ToListAsync();
 
-                    // SoldProperties: immobili venduti nell'anno
+                    // SoldProperties: immobili venduti nell'anno (già filtrati per incarico valido)
                     var soldProperties = allAgentProperties
                         .Where(p => p.Sold)
                         .Where(p =>
@@ -989,7 +1002,7 @@ namespace BackEnd.Services.BusinessServices
                         })
                         .Count();
 
-                    // LoadedProperties: immobili caricati nell'anno
+                    // LoadedProperties: immobili caricati nell'anno (già filtrati per incarico valido)
                     var loadedProperties = allAgentProperties
                         .Where(p => p.CreationDate.Year == currentYear)
                         .Count();
@@ -1008,6 +1021,7 @@ namespace BackEnd.Services.BusinessServices
                         .CountAsync();
 
                     // Commissions: guadagni totali (somma EffectiveCommission degli immobili venduti)
+                    // Solo immobili con incarico valido (già filtrati nella query principale)
                     var commissions = allAgentProperties
                         .Where(p => p.Sold)
                         .Where(p =>
@@ -1418,7 +1432,7 @@ namespace BackEnd.Services.BusinessServices
                         AddressLine = p.AddressLine ?? string.Empty,
                         City = p.City ?? string.Empty,
                         UserFirstName = p.User?.FirstName ?? string.Empty,
-                        Price = p.Price,
+                        Price = p.GetPriceToUse(),
                         EffectiveCommission = p.EffectiveCommission
                     })
                     .OrderByDescending(x => x.EffectiveCommission)
@@ -1429,11 +1443,16 @@ namespace BackEnd.Services.BusinessServices
                 result.TotalPortfolioCommission = (decimal)portfolioProps.Sum(p => p.EffectiveCommission);
 
                 // ===== Vendite anno corrente (Sold=true, anno = filtro) =====
+                // Escludi immobili scaduti (solo incarichi validi al momento della vendita)
+                var nowDateOnly = DateTime.UtcNow.Date;
                 var salesPropsQuery = _unitOfWork.dbContext.RealEstateProperties
                     .Include(p => p.User)
                     .Where(p => !string.IsNullOrEmpty(p.UserId) &&
                                 circleUserIds.Contains(p.UserId) &&
-                                p.Sold);
+                                p.Sold &&
+                                (p.AssignmentEnd == default(DateTime) || 
+                                 p.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                 p.AssignmentEnd.Date >= nowDateOnly));
 
                 var salesProps = await salesPropsQuery.ToListAsync();
 
@@ -1453,7 +1472,7 @@ namespace BackEnd.Services.BusinessServices
                         AddressLine = p.AddressLine ?? string.Empty,
                         City = p.City ?? string.Empty,
                         UserFirstName = p.User?.FirstName ?? string.Empty,
-                        Price = p.Price,
+                        Price = p.GetPriceToUse(),
                         EffectiveCommission = p.EffectiveCommission
                     })
                     .OrderByDescending(x => x.EffectiveCommission)
@@ -1586,8 +1605,15 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 // ========== IMMOBILI ==========
+                var nowDateOnly = DateTime.UtcNow.Date;
+                
                 var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
-                    .Where(p => !string.IsNullOrEmpty(p.UserId) && circleUserIds.Contains(p.UserId));
+                    .Where(p => !string.IsNullOrEmpty(p.UserId) && 
+                               circleUserIds.Contains(p.UserId) &&
+                               // Escludi immobili scaduti (solo incarichi validi)
+                               (p.AssignmentEnd == default(DateTime) || 
+                                p.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                p.AssignmentEnd.Date >= nowDateOnly));
 
                 // Applica filtro agenzia se presente
                 if (!string.IsNullOrEmpty(filterAgencyId))
@@ -1685,10 +1711,10 @@ namespace BackEnd.Services.BusinessServices
                     .GroupBy(a => FormatMonthKey(a.CreationDate.Month, year))
                     .ToDictionary(g => g.Key, g => g.Count());
 
-                // Appuntamenti confermati (per UpdateDate quando Confirmed == true)
+                // Appuntamenti confermati (per EventEndDate quando Confirmed == true)
                 var appointmentsConfirmed = allAppointments
-                    .Where(a => a.Confirmed && a.UpdateDate.Year == year)
-                    .GroupBy(a => FormatMonthKey(a.UpdateDate.Month, year))
+                    .Where(a => a.Confirmed && a.EventEndDate.Year == year)
+                    .GroupBy(a => FormatMonthKey(a.EventEndDate.Month, year))
                     .ToDictionary(g => g.Key, g => g.Count());
 
                 result.Appointments.MonthlyData = new Dictionary<string, int>(allMonths);
@@ -1724,6 +1750,94 @@ namespace BackEnd.Services.BusinessServices
                     _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
                 }
                 throw new Exception($"Si è verificato un errore nel recupero dei dati Analytics: {ex.Message}");
+            }
+        }
+
+        public async Task<ExpiringAssignmentsDataModel> GetExpiringAssignments(string? userId, int? daysThreshold = 30)
+        {
+            try
+            {
+                var result = new ExpiringAssignmentsDataModel();
+                var now = DateTime.UtcNow;
+                var nowDateOnly = now.Date; // Solo la data, senza l'ora (inizio del giorno)
+                var threshold = daysThreshold ?? 30;
+                var thresholdDate = nowDateOnly.AddDays(threshold);
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogWarning("UserId non specificato per GetExpiringAssignments");
+                    return result;
+                }
+
+                // Ottieni tutti gli userId nella cerchia dell'utente corrente
+                var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                
+                if (circleUserIds == null || !circleUserIds.Any())
+                {
+                    _logger.LogWarning($"Nessun userId trovato nella cerchia per l'utente {userId}");
+                    return result;
+                }
+
+                // Query per immobili non venduti con incarico in scadenza (entro 30 giorni, non ancora scaduti)
+                var expiringProperties = await _unitOfWork.dbContext.RealEstateProperties
+                    .Where(p => !string.IsNullOrEmpty(p.UserId) &&
+                                circleUserIds.Contains(p.UserId) &&
+                                !p.Sold && // Solo immobili non venduti
+                                p.AssignmentEnd != default(DateTime) && // Deve avere una scadenza
+                                p.AssignmentEnd != new DateTime(1, 1, 1) &&
+                                p.AssignmentEnd.Date > nowDateOnly && // Non ancora scaduto (confronta solo la data)
+                                p.AssignmentEnd.Date <= thresholdDate) // Scade entro la soglia
+                    .OrderBy(p => p.AssignmentEnd) // Ordina per scadenza più imminente
+                    .Select(p => new ExpiringAssignmentItemModel
+                    {
+                        Id = p.Id,
+                        Title = p.Title ?? string.Empty,
+                        AddressLine = p.AddressLine ?? string.Empty,
+                        City = p.City ?? string.Empty,
+                        AssignmentEnd = p.AssignmentEnd,
+                        DaysUntilExpiry = (int)Math.Ceiling((p.AssignmentEnd.Date - nowDateOnly).TotalDays)
+                    })
+                    .ToListAsync();
+
+                result.Properties = expiringProperties;
+                result.Total = expiringProperties.Count;
+
+                // Query per immobili non venduti con incarico scaduto (tutti gli scaduti)
+                // Considera scaduto se la data di scadenza è precedente a oggi (confronta solo la data)
+                var expiredProperties = await _unitOfWork.dbContext.RealEstateProperties
+                    .Where(p => !string.IsNullOrEmpty(p.UserId) &&
+                                circleUserIds.Contains(p.UserId) &&
+                                !p.Sold && // Solo immobili non venduti
+                                p.AssignmentEnd != default(DateTime) && // Deve avere una scadenza
+                                p.AssignmentEnd != new DateTime(1, 1, 1) &&
+                                p.AssignmentEnd.Date < nowDateOnly) // Già scaduto (confronta solo la data, escludendo oggi)
+                    .OrderByDescending(p => p.AssignmentEnd) // Ordina per scadenza più recente (più recenti prima)
+                    .Select(p => new ExpiringAssignmentItemModel
+                    {
+                        Id = p.Id,
+                        Title = p.Title ?? string.Empty,
+                        AddressLine = p.AddressLine ?? string.Empty,
+                        City = p.City ?? string.Empty,
+                        AssignmentEnd = p.AssignmentEnd,
+                        DaysUntilExpiry = (int)Math.Ceiling((p.AssignmentEnd.Date - nowDateOnly).TotalDays) // Negativo per scaduti
+                    })
+                    .ToListAsync();
+
+                result.ExpiredProperties = expiredProperties;
+                result.TotalExpired = expiredProperties.Count;
+
+                _logger.LogInformation($"Trovati {result.Total} immobili con incarico in scadenza entro {threshold} giorni e {result.TotalExpired} scaduti per l'utente {userId}");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero degli immobili in scadenza: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                throw new Exception($"Si è verificato un errore nel recupero degli immobili in scadenza: {ex.Message}");
             }
         }
     }

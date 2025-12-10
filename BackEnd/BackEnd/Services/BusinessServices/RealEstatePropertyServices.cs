@@ -11,6 +11,7 @@ using BackEnd.Models.CustomerModels;
 using Microsoft.AspNetCore.Identity;
 using BackEnd.Models.UserModel;
 using BackEnd.Models.CalendarModels;
+using BackEnd.Services;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -216,8 +217,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                var nowDateOnly = DateTime.UtcNow.Date;
+                
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
-                     .Include(x => x.Photos.OrderBy(x => x.Position)).Where(x => !x.Archived && x.User!.Admin!.EmailConfirmed)
+                     .Include(x => x.Photos.OrderBy(x => x.Position))
+                     .Where(x => !x.Archived && 
+                                 x.User!.Admin!.EmailConfirmed &&
+                                 // Escludi immobili scaduti (solo incarichi validi)
+                                 (x.AssignmentEnd == default(DateTime) || 
+                                  x.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                  x.AssignmentEnd.Date >= nowDateOnly))
                      //.Include(x => x.Agent)
                      .OrderByDescending(x => x.Id);
 
@@ -255,9 +264,11 @@ namespace BackEnd.Services.BusinessServices
                 if (code > 0)
                     query = query.Where(x => x.Id == code);
                 if (from > 0)
-                    query = query.Where(x => x.Price >= from);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= from) || (x.PriceReduced <= 0 && x.Price >= from));
                 if (to > 0)
-                    query = query.Where(x => x.Price <= to);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= to) || (x.PriceReduced <= 0 && x.Price <= to));
                 if (!string.IsNullOrEmpty(agencyId))
                     query = query.Where(x => x.User.AdminId == agencyId);
                 if (toName != null)
@@ -327,10 +338,12 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 if (priceFrom > 0)
-                    query = query.Where(x => x.Price >= priceFrom);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= priceFrom) || (x.PriceReduced <= 0 && x.Price >= priceFrom));
 
                 if (priceTo > 0)
-                    query = query.Where(x => x.Price <= priceTo);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= priceTo) || (x.PriceReduced <= 0 && x.Price <= priceTo));
 
                 if (!string.IsNullOrEmpty(category))
                     query = query.Where(x => x.Category == category);
@@ -428,10 +441,12 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 if (priceFrom > 0)
-                    query = query.Where(x => x.Price >= priceFrom);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= priceFrom) || (x.PriceReduced <= 0 && x.Price >= priceFrom));
 
                 if (priceTo > 0)
-                    query = query.Where(x => x.Price <= priceTo);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= priceTo) || (x.PriceReduced <= 0 && x.Price <= priceTo));
 
                 if (!string.IsNullOrEmpty(category))
                     query = query.Where(x => x.Category == category);
@@ -477,6 +492,7 @@ namespace BackEnd.Services.BusinessServices
                         City = x.City,
                         State = x.State,
                         Price = x.Price,
+                        PriceReduced = x.PriceReduced,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,
@@ -497,10 +513,13 @@ namespace BackEnd.Services.BusinessServices
                 {
                     double grossCommission = 0;
                     
+                    // Usa PriceReduced se > 0, altrimenti Price
+                    double priceToUse = PropertyPriceHelper.GetPriceToUse(x.Price, x.PriceReduced);
+                    
                     // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && x.Price > 0)
+                    if (x.AgreedCommission > 0 && priceToUse > 0)
                     {
-                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
+                        grossCommission = (priceToUse * x.AgreedCommission) / 100.0;
                     }
                     else if (x.FlatRateCommission > 0)
                     {
@@ -522,7 +541,7 @@ namespace BackEnd.Services.BusinessServices
                         AddressLine = x.AddressLine,
                         City = x.City,
                         State = x.State,
-                        Price = x.Price,
+                        Price = priceToUse,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,
@@ -600,12 +619,14 @@ namespace BackEnd.Services.BusinessServices
 
                 if (filters.PriceFrom.HasValue && filters.PriceFrom.Value > 0)
                 {
-                    query = query.Where(x => x.Price >= filters.PriceFrom.Value);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= filters.PriceFrom.Value) || (x.PriceReduced <= 0 && x.Price >= filters.PriceFrom.Value));
                 }
 
                 if (filters.PriceTo.HasValue && filters.PriceTo.Value > 0)
                 {
-                    query = query.Where(x => x.Price <= filters.PriceTo.Value);
+                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
+                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= filters.PriceTo.Value) || (x.PriceReduced <= 0 && x.Price <= filters.PriceTo.Value));
                 }
 
                 if (!string.IsNullOrEmpty(filters.Category))
@@ -666,6 +687,7 @@ namespace BackEnd.Services.BusinessServices
                         City = x.City,
                         State = x.State,
                         Price = x.Price,
+                        PriceReduced = x.PriceReduced,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,
@@ -686,10 +708,13 @@ namespace BackEnd.Services.BusinessServices
                 {
                     double grossCommission = 0;
                     
+                    // Usa PriceReduced se > 0, altrimenti Price
+                    double priceToUse = PropertyPriceHelper.GetPriceToUse(x.Price, x.PriceReduced);
+                    
                     // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && x.Price > 0)
+                    if (x.AgreedCommission > 0 && priceToUse > 0)
                     {
-                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
+                        grossCommission = (priceToUse * x.AgreedCommission) / 100.0;
                     }
                     else if (x.FlatRateCommission > 0)
                     {
@@ -711,7 +736,7 @@ namespace BackEnd.Services.BusinessServices
                         AddressLine = x.AddressLine,
                         City = x.City,
                         State = x.State,
-                        Price = x.Price,
+                        Price = priceToUse,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,

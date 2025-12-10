@@ -42,10 +42,28 @@ namespace BackEnd.Services
             try
             {
                 HomeDetailsModel result = new HomeDetailsModel();
-                List<RealEstateProperty> propertiesInHome = await _unitOfWork.dbContext.RealEstateProperties.Where(x => x.InHome).Include(x => x.Photos.OrderBy(x => x.Position)).OrderByDescending(x => x.Id).ToListAsync();
+                var nowDateOnly = DateTime.UtcNow.Date;
+                
+                // Filtra per escludere immobili scaduti (solo incarichi validi)
+                // Include immobili senza scadenza (default) o con scadenza futura
+                List<RealEstateProperty> propertiesInHome = await _unitOfWork.dbContext.RealEstateProperties
+                    .Where(x => x.InHome && 
+                                (x.AssignmentEnd == default(DateTime) || 
+                                 x.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                 x.AssignmentEnd.Date >= nowDateOnly))
+                    .Include(x => x.Photos.OrderBy(x => x.Position))
+                    .OrderByDescending(x => x.Id)
+                    .ToListAsync();
 
+                // Filtra anche per propertyHighlighted
                 RealEstateProperty? propertyHighlighted =
-                    await _unitOfWork.dbContext.RealEstateProperties.Include(x => x.Photos).FirstOrDefaultAsync(x => x.Highlighted) ?? propertiesInHome.FirstOrDefault();
+                    await _unitOfWork.dbContext.RealEstateProperties
+                        .Where(x => x.Highlighted && 
+                                    (x.AssignmentEnd == default(DateTime) || 
+                                     x.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                     x.AssignmentEnd.Date >= nowDateOnly))
+                        .Include(x => x.Photos)
+                        .FirstOrDefaultAsync() ?? propertiesInHome.FirstOrDefault();
 
                 result.RealEstatePropertiesHighlighted = _mapper.Map<RealEstatePropertySelectModel>(propertyHighlighted);
 
@@ -88,9 +106,17 @@ namespace BackEnd.Services
             try
             {
                 AdminHomeDetailsModel result = new AdminHomeDetailsModel();
+                var nowDateOnly = DateTime.UtcNow.Date;
+                
                 IQueryable<RealEstateProperty> propertiesInHome = string.IsNullOrEmpty(agencyId) 
                     ? _unitOfWork.dbContext.RealEstateProperties 
                     : _unitOfWork.dbContext.RealEstateProperties.Where(x => x.User.AdminId == agencyId);
+
+                // Filtra per escludere immobili scaduti (solo incarichi validi)
+                propertiesInHome = propertiesInHome.Where(x => 
+                    x.AssignmentEnd == default(DateTime) || 
+                    x.AssignmentEnd == new DateTime(1, 1, 1) || 
+                    x.AssignmentEnd.Date >= nowDateOnly);
 
                 result.RealEstatePropertyHomeDetails.Total = propertiesInHome.Count();
                 result.RealEstatePropertyHomeDetails.TotalSale = propertiesInHome.Where(x => x.Status == "Vendita").Count();

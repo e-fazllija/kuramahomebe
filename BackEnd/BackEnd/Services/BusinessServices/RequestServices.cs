@@ -9,6 +9,7 @@ using BackEnd.Models.Options;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
 using Microsoft.AspNetCore.Identity;
+using BackEnd.Services;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -652,26 +653,28 @@ namespace BackEnd.Services.BusinessServices
             }
 
             // 5. Price Range - se presente nella richiesta
+            // Usa PriceReduced se > 0, altrimenti Price
+            double propertyPriceToUse = property.GetPriceToUse();
             if (request.PriceFrom > 0 || request.PriceTo > 0)
             {
                 totalCriteria++;
                 if (request.PriceFrom > 0 && request.PriceTo > 0)
                 {
-                    if (property.Price >= request.PriceFrom && property.Price <= request.PriceTo)
+                    if (propertyPriceToUse >= request.PriceFrom && propertyPriceToUse <= request.PriceTo)
                     {
                         matchedCriteria++;
                     }
                 }
                 else if (request.PriceFrom > 0)
                 {
-                    if (property.Price >= request.PriceFrom)
+                    if (propertyPriceToUse >= request.PriceFrom)
                     {
                         matchedCriteria++;
                     }
                 }
                 else if (request.PriceTo > 0)
                 {
-                    if (property.Price <= request.PriceTo)
+                    if (propertyPriceToUse <= request.PriceTo)
                     {
                         matchedCriteria++;
                     }
