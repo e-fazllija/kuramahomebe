@@ -49,16 +49,116 @@ namespace BackEnd.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                // Converti l'importo in centesimi per Stripe
-                long amountInCents = request.Amount;
+                decimal originalAmount = request.Amount / 100m; // Importo originale in euro
+                decimal creditAmount = 0;
+                decimal finalAmount = originalAmount;
+                bool isUpgrade = false;
+                string? currentPlanId = null;
+                string? currentPlanName = null;
 
-                // Crea metadata per tracciare il piano e l'email
+                // Se l'email è fornita, prova a recuperare l'utente e verificare se è un upgrade
+                if (!string.IsNullOrEmpty(request.Email))
+                {
+                    var user = await _userManager.FindByEmailAsync(request.Email);
+                    if (user != null)
+                    {
+                        // Recupera abbonamento corrente
+                        var currentSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
+                        
+                        if (currentSubscription != null && currentSubscription.SubscriptionPlan != null)
+                        {
+                            // Recupera il nuovo piano
+                            var allPlans = await _subscriptionPlanServices.GetActivePlansAsync();
+                            var newPlan = allPlans.FirstOrDefault(p => 
+                                p.Name.Equals(request.Plan, StringComparison.OrdinalIgnoreCase));
+
+                            if (newPlan != null)
+                            {
+                                var currentPlanPrice = currentSubscription.SubscriptionPlan.Price;
+                                var newPlanPrice = newPlan.Price;
+
+                                // Verifica se è un upgrade
+                                isUpgrade = newPlanPrice > currentPlanPrice && 
+                                           currentSubscription.SubscriptionPlanId != newPlan.Id;
+
+                                if (isUpgrade)
+                                {
+                                    // Verifica se l'abbonamento è scaduto
+                                    var today = DateTime.UtcNow;
+                                    var isExpired = !currentSubscription.EndDate.HasValue || 
+                                                   currentSubscription.EndDate.Value <= today;
+
+                                    if (!isExpired)
+                                    {
+                                        // Calcola credito residuo
+                                        var endDate = currentSubscription.EndDate.Value;
+                                        var startDate = currentSubscription.StartDate;
+
+                                        // Durata ciclo attuale (in giorni)
+                                        var cycleDuration = (endDate - startDate).TotalDays;
+                                        if (cycleDuration <= 0)
+                                            cycleDuration = 30; // Default a 30 giorni
+
+                                        // Giorni rimasti
+                                        var daysRemaining = (endDate - today).TotalDays;
+                                        if (daysRemaining < 0)
+                                            daysRemaining = 0;
+
+                                        // Calcolo credito proporzionale
+                                        var dailyRate = currentPlanPrice / (decimal)cycleDuration;
+                                        creditAmount = dailyRate * (decimal)daysRemaining;
+                                        creditAmount = Math.Round(creditAmount, 2, MidpointRounding.AwayFromZero);
+
+                                        // Importo netto da pagare
+                                        finalAmount = Math.Max(0, newPlanPrice - creditAmount);
+                                        finalAmount = Math.Round(finalAmount, 2, MidpointRounding.AwayFromZero);
+
+                                        currentPlanId = currentSubscription.SubscriptionPlanId.ToString();
+                                        currentPlanName = currentSubscription.SubscriptionPlan.Name;
+
+                                        _logger.LogInformation(
+                                            "Upgrade rilevato per utente {UserId} ({Email}). " +
+                                            "Piano corrente: {CurrentPlan} (€{CurrentPrice}), " +
+                                            "Nuovo piano: {NewPlan} (€{NewPrice}), " +
+                                            "Giorni rimasti: {DaysRemaining}, " +
+                                            "Credito: €{Credit}, Importo finale: €{FinalAmount}",
+                                            user.Id, request.Email, currentPlanName, currentPlanPrice,
+                                            newPlan.Name, newPlanPrice, (int)daysRemaining,
+                                            creditAmount, finalAmount);
+                                    }
+                                    else
+                                    {
+                                        _logger.LogInformation(
+                                            "Upgrade rilevato per utente {UserId} ({Email}) ma abbonamento scaduto. " +
+                                            "Nessun credito applicato.",
+                                            user.Id, request.Email);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Converti l'importo finale in centesimi per Stripe
+                long amountInCents = (long)(finalAmount * 100);
+
+                // Crea metadata per tracciare il piano, l'email e le info di upgrade
                 var metadata = new Dictionary<string, string>
                 {
                     { "plan", request.Plan },
                     { "email", request.Email ?? "" },
-                    { "source", "pricing_page" }
+                    { "source", "pricing_page" },
+                    { "isUpgrade", isUpgrade.ToString().ToLower() },
+                    { "originalAmount", originalAmount.ToString("F2") },
+                    { "creditAmount", creditAmount.ToString("F2") },
+                    { "finalAmount", finalAmount.ToString("F2") }
                 };
+
+                if (!string.IsNullOrEmpty(currentPlanId))
+                {
+                    metadata["currentPlanId"] = currentPlanId;
+                    metadata["currentPlanName"] = currentPlanName ?? "";
+                }
 
                 // Crea il Payment Intent con Stripe
                 var paymentIntent = await _stripeService.CreatePaymentIntentAsync(
@@ -74,12 +174,14 @@ namespace BackEnd.Controllers
                 var paymentModel = new PaymentCreateModel
                 {
                     UserId = "", // Verrà aggiornato dopo la registrazione
-                    Amount = request.Amount / 100m, // Converti da centesimi a euro
+                    Amount = finalAmount, // Usa l'importo finale calcolato
                     Currency = request.Currency ?? "EUR",
                     PaymentMethod = "stripe",
                     Status = "pending",
                     StripePaymentIntentId = paymentIntent.Id,
-                    Notes = $"Piano: {request.Plan}, Email: {request.Email}"
+                    Notes = isUpgrade 
+                        ? $"Upgrade piano: {request.Plan}, Credito applicato: €{creditAmount:F2}, Importo originale: €{originalAmount:F2}, Importo finale: €{finalAmount:F2}"
+                        : $"Piano: {request.Plan}, Email: {request.Email}"
                 };
 
                 // Non salviamo ancora il payment perché l'utente non esiste
@@ -156,6 +258,148 @@ namespace BackEnd.Controllers
             {
                 _logger.LogError(ex, "Errore durante la conferma del pagamento");
                 return StatusCode(500, $"Errore durante la conferma del pagamento: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Calcola il credito residuo e l'importo netto per un upgrade
+        /// </summary>
+        [HttpGet("calculate-upgrade-credit")]
+        [Authorize]
+        public async Task<ActionResult<UpgradeCreditCalculationResponse>> CalculateUpgradeCredit([FromQuery] string planName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(planName))
+                    return BadRequest("Il nome del piano è obbligatorio");
+
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized();
+
+                // Recupera abbonamento corrente
+                var currentSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
+                
+                // Se non ha abbonamento attivo, non c'è credito da calcolare
+                if (currentSubscription == null)
+                {
+                    return Ok(new UpgradeCreditCalculationResponse
+                    {
+                        IsUpgrade = false,
+                        HasActiveSubscription = false,
+                        CreditAmount = 0,
+                        OriginalAmount = 0,
+                        FinalAmount = 0,
+                        DaysRemaining = 0,
+                        Message = "Nessun abbonamento attivo trovato"
+                    });
+                }
+
+                // Recupera il nuovo piano
+                var allPlans = await _subscriptionPlanServices.GetActivePlansAsync();
+                var newPlan = allPlans.FirstOrDefault(p => 
+                    p.Name.Equals(planName, StringComparison.OrdinalIgnoreCase));
+
+                if (newPlan == null)
+                    return NotFound($"Piano '{planName}' non trovato");
+
+                var currentPlan = currentSubscription.SubscriptionPlan;
+                if (currentPlan == null)
+                    return BadRequest("Impossibile recuperare i dettagli del piano corrente");
+
+                var currentPlanPrice = currentPlan.Price;
+                var newPlanPrice = newPlan.Price;
+
+                // Verifica se è un upgrade
+                bool isUpgrade = newPlanPrice > currentPlanPrice;
+                bool isSamePlan = currentSubscription.SubscriptionPlanId == newPlan.Id;
+
+                // Se è lo stesso piano o un downgrade, non c'è credito
+                if (!isUpgrade || isSamePlan)
+                {
+                    return Ok(new UpgradeCreditCalculationResponse
+                    {
+                        IsUpgrade = false,
+                        HasActiveSubscription = true,
+                        CreditAmount = 0,
+                        OriginalAmount = newPlanPrice,
+                        FinalAmount = newPlanPrice,
+                        DaysRemaining = 0,
+                        Message = isSamePlan ? "Stesso piano selezionato" : "Non è un upgrade"
+                    });
+                }
+
+                // Verifica se l'abbonamento è scaduto
+                var today = DateTime.UtcNow;
+                var isExpired = !currentSubscription.EndDate.HasValue || 
+                               currentSubscription.EndDate.Value <= today;
+
+                // Se scaduto, non c'è credito
+                if (isExpired)
+                {
+                    return Ok(new UpgradeCreditCalculationResponse
+                    {
+                        IsUpgrade = true,
+                        HasActiveSubscription = true,
+                        CreditAmount = 0,
+                        OriginalAmount = newPlanPrice,
+                        FinalAmount = newPlanPrice,
+                        DaysRemaining = 0,
+                        Message = "Abbonamento scaduto, nessun credito residuo"
+                    });
+                }
+
+                // Calcola credito residuo
+                var endDate = currentSubscription.EndDate.Value;
+                var startDate = currentSubscription.StartDate;
+
+                // Durata ciclo attuale (in giorni)
+                var cycleDuration = (endDate - startDate).TotalDays;
+                if (cycleDuration <= 0)
+                    cycleDuration = 30; // Default a 30 giorni se calcolo anomalo
+
+                // Giorni rimasti
+                var daysRemaining = (endDate - today).TotalDays;
+                if (daysRemaining < 0)
+                    daysRemaining = 0;
+
+                // Calcolo credito proporzionale (converti double a decimal per operazioni con decimal)
+                var dailyRate = currentPlanPrice / (decimal)cycleDuration;
+                var creditAmount = dailyRate * (decimal)daysRemaining;
+                creditAmount = Math.Round(creditAmount, 2, MidpointRounding.AwayFromZero);
+
+                // Importo netto da pagare
+                var finalAmount = Math.Max(0, newPlanPrice - creditAmount);
+                finalAmount = Math.Round(finalAmount, 2, MidpointRounding.AwayFromZero);
+
+                _logger.LogInformation(
+                    "Calcolo credito upgrade per utente {UserId}. Piano corrente: {CurrentPlan} (€{CurrentPrice}), " +
+                    "Nuovo piano: {NewPlan} (€{NewPrice}), Giorni rimasti: {DaysRemaining}, " +
+                    "Credito: €{Credit}, Importo finale: €{FinalAmount}",
+                    userId, currentPlan.Name, currentPlanPrice, newPlan.Name, newPlanPrice,
+                    (int)daysRemaining, creditAmount, finalAmount);
+
+                return Ok(new UpgradeCreditCalculationResponse
+                {
+                    IsUpgrade = true,
+                    HasActiveSubscription = true,
+                    CreditAmount = creditAmount,
+                    OriginalAmount = newPlanPrice,
+                    FinalAmount = finalAmount,
+                    DaysRemaining = (int)daysRemaining,
+                    CurrentPlanName = currentPlan.Name,
+                    NewPlanName = newPlan.Name,
+                    Message = "Calcolo completato con successo"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore durante il calcolo del credito upgrade");
+                return StatusCode(500, $"Errore durante il calcolo del credito: {ex.Message}");
             }
         }
 
@@ -306,6 +550,19 @@ namespace BackEnd.Controllers
         public bool Success { get; set; }
         public string Message { get; set; } = null!;
         public int? PaymentId { get; set; }
+    }
+
+    public class UpgradeCreditCalculationResponse
+    {
+        public bool IsUpgrade { get; set; }
+        public bool HasActiveSubscription { get; set; }
+        public decimal CreditAmount { get; set; }
+        public decimal OriginalAmount { get; set; }
+        public decimal FinalAmount { get; set; }
+        public int DaysRemaining { get; set; }
+        public string? CurrentPlanName { get; set; }
+        public string? NewPlanName { get; set; }
+        public string Message { get; set; } = null!;
     }
 }
 
