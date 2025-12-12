@@ -22,5 +22,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? AgencyId { get; set; }
         public string? AgentId { get; set; }
         public double EffectiveCommission { get; set; }
+        public DateTime UpdateDate { get; set; }
     }
 } 

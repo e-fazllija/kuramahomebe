@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using BackEnd.Entities;
@@ -504,7 +504,8 @@ namespace BackEnd.Services.BusinessServices
                         AgentId = x.UserId,
                         AgreedCommission = x.AgreedCommission,
                         FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal
+                        CommissionReversal = x.CommissionReversal,
+                        UpdateDate = x.UpdateDate
                     })
                     .ToListAsync();
 
@@ -551,7 +552,8 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.FirstPhotoUrl,
                         AgencyId = x.AgencyId,
                         AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission
+                        EffectiveCommission = effectiveCommission,
+                        UpdateDate = x.UpdateDate
                     };
                 }).ToList();
 
@@ -699,7 +701,8 @@ namespace BackEnd.Services.BusinessServices
                         AgentId = x.UserId,
                         AgreedCommission = x.AgreedCommission,
                         FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal
+                        CommissionReversal = x.CommissionReversal,
+                        UpdateDate = x.UpdateDate
                     })
                     .ToListAsync();
 
@@ -746,7 +749,8 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.FirstPhotoUrl,
                         AgencyId = x.AgencyId,
                         AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission
+                        EffectiveCommission = effectiveCommission,
+                        UpdateDate = x.UpdateDate
                     };
                 }).ToList();
 
