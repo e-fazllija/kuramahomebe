@@ -11,7 +11,6 @@ using BackEnd.Models.CustomerModels;
 using Microsoft.AspNetCore.Identity;
 using BackEnd.Models.UserModel;
 using BackEnd.Models.CalendarModels;
-using BackEnd.Services;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -217,16 +216,8 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
-                var nowDateOnly = DateTime.UtcNow.Date;
-                
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
-                     .Include(x => x.Photos.OrderBy(x => x.Position))
-                     .Where(x => !x.Archived && 
-                                 x.User!.Admin!.EmailConfirmed &&
-                                 // Escludi immobili scaduti (solo incarichi validi)
-                                 (x.AssignmentEnd == default(DateTime) || 
-                                  x.AssignmentEnd == new DateTime(1, 1, 1) || 
-                                  x.AssignmentEnd.Date >= nowDateOnly))
+                     .Include(x => x.Photos.OrderBy(x => x.Position)).Where(x => !x.Archived && x.User!.Admin!.EmailConfirmed)
                      //.Include(x => x.Agent)
                      .OrderByDescending(x => x.Id);
 
@@ -264,11 +255,9 @@ namespace BackEnd.Services.BusinessServices
                 if (code > 0)
                     query = query.Where(x => x.Id == code);
                 if (from > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= from) || (x.PriceReduced <= 0 && x.Price >= from));
+                    query = query.Where(x => x.Price >= from);
                 if (to > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= to) || (x.PriceReduced <= 0 && x.Price <= to));
+                    query = query.Where(x => x.Price <= to);
                 if (!string.IsNullOrEmpty(agencyId))
                     query = query.Where(x => x.User.AdminId == agencyId);
                 if (toName != null)
@@ -338,12 +327,10 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 if (priceFrom > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= priceFrom) || (x.PriceReduced <= 0 && x.Price >= priceFrom));
+                    query = query.Where(x => x.Price >= priceFrom);
 
                 if (priceTo > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= priceTo) || (x.PriceReduced <= 0 && x.Price <= priceTo));
+                    query = query.Where(x => x.Price <= priceTo);
 
                 if (!string.IsNullOrEmpty(category))
                     query = query.Where(x => x.Category == category);
@@ -441,12 +428,10 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 if (priceFrom > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= priceFrom) || (x.PriceReduced <= 0 && x.Price >= priceFrom));
+                    query = query.Where(x => x.Price >= priceFrom);
 
                 if (priceTo > 0)
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= priceTo) || (x.PriceReduced <= 0 && x.Price <= priceTo));
+                    query = query.Where(x => x.Price <= priceTo);
 
                 if (!string.IsNullOrEmpty(category))
                     query = query.Where(x => x.Category == category);
@@ -482,17 +467,17 @@ namespace BackEnd.Services.BusinessServices
 
                 // Proiezione ottimizzata per la lista
                 var queryList = await query
-                    .Select(x => new
+                    .Select(x => new RealEstatePropertyListModel
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
                         AssignmentEnd = x.AssignmentEnd,
+                        UpdateDate = x.UpdateDate,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
                         City = x.City,
                         State = x.State,
                         Price = x.Price,
-                        PriceReduced = x.PriceReduced,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,
@@ -502,62 +487,11 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
                         AgentId = x.UserId,
-                        AgreedCommission = x.AgreedCommission,
-                        FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal,
-                        UpdateDate = x.UpdateDate
+                        EffectiveCommission = x.EffectiveCommission
                     })
                     .ToListAsync();
 
-                // Mappa e calcola EffectiveCommission
-                var mappedList = queryList.Select(x =>
-                {
-                    double grossCommission = 0;
-                    
-                    // Usa PriceReduced se > 0, altrimenti Price
-                    double priceToUse = PropertyPriceHelper.GetPriceToUse(x.Price, x.PriceReduced);
-                    
-                    // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && priceToUse > 0)
-                    {
-                        grossCommission = (priceToUse * x.AgreedCommission) / 100.0;
-                    }
-                    else if (x.FlatRateCommission > 0)
-                    {
-                        grossCommission = x.FlatRateCommission;
-                    }
-                    
-                    // Calcola la provvigione netta (lorda - storno)
-                    double netCommission = grossCommission - x.CommissionReversal;
-                    
-                    // Il risultato non può essere negativo (minimo 0)
-                    double effectiveCommission = Math.Max(0, netCommission);
-                    
-                    return new RealEstatePropertyListModel
-                    {
-                        Id = x.Id,
-                        CreationDate = x.CreationDate,
-                        AssignmentEnd = x.AssignmentEnd,
-                        CommercialSurfaceate = x.CommercialSurfaceate,
-                        AddressLine = x.AddressLine,
-                        City = x.City,
-                        State = x.State,
-                        Price = priceToUse,
-                        Category = x.Category,
-                        Typology = x.Typology,
-                        StateOfTheProperty = x.StateOfTheProperty,
-                        Status = x.Status,
-                        Auction = x.Auction,
-                        Sold = x.Sold,
-                        FirstPhotoUrl = x.FirstPhotoUrl,
-                        AgencyId = x.AgencyId,
-                        AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission,
-                        UpdateDate = x.UpdateDate
-                    };
-                }).ToList();
-
-                result.Data = mappedList;
+                result.Data = queryList;
 
                 _logger.LogInformation(nameof(GetList));
 
@@ -621,14 +555,12 @@ namespace BackEnd.Services.BusinessServices
 
                 if (filters.PriceFrom.HasValue && filters.PriceFrom.Value > 0)
                 {
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced >= filters.PriceFrom.Value) || (x.PriceReduced <= 0 && x.Price >= filters.PriceFrom.Value));
+                    query = query.Where(x => x.Price >= filters.PriceFrom.Value);
                 }
 
                 if (filters.PriceTo.HasValue && filters.PriceTo.Value > 0)
                 {
-                    // Filtra per prezzo: usa PriceReduced se > 0, altrimenti Price
-                    query = query.Where(x => (x.PriceReduced > 0 && x.PriceReduced <= filters.PriceTo.Value) || (x.PriceReduced <= 0 && x.Price <= filters.PriceTo.Value));
+                    query = query.Where(x => x.Price <= filters.PriceTo.Value);
                 }
 
                 if (!string.IsNullOrEmpty(filters.Category))
@@ -678,18 +610,18 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.Auction == filters.Auction.Value);
                 }
 
-                var queryList = await query
-                    .Select(x => new
+                var data = await query
+                    .Select(x => new RealEstatePropertyListModel
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
                         AssignmentEnd = x.AssignmentEnd,
+                        UpdateDate = x.UpdateDate,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
                         City = x.City,
                         State = x.State,
                         Price = x.Price,
-                        PriceReduced = x.PriceReduced,
                         Category = x.Category,
                         Typology = x.Typology,
                         StateOfTheProperty = x.StateOfTheProperty,
@@ -699,60 +631,9 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
                         AgentId = x.UserId,
-                        AgreedCommission = x.AgreedCommission,
-                        FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal,
-                        UpdateDate = x.UpdateDate
+                        EffectiveCommission = x.EffectiveCommission
                     })
                     .ToListAsync();
-
-                // Mappa e calcola EffectiveCommission
-                var data = queryList.Select(x =>
-                {
-                    double grossCommission = 0;
-                    
-                    // Usa PriceReduced se > 0, altrimenti Price
-                    double priceToUse = PropertyPriceHelper.GetPriceToUse(x.Price, x.PriceReduced);
-                    
-                    // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && priceToUse > 0)
-                    {
-                        grossCommission = (priceToUse * x.AgreedCommission) / 100.0;
-                    }
-                    else if (x.FlatRateCommission > 0)
-                    {
-                        grossCommission = x.FlatRateCommission;
-                    }
-                    
-                    // Calcola la provvigione netta (lorda - storno)
-                    double netCommission = grossCommission - x.CommissionReversal;
-                    
-                    // Il risultato non può essere negativo (minimo 0)
-                    double effectiveCommission = Math.Max(0, netCommission);
-                    
-                    return new RealEstatePropertyListModel
-                    {
-                        Id = x.Id,
-                        CreationDate = x.CreationDate,
-                        AssignmentEnd = x.AssignmentEnd,
-                        CommercialSurfaceate = x.CommercialSurfaceate,
-                        AddressLine = x.AddressLine,
-                        City = x.City,
-                        State = x.State,
-                        Price = priceToUse,
-                        Category = x.Category,
-                        Typology = x.Typology,
-                        StateOfTheProperty = x.StateOfTheProperty,
-                        Status = x.Status,
-                        Auction = x.Auction,
-                        Sold = x.Sold,
-                        FirstPhotoUrl = x.FirstPhotoUrl,
-                        AgencyId = x.AgencyId,
-                        AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission,
-                        UpdateDate = x.UpdateDate
-                    };
-                }).ToList();
 
                 return data;
             }
@@ -796,13 +677,22 @@ namespace BackEnd.Services.BusinessServices
                         !string.IsNullOrEmpty(customer.UserId) &&
                         accessibleUserIdsSet.Contains(customer.UserId));
 
+                // Recupera sia Agent che Agency
                 var agentsInCircle = (await userManager.GetUsersInRoleAsync("Agent"))
                     .Where(agent =>
                         !string.IsNullOrEmpty(agent.AdminId) &&
                         accessibleAdminIds.Contains(agent.AdminId))
                     .ToList();
 
-                var agentModels = _mapper.Map<List<UserSelectModel>>(agentsInCircle);
+                var agenciesInCircle = (await userManager.GetUsersInRoleAsync("Agency"))
+                    .Where(agency =>
+                        accessibleUserIdsSet.Contains(agency.Id) ||
+                        (!string.IsNullOrEmpty(agency.AdminId) && accessibleAdminIds.Contains(agency.AdminId)))
+                    .ToList();
+
+                // Combina agenti e agenzie
+                var allUsers = agentsInCircle.Concat(agenciesInCircle).ToList();
+                var agentModels = _mapper.Map<List<UserSelectModel>>(allUsers);
 
                 var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
                 if (currentUserModel != null)

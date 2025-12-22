@@ -62,7 +62,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
         public int CommissionReversal { get; set; }
-        public double EffectiveCommission { get; set; }
         public string? TypeOfAssignment { get; set; }
 
         public string? VideoUrl { get; set; }
@@ -75,6 +74,8 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string UserId { get; set; }
         public virtual ApplicationUser User { get; set; } = new ApplicationUser();
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
+        
+        // Proprietà usate quando l'immobile viene restituito in contesto di match con una richiesta
         public int MatchPercentage { get; set; }
         public string? AgencyName { get; set; }
     }

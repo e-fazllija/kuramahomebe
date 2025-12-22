@@ -7,6 +7,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int Id { get; set; }
         public DateTime CreationDate { get; set; }
         public DateTime AssignmentEnd { get; set; }
+        public DateTime UpdateDate { get; set; }
         public int CommercialSurfaceate { get; set; }
         public string AddressLine { get; set; } = string.Empty;
         public string City { get; set; } = string.Empty;
@@ -22,6 +23,5 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? AgencyId { get; set; }
         public string? AgentId { get; set; }
         public double EffectiveCommission { get; set; }
-        public DateTime UpdateDate { get; set; }
     }
 } 
