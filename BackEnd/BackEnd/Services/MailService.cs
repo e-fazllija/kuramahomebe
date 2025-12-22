@@ -1,11 +1,9 @@
-using Azure.Core;
 using BackEnd.Interfaces;
 using BackEnd.Models.InputModels;
 using BackEnd.Models.MailModels;
 using BackEnd.Models.Options;
 using MailKit.Net.Smtp;
 using MailKit.Security;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
@@ -31,8 +29,8 @@ public class MailService : IMailService
     public async Task SendEmailAsync(MailRequest mailRequest)
     {
         var email = new MimeMessage();
-        email.Sender = MailboxAddress.Parse("info@thinkhome.it");
-        email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
+        email.Sender = MailboxAddress.Parse("info@miraihome.it");
+        email.From.Add(InternetAddress.Parse("info@miraihome.it"));
         email.To.Add(MailboxAddress.Parse(mailRequest.ToEmail));
         if (mailRequest.CcEmail.Count > 0)
         {
@@ -62,7 +60,7 @@ public class MailService : IMailService
         builder.HtmlBody = mailRequest.Body;
         email.Body = builder.ToMessageBody();
         using var smtp = new SmtpClient();
-        smtp.Connect(_mailSettings.Host, _mailSettings.Port, SecureSocketOptions.SslOnConnect);
+        smtp.Connect(_mailSettings.Host, _mailSettings.Port, SecureSocketOptions.Auto);
         smtp.Authenticate(_mailSettings.Mail, _mailSettings.Password);
         await smtp.SendAsync(email);
         smtp.Disconnect(true);
@@ -73,9 +71,9 @@ public class MailService : IMailService
         try
         {
             var email = new MimeMessage();
-            email.Sender = MailboxAddress.Parse("info@thinkhome.it");
-            email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
-            email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
+            email.Sender = MailboxAddress.Parse("info@miraihome.it");
+            email.From.Add(InternetAddress.Parse("info@miraihome.it"));
+            email.To.Add(MailboxAddress.Parse("info@miraihome.it"));
 
             email.Subject = $"Richiesta di valutazione, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
@@ -120,9 +118,9 @@ public class MailService : IMailService
         try
         {
             var email = new MimeMessage();
-            email.Sender = MailboxAddress.Parse("info@thinkhome.it");
-            email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
-            email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
+            email.Sender = MailboxAddress.Parse("info@miraihome.it");
+            email.From.Add(InternetAddress.Parse("info@miraihome.it"));
+            email.To.Add(MailboxAddress.Parse("info@miraihome.it"));
 
             email.Subject = $"Lavora con noi, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
@@ -149,9 +147,9 @@ public class MailService : IMailService
         try
         {
             var email = new MimeMessage();
-            email.Sender = MailboxAddress.Parse("info@thinkhome.it");
-            email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
-            email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
+            email.Sender = MailboxAddress.Parse("info@miraihome.it");
+            email.From.Add(InternetAddress.Parse("info@miraihome.it"));
+            email.To.Add(MailboxAddress.Parse("info@miraihome.it"));
 
             email.Subject = $"Nuova richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();
@@ -196,9 +194,9 @@ public class MailService : IMailService
         try
         {
             var email = new MimeMessage();
-            email.Sender = MailboxAddress.Parse("info@thinkhome.it");
-            email.From.Add(InternetAddress.Parse("info@thinkhome.it"));
-            email.To.Add(MailboxAddress.Parse("info@thinkhome.it"));
+            email.Sender = MailboxAddress.Parse("info@miraihome.it");
+            email.From.Add(InternetAddress.Parse("info@miraihome.it"));
+            email.To.Add(MailboxAddress.Parse("info@miraihome.it"));
 
             email.Subject = $"Informazioni per immobile Cod. 00{mailRequest.Information}, richiesta di {mailRequest.FirstName} {mailRequest.LastName}";
             var builder = new BodyBuilder();

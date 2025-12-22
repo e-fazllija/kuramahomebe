@@ -97,25 +97,23 @@ namespace BackEnd.Controllers
                 var roleResult = await userManager.AddToRoleAsync(user, model.Role);
 
                 var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-                
+
                 // ===== MODALITÀ TEST: Link di conferma email =====
                 // Link che porta alla pagina di conferma email
-                var confirmationLink = $"http://localhost:5173/email-confirmation/{user.Email}/{token}";
+                var confirmationLink = $"https://red-mushroom-08aa33903.3.azurestaticapps.net/email-confirmation/{user.Email}/{token}";
                 Console.WriteLine("========================================");
                 Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
                 Console.WriteLine(confirmationLink);
                 Console.WriteLine("========================================");
-                
+
                 // ===== MODALITÀ PRODUZIONE: Invio email di conferma =====
-                // Decommentare le righe seguenti per l'invio effettivo delle email in produzione
-                // var confirmationLink = $"https://www.amministrazionethinkhome.it/#/email-confirmation/{user.Email}/{token}";
-                // MailRequest mailRequest = new MailRequest()
-                // {
-                //     ToEmail = user.Email,
-                //     Subject = "Conferma la tua email - KuramaHome",
-                //     Body = $"<h2>Benvenuto in KuramaHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href='{confirmationLink}'>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p>{confirmationLink}</p><p>Il link scadrà tra 24 ore.</p>"
-                // };
-                // await _mailService.SendEmailAsync(mailRequest);
+                MailRequest mailRequest = new MailRequest()
+                {
+                    ToEmail = user.Email,
+                    Subject = "Conferma la tua email - KuramaHome",
+                    Body = $"<h2>Benvenuto in KuramaHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href='{confirmationLink}'>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p>{confirmationLink}</p><p>Il link scadrà tra 24 ore.</p>"
+                };
+                await _mailService.SendEmailAsync(mailRequest);
 
                 return Ok(new AuthResponseModel { Status = "Success", Message = "User created successfully!" });
             }
@@ -160,7 +158,7 @@ namespace BackEnd.Controllers
                         new Claim("subscription_expiry", subscriptionExpiry.ToString("o")),
                         new Claim("plan", subscription?.SubscriptionPlan?.Name ?? "none")
                     };
-                    
+
                     var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretForKey));
                     var token = new JwtSecurityToken(
                         issuer: _configuration["Authentication:Issuer"],
@@ -177,7 +175,7 @@ namespace BackEnd.Controllers
                         new Claim(ClaimTypes.Email, user.Email!),
                         new Claim("type", "refresh_token")
                     };
-                    
+
                     var refreshToken = new JwtSecurityToken(
                         issuer: _configuration["Authentication:Issuer"],
                         audience: _configuration["Authentication:Audience"],
@@ -234,7 +232,7 @@ namespace BackEnd.Controllers
 
                 SecurityToken validatedToken;
                 var principal = tokenHandler.ValidateToken(api_token.api_token, validationParameters, out validatedToken);
-                
+
                 if (principal.Identity.IsAuthenticated)
                 {
                     // Estrae l'email dal claim corretto (ClaimTypes.Email)
@@ -243,28 +241,28 @@ namespace BackEnd.Controllers
                     {
                         return BadRequest("Email claim non trovata nel token");
                     }
-                    
+
                     string email = emailClaim.Value;
                     var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
                     string userId = userIdClaim?.Value ?? "";
-                    
+
                     var user = await userManager.FindByEmailAsync(email);
-                    
+
                     if (user == null)
                     {
                         return NotFound("Utente non trovato");
                     }
-                    
+
                     // Recupera l'abbonamento aggiornato dell'utente (con ereditarietà)
                     var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
                     var subscriptionExpiry = subscription?.EndDate ?? DateTime.MinValue;
-                    
+
                     var userRoles = await userManager.GetRolesAsync(user);
-                    string role = userRoles.Contains("Admin") ? "Admin" 
-                        : userRoles.Contains("Agency") ? "Agency" 
-                        : userRoles.Contains("Agent") ? "Agent" 
+                    string role = userRoles.Contains("Admin") ? "Admin"
+                        : userRoles.Contains("Agency") ? "Agency"
+                        : userRoles.Contains("Agent") ? "Agent"
                         : userRoles.FirstOrDefault() ?? "";
-                    
+
                     var result = new
                     {
                         Id = user.Id,
@@ -298,30 +296,30 @@ namespace BackEnd.Controllers
                 // Validate input parameters
                 if (string.IsNullOrEmpty(credentials.Email) || string.IsNullOrEmpty(credentials.Token))
                 {
-                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
-                    { 
-                        Status = "Error", 
-                        Message = "Email e token sono richiesti per la conferma delle credenziali." 
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "Email e token sono richiesti per la conferma delle credenziali."
                     });
                 }
 
                 var user = await userManager.FindByEmailAsync(credentials.Email);
                 if (user == null)
                 {
-                    return StatusCode(StatusCodes.Status404NotFound, new AuthResponseModel() 
-                    { 
-                        Status = "Error", 
-                        Message = "Utente non trovato. Verifica che l'email sia corretta." 
+                    return StatusCode(StatusCodes.Status404NotFound, new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "Utente non trovato. Verifica che l'email sia corretta."
                     });
                 }
 
                 // Check if email is already confirmed
                 if (user.EmailConfirmed)
                 {
-                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
-                    { 
-                        Status = "Error", 
-                        Message = "L'email è già stata confermata. Puoi procedere con l'accesso." 
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "L'email è già stata confermata. Puoi procedere con l'accesso."
                     });
                 }
 
@@ -334,18 +332,18 @@ namespace BackEnd.Controllers
 
                     if (updateResult.Succeeded)
                     {
-                        return Ok(new AuthResponseModel() 
-                        { 
-                            Status = "Success", 
-                            Message = "Email confermata con successo! Ora puoi accedere al tuo account." 
+                        return Ok(new AuthResponseModel()
+                        {
+                            Status = "Success",
+                            Message = "Email confermata con successo! Ora puoi accedere al tuo account."
                         });
                     }
                     else
                     {
-                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() 
-                        { 
-                            Status = "Error", 
-                            Message = "Errore durante l'aggiornamento dell'utente. Riprova più tardi." 
+                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel()
+                        {
+                            Status = "Error",
+                            Message = "Errore durante l'aggiornamento dell'utente. Riprova più tardi."
                         });
                     }
                 }
@@ -353,25 +351,25 @@ namespace BackEnd.Controllers
                 // Handle specific token errors
                 if (result.Errors.Any(e => e.Code == "InvalidToken"))
                 {
-                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
-                    { 
-                        Status = "Error", 
-                        Message = "Token non valido. Richiedi un nuovo link di conferma." 
+                    return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel()
+                    {
+                        Status = "Error",
+                        Message = "Token non valido. Richiedi un nuovo link di conferma."
                     });
                 }
 
-                return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() 
-                { 
-                    Status = "Error", 
-                    Message = "Token non valido o scaduto. Richiedi un nuovo link di conferma." 
+                return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel()
+                {
+                    Status = "Error",
+                    Message = "Token non valido o scaduto. Richiedi un nuovo link di conferma."
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() 
-                { 
-                    Status = "Error", 
-                    Message = "Si è verificato un errore durante la conferma delle credenziali. Riprova più tardi." 
+                return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel()
+                {
+                    Status = "Error",
+                    Message = "Si è verificato un errore durante la conferma delle credenziali. Riprova più tardi."
                 });
             }
         }
@@ -444,8 +442,8 @@ namespace BackEnd.Controllers
                 }
                 else
                 {
-                    result.Role= roles.First() == "Agency" ? result.Role = "Agenzia"
-                        : roles.First() == "Agent" ? result.Role = "Agente" 
+                    result.Role = roles.First() == "Agency" ? result.Role = "Agenzia"
+                        : roles.First() == "Agent" ? result.Role = "Agente"
                         : result.Role;
                 }
                 return Ok(result);
@@ -559,7 +557,7 @@ namespace BackEnd.Controllers
                 // Estrae l'email dal claim corretto
                 var emailClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email);
                 var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
-                
+
                 if (emailClaim == null || userIdClaim == null)
                 {
                     return BadRequest(new AuthResponseModel { Status = "Error", Message = "Claims non validi nel token" });
@@ -581,9 +579,9 @@ namespace BackEnd.Controllers
 
                 // Recupera i ruoli dell'utente
                 var userRoles = await userManager.GetRolesAsync(user);
-                string role = userRoles.Contains("Admin") ? "Admin" 
-                    : userRoles.Contains("Agency") ? "Agenzia" 
-                    : userRoles.Contains("Agent") ? "Agente" 
+                string role = userRoles.Contains("Admin") ? "Admin"
+                    : userRoles.Contains("Agency") ? "Agenzia"
+                    : userRoles.Contains("Agent") ? "Agente"
                     : userRoles.FirstOrDefault() ?? "";
 
                 // Crea i nuovi claims con i dati aggiornati
@@ -614,7 +612,7 @@ namespace BackEnd.Controllers
                     new Claim(ClaimTypes.Email, user.Email!),
                     new Claim("type", "refresh_token")
                 };
-                
+
                 var newRefreshToken = new JwtSecurityToken(
                     issuer: _configuration["Authentication:Issuer"],
                     audience: _configuration["Authentication:Audience"],
@@ -646,9 +644,35 @@ namespace BackEnd.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, 
+                return StatusCode(StatusCodes.Status500InternalServerError,
                     new AuthResponseModel { Status = "Error", Message = $"Errore durante l'aggiornamento del token: {ex.Message}" });
             }
+        }
+
+        [HttpPost]
+        [Route(nameof(SendEmail))]
+        public async Task<IActionResult> SendEmail()
+        {
+            try
+            {
+                MailRequest mailRequest = new MailRequest()
+                {
+                    ToEmail = "e.fazllija@gruppointent.com",
+                    Subject = "Conferma la tua email - KuramaHome",
+                    Body = $"<h2>Benvenuto in KuramaHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href=''>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p></p><p>Il link scadrà tra 24 ore.</p>"
+                };
+                await _mailService.SendEmailAsync(mailRequest);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                if (ex is NullReferenceException)
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+
+                else
+                    return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Si è verificato un errore!" });
+            }
+
         }
 
         //[HttpGet]
