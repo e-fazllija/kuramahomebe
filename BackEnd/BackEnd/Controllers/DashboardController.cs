@@ -346,6 +346,46 @@ namespace BackEnd.Controllers
         }
 
         /// <summary>
+        /// Recupera le richieste matchate ordinate per percentuale match
+        /// Admin e Agency con piano Premium possono accedere
+        /// </summary>
+        /// <returns>Lista di richieste matchate con miglior immobile e percentuale match</returns>
+        [HttpGet]
+        [Route(nameof(GetMatchedRequests))]
+        public async Task<IActionResult> GetMatchedRequests()
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
+                }
+
+                // Verifica che l'utente sia Admin o Agency con piano Premium
+                if (!await IsAdminOrAgencyPremiumAsync(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, 
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin o Agency con piano Premium può accedere a questa funzionalità" });
+                }
+
+                var result = await _dashboardService.GetMatchedRequests(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in GetMatchedRequests: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Recupera gli immobili con incarico in scadenza (meno di 30 giorni)
         /// Admin e Agency con piano Premium possono accedere
         /// </summary>

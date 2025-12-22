@@ -1840,6 +1840,419 @@ namespace BackEnd.Services.BusinessServices
                 throw new Exception($"Si è verificato un errore nel recupero degli immobili in scadenza: {ex.Message}");
             }
         }
+
+        public async Task<MatchedRequestsDataModel> GetMatchedRequests(string? userId)
+        {
+            try
+            {
+                // Genera chiave cache basata su userId
+                var cacheKey = $"MatchedRequests_{userId}";
+
+                // Verifica cache
+                if (_cache.TryGetValue(cacheKey, out MatchedRequestsDataModel? cachedData))
+                {
+                    _logger.LogInformation($"Dati MatchedRequests recuperati dalla cache per chiave: {cacheKey}");
+                    return cachedData!;
+                }
+
+                var result = new MatchedRequestsDataModel();
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogWarning("UserId non specificato per GetMatchedRequests");
+                    return result;
+                }
+
+                // Ottieni tutti gli userId nella cerchia dell'utente
+                var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                
+                if (circleUserIds == null || !circleUserIds.Any())
+                {
+                    _logger.LogWarning($"Nessun userId trovato nella cerchia per l'utente {userId}");
+                    return result;
+                }
+
+                // Recupera tutte le richieste nella cerchia (non chiuse?)
+                var requestsQuery = _unitOfWork.dbContext.Requests
+                    .Include(r => r.Customer)
+                    .Where(r => r.UserId != null && circleUserIds.Contains(r.UserId));
+
+                var allRequests = await requestsQuery.ToListAsync();
+
+                var matchedRequestsList = new List<MatchedRequestItemModel>();
+
+                // Per ogni richiesta, trova il miglior match
+                foreach (var request in allRequests)
+                {
+                    // Ottieni la cerchia estesa per questa richiesta (include Admin se Agency/Agent)
+                    var extendedCircleIds = new List<string>(circleUserIds);
+                    if (!string.IsNullOrEmpty(request.UserId))
+                    {
+                        var requestUser = await _userManager.FindByIdAsync(request.UserId);
+                        if (requestUser != null)
+                        {
+                            var requestUserRoles = await _userManager.GetRolesAsync(requestUser);
+                            
+                            // Se è un'Agency, aggiungi anche l'Admin che l'ha creata
+                            if (requestUserRoles.Contains("Agency") && !string.IsNullOrEmpty(requestUser.AdminId))
+                            {
+                                if (!extendedCircleIds.Contains(requestUser.AdminId))
+                                    extendedCircleIds.Add(requestUser.AdminId);
+                            }
+                            // Se è un'Agent, aggiungi anche l'Admin (direttamente o tramite Agency)
+                            else if (requestUserRoles.Contains("Agent") && !string.IsNullOrEmpty(requestUser.AdminId))
+                            {
+                                if (!extendedCircleIds.Contains(requestUser.AdminId))
+                                    extendedCircleIds.Add(requestUser.AdminId);
+                                
+                                // Aggiungi anche l'Agency dell'agent (se esiste)
+                                var agentAgency = await _userManager.FindByIdAsync(requestUser.AdminId);
+                                if (agentAgency != null && !string.IsNullOrEmpty(agentAgency.AdminId))
+                                {
+                                    if (!extendedCircleIds.Contains(agentAgency.AdminId))
+                                        extendedCircleIds.Add(agentAgency.AdminId);
+                                }
+                            }
+                        }
+                    }
+
+                    // Filtro base: solo immobili non venduti nella cerchia estesa
+                    var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
+                        .Include(x => x.User)
+                            .ThenInclude(u => u.Admin)
+                        .Where(x => !x.Sold && 
+                                   !string.IsNullOrEmpty(x.UserId) && 
+                                   extendedCircleIds.Contains(x.UserId));
+
+                    // Filtro City - se il comune non corrisponde, escludi
+                    if (!string.IsNullOrEmpty(request.City))
+                    {
+                        var requestCities = request.City.Split(',')
+                            .Select(c => c.Trim().ToLower())
+                            .Where(c => !string.IsNullOrEmpty(c))
+                            .ToList();
+                        
+                        if (requestCities.Any())
+                        {
+                            propertiesQuery = propertiesQuery.Where(x => 
+                                !string.IsNullOrEmpty(x.City) && 
+                                requestCities.Contains(x.City.ToLower()));
+                        }
+                    }
+
+                    var properties = await propertiesQuery.ToListAsync();
+                    
+                    // Calcola il match percentuale per ogni immobile
+                    var propertiesWithMatch = new List<(RealEstateProperty Property, int MatchPercentage)>();
+                    foreach (var property in properties)
+                    {
+                        int matchPercentage = CalculateMatchPercentage(request, property);
+                        if (matchPercentage >= 60) // Solo match >= 60%
+                        {
+                            propertiesWithMatch.Add((property, matchPercentage));
+                        }
+                    }
+
+                    // Se ci sono match, prendi il migliore (primo dopo ordinamento decrescente)
+                    if (propertiesWithMatch.Any())
+                    {
+                        var bestMatch = propertiesWithMatch
+                            .OrderByDescending(p => p.MatchPercentage)
+                            .First();
+
+                        matchedRequestsList.Add(new MatchedRequestItemModel
+                        {
+                            RequestId = request.Id,
+                            CustomerLastName = request.Customer?.LastName ?? string.Empty,
+                            CustomerName = request.Customer?.FirstName ?? string.Empty,
+                            PropertyTitle = bestMatch.Property.Title ?? string.Empty,
+                            CreationDate = request.CreationDate,
+                            MatchPercentage = bestMatch.MatchPercentage
+                        });
+                    }
+                }
+
+                // Ordina per match percentuale decrescente
+                result.MatchedRequests = matchedRequestsList
+                    .OrderByDescending(r => r.MatchPercentage)
+                    .ToList();
+
+                result.Total = result.MatchedRequests.Count;
+
+                // Cache 5 minuti
+                var cacheOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                    SlidingExpiration = TimeSpan.FromMinutes(2)
+                };
+                _cache.Set(cacheKey, result, cacheOptions);
+
+                _logger.LogInformation($"Dati MatchedRequests calcolati e salvati in cache per chiave: {cacheKey}, Total: {result.Total}");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero dei dati MatchedRequests: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError(ex.InnerException, $"InnerException: {ex.InnerException.Message}");
+                }
+                throw new Exception($"Si è verificato un errore nel recupero dei dati MatchedRequests: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Calcola la percentuale di match tra una richiesta e un immobile
+        /// Logica duplicata da RequestServices per coerenza
+        /// </summary>
+        private int CalculateMatchPercentage(Request request, RealEstateProperty property)
+        {
+            int totalCriteria = 0;
+            int matchedCriteria = 0;
+
+            // 1. Contract (Status) - OBBLIGATORIO
+            totalCriteria++;
+            if (property.Status != null && request.Contract != null && property.Status == request.Contract)
+            {
+                matchedCriteria++;
+            }
+
+            // 2. PropertyType (Typology) - se presente nella richiesta
+            if (!string.IsNullOrEmpty(request.PropertyType))
+            {
+                totalCriteria++;
+                var requestTypes = request.PropertyType.Split(',').Select(t => t.Trim().ToLower()).ToList();
+                if (!string.IsNullOrEmpty(property.Typology))
+                {
+                    var propertyTypeLower = property.Typology.ToLower();
+                    if (requestTypes.Any(type => propertyTypeLower.Contains(type)))
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 3. Province (State) - se presente nella richiesta
+            if (!string.IsNullOrEmpty(request.Province))
+            {
+                totalCriteria++;
+                if (!string.IsNullOrEmpty(property.State) && 
+                    property.State.Equals(request.Province, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 4. City - già filtrato nella query, ma lo contiamo come match
+            if (!string.IsNullOrEmpty(request.City))
+            {
+                totalCriteria++;
+                var requestCities = request.City.Split(',').Select(c => c.Trim().ToLower()).ToList();
+                if (!string.IsNullOrEmpty(property.City))
+                {
+                    var propertyCityLower = property.City.ToLower();
+                    if (requestCities.Any(city => propertyCityLower.Contains(city)))
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 5. Price Range - se presente nella richiesta
+            // Usa PriceReduced se > 0, altrimenti Price
+            double propertyPriceToUse = (property.PriceReduced > 0) ? property.PriceReduced : property.Price;
+            if (request.PriceFrom > 0 || request.PriceTo > 0)
+            {
+                totalCriteria++;
+                if (request.PriceFrom > 0 && request.PriceTo > 0)
+                {
+                    if (propertyPriceToUse >= request.PriceFrom && propertyPriceToUse <= request.PriceTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.PriceFrom > 0)
+                {
+                    if (propertyPriceToUse >= request.PriceFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.PriceTo > 0)
+                {
+                    if (propertyPriceToUse <= request.PriceTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 6. MQ Range - se presente nella richiesta
+            if (request.MQFrom > 0 || request.MQTo > 0)
+            {
+                totalCriteria++;
+                if (request.MQFrom > 0 && request.MQTo > 0)
+                {
+                    if (property.CommercialSurfaceate > request.MQFrom && property.CommercialSurfaceate < request.MQTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.MQFrom > 0)
+                {
+                    if (property.CommercialSurfaceate > request.MQFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.MQTo > 0)
+                {
+                    if (property.CommercialSurfaceate < request.MQTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 7. Garden Range - se presente nella richiesta
+            if (request.GardenFrom > 0 || request.GardenTo > 0)
+            {
+                totalCriteria++;
+                if (request.GardenFrom > 0 && request.GardenTo > 0)
+                {
+                    if (property.MQGarden >= request.GardenFrom && property.MQGarden <= request.GardenTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.GardenFrom > 0)
+                {
+                    if (property.MQGarden >= request.GardenFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.GardenTo > 0)
+                {
+                    if (property.MQGarden <= request.GardenTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 8. PropertyState - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.PropertyState) && 
+                !string.IsNullOrEmpty(property.StateOfTheProperty))
+            {
+                totalCriteria++;
+                if (property.StateOfTheProperty == request.PropertyState)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 9. Heating - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Heating) && !string.IsNullOrEmpty(property.Heating))
+            {
+                totalCriteria++;
+                if (property.Heating.Equals(request.Heating, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 10. ParkingSpaces - se presente nella richiesta
+            if (request.ParkingSpaces > 0)
+            {
+                totalCriteria++;
+                if (property.ParkingSpaces >= request.ParkingSpaces)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 11. Rooms Range - se presente nella richiesta
+            if (request.RoomsFrom > 0 || request.RoomsTo > 0)
+            {
+                totalCriteria++;
+                if (request.RoomsFrom > 0 && request.RoomsTo > 0)
+                {
+                    if (property.Bedrooms >= request.RoomsFrom && property.Bedrooms <= request.RoomsTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.RoomsFrom > 0)
+                {
+                    if (property.Bedrooms >= request.RoomsFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.RoomsTo > 0)
+                {
+                    if (property.Bedrooms <= request.RoomsTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 12. Bathrooms - se presente nella richiesta
+            if (request.Bathrooms > 0)
+            {
+                totalCriteria++;
+                if (property.Bathrooms >= request.Bathrooms)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 13. Floor - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Floor) && !string.IsNullOrEmpty(property.Floor))
+            {
+                totalCriteria++;
+                if (property.Floor.Equals(request.Floor, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 14. Furniture - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Furniture) && !string.IsNullOrEmpty(property.Furniture))
+            {
+                totalCriteria++;
+                if (property.Furniture.Equals(request.Furniture, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 15. EnergyClass - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.EnergyClass) && !string.IsNullOrEmpty(property.EnergyClass))
+            {
+                totalCriteria++;
+                if (property.EnergyClass == request.EnergyClass)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 16. Auction - sempre confrontato
+            totalCriteria++;
+            if (property.Auction == request.Auction)
+            {
+                matchedCriteria++;
+            }
+
+            // Calcola la percentuale
+            if (totalCriteria == 0)
+                return 0;
+
+            return (int)Math.Round((double)matchedCriteria / totalCriteria * 100);
+        }
     }
 }
 
