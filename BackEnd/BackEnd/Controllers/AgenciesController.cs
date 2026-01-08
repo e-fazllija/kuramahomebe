@@ -8,6 +8,7 @@ using BackEnd.Models.MailModels;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
+using BackEnd.Models.UserSubscriptionModels;
 using BackEnd.Services;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Authorization;
@@ -34,6 +35,8 @@ namespace BackEnd.Controllers
         private readonly IMapper _mapper;
         private readonly IMailService _mailService;
         private readonly ISubscriptionLimitService _subscriptionLimitService;
+        private readonly IUserSubscriptionServices _userSubscriptionServices;
+        private readonly ISubscriptionPlanServices _subscriptionPlanServices;
 
         public AgenciesController(
             UserManager<ApplicationUser> userManager,
@@ -42,7 +45,9 @@ namespace BackEnd.Controllers
             ILogger<AgenciesController> logger,
             IMapper mapper,
             IMailService mailService,
-            ISubscriptionLimitService subscriptionLimitService)
+            ISubscriptionLimitService subscriptionLimitService,
+            IUserSubscriptionServices userSubscriptionServices,
+            ISubscriptionPlanServices subscriptionPlanServices)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
@@ -51,6 +56,8 @@ namespace BackEnd.Controllers
             _mapper = mapper;
             _mailService = mailService;
             _subscriptionLimitService = subscriptionLimitService;
+            _userSubscriptionServices = userSubscriptionServices;
+            _subscriptionPlanServices = subscriptionPlanServices;
         }
 
         [HttpPost]
@@ -149,6 +156,54 @@ namespace BackEnd.Controllers
                 {
                     await userManager.DeleteAsync(user); // Rollback se l'assegnazione del ruolo fallisce
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Errore durante l'assegnazione del ruolo" });
+                }
+
+                // Se è stato specificato un piano di abbonamento, crea l'abbonamento per l'agenzia
+                if (model.SubscriptionPlanId.HasValue && model.SubscriptionPlanId.Value > 0)
+                {
+                    try
+                    {
+                        // Verifica che il piano esista e sia attivo
+                        var plan = await _subscriptionPlanServices.GetByIdAsync(model.SubscriptionPlanId.Value);
+                        if (plan == null || !plan.Active)
+                        {
+                            // Se il piano non esiste o non è attivo, elimina l'agenzia creata
+                            await userManager.DeleteAsync(user);
+                            return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() { Status = "Error", Message = "Il piano di abbonamento specificato non esiste o non è attivo" });
+                        }
+
+                        // Calcola la data di fine abbonamento in base al periodo di fatturazione
+                        DateTime? endDate = null;
+                        if (plan.BillingPeriod?.ToLower() == "monthly")
+                        {
+                            endDate = DateTime.UtcNow.AddMonths(1);
+                        }
+                        else if (plan.BillingPeriod?.ToLower() == "yearly")
+                        {
+                            endDate = DateTime.UtcNow.AddYears(1);
+                        }
+
+                        // Crea l'abbonamento per l'agenzia
+                        var subscriptionModel = new UserSubscriptionCreateModel
+                        {
+                            UserId = user.Id,
+                            SubscriptionPlanId = model.SubscriptionPlanId.Value,
+                            StartDate = DateTime.UtcNow,
+                            EndDate = endDate,
+                            Status = "active",
+                            AutoRenew = false // L'admin gestirà il rinnovo manualmente
+                        };
+
+                        await _userSubscriptionServices.CreateAsync(subscriptionModel);
+                        _logger.LogInformation($"Abbonamento creato per l'agenzia {user.Id} con piano {model.SubscriptionPlanId.Value}");
+                    }
+                    catch (Exception subscriptionEx)
+                    {
+                        // Se la creazione dell'abbonamento fallisce, elimina l'agenzia creata
+                        _logger.LogError(subscriptionEx, $"Errore durante la creazione dell'abbonamento per l'agenzia {user.Id}");
+                        await userManager.DeleteAsync(user);
+                        return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = $"Errore durante la creazione dell'abbonamento: {subscriptionEx.Message}" });
+                    }
                 }
 
                 // ===== MODALITÀ TEST: Comunicazione credenziali =====

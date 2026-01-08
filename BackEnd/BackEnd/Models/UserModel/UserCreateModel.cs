@@ -51,5 +51,12 @@ namespace BackEnd.Models.UserModel
         public string? VATNumber { get; set; }
         public string? PEC { get; set; }
         public string? SDICode { get; set; }
+
+        // --- ABBONAMENTO (per agenzie) ---
+        /// <summary>
+        /// ID del piano di abbonamento da assegnare all'agenzia durante la creazione.
+        /// Se specificato, verrà creato un abbonamento attivo per l'agenzia.
+        /// </summary>
+        public int? SubscriptionPlanId { get; set; }
     }
 }

@@ -43,7 +43,8 @@ namespace BackEnd.Services.BusinessServices
             try
             {
                 // Genera chiave cache basata su userId, agencyId e year
-                var cacheKey = $"MapData_{userId}_{agencyId ?? "all"}_{year ?? DateTime.UtcNow.Year}";
+                // Usa "current" per modalità "Corrente" (year null) per distinguerla dall'anno specifico
+                var cacheKey = $"MapData_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
 
                 // Verifica se i dati sono in cache
                 if (_cache.TryGetValue(cacheKey, out MapDataModel? cachedData))
@@ -55,6 +56,7 @@ namespace BackEnd.Services.BusinessServices
                 var result = new MapDataModel();
                 var now = DateTime.UtcNow;
                 var currentYear = year ?? now.Year;
+                bool isCurrentMode = !year.HasValue; // "Corrente" quando year è null
 
                 // Determina l'adminId in base al ruolo dell'utente
                 ApplicationUser? currentUser = null;
@@ -136,6 +138,16 @@ namespace BackEnd.Services.BusinessServices
                     }
                 }
 
+                // Applica filtro per anno se specificato (filtra per data creazione agenzia)
+                // Se year è null (modalità "Corrente"), mostra tutte le agenzie attive (nessun filtro)
+                if (year.HasValue)
+                {
+                    // Filtra solo le agenzie che esistevano nell'anno specificato
+                    // Mostra agenzie create prima o durante l'anno selezionato
+                    var targetYear = year.Value;
+                    agenciesBaseQuery = agenciesBaseQuery.Where(u => u.CreationDate.Year <= targetYear);
+                }
+
                 // Applica filtro agencyId se specificato (per la lista visualizzata sulla mappa)
                 IQueryable<ApplicationUser> agenciesQuery = agenciesBaseQuery;
                 if (!string.IsNullOrEmpty(filterAgencyId))
@@ -198,25 +210,34 @@ namespace BackEnd.Services.BusinessServices
                     Email = a.Email
                 }).ToList();
 
-                // Aggiungi l'admin stesso se è Admin e non è già nella lista (per la visualizzazione)
-                // MA NON aggiungerlo se c'è un filtro attivo per agenzia/agente specifico
-                if (currentUser != null && string.IsNullOrEmpty(filterAgencyId))
+                // Aggiungi l'admin stesso se è Admin e non è già nella lista
+                // Includi l'admin anche se il filtro è attivo per la sua agenzia (per modalità "Corrente")
+                if (currentUser != null)
                 {
                     var roles = await _userManager.GetRolesAsync(currentUser);
-                    if (roles.Contains("Admin") && !result.Agencies.Any(a => a.Id == currentUser.Id))
+                    if (roles.Contains("Admin"))
                     {
-                        result.Agencies.Add(new MapAgencyModel
+                        // Verifica se il filtro è per l'admin stesso
+                        bool isFilterForAdminAgency = !string.IsNullOrEmpty(filterAgencyId) && 
+                            (filterAgencyId == currentUser.Id || 
+                             (filterAgencyId.StartsWith("agency_") && filterAgencyId.Replace("agency_", "") == currentUser.Id));
+                        
+                        // Aggiungi l'admin se: modalità "Corrente" OPPURE il filtro è per l'admin stesso
+                        if ((isCurrentMode || isFilterForAdminAgency) && !result.Agencies.Any(a => a.Id == currentUser.Id))
                         {
-                            Id = currentUser.Id,
-                            UserName = currentUser.UserName ?? string.Empty,
-                            AdminId = currentUser.AdminId,
-                            Address = currentUser.Address,
-                            City = currentUser.City,
-                            Province = currentUser.Province,
-                            ZipCode = currentUser.ZipCode,
-                            PhoneNumber = currentUser.PhoneNumber,
-                            Email = currentUser.Email
-                        });
+                            result.Agencies.Add(new MapAgencyModel
+                            {
+                                Id = currentUser.Id,
+                                UserName = currentUser.UserName ?? string.Empty,
+                                AdminId = currentUser.AdminId,
+                                Address = currentUser.Address,
+                                City = currentUser.City,
+                                Province = currentUser.Province,
+                                ZipCode = currentUser.ZipCode,
+                                PhoneNumber = currentUser.PhoneNumber,
+                                Email = currentUser.Email
+                            });
+                        }
                     }
                 }
 
@@ -308,7 +329,8 @@ namespace BackEnd.Services.BusinessServices
             try
             {
                 // Genera chiave cache basata su userId, agencyId e year
-                var cacheKey = $"Widget3Data_{userId}_{agencyId ?? "all"}_{year ?? DateTime.UtcNow.Year}";
+                // Usa "current" per modalità "Corrente" (year null) per distinguerla dall'anno specifico
+                var cacheKey = $"Widget3Data_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
 
                 // Verifica se i dati sono in cache
                 if (_cache.TryGetValue(cacheKey, out Widget3DataModel? cachedData))
@@ -320,6 +342,7 @@ namespace BackEnd.Services.BusinessServices
                 var result = new Widget3DataModel();
                 var now = DateTime.UtcNow;
                 var currentYear = year ?? now.Year;
+                bool isCurrentMode = !year.HasValue; // "Corrente" quando year è null
 
                 if (string.IsNullOrEmpty(userId))
                 {
@@ -344,9 +367,10 @@ namespace BackEnd.Services.BusinessServices
                 // Query base per gli immobili nella cerchia dell'utente corrente
                 // Include User per accedere a AdminId (usato nel filtro agency)
                 // GetCircleUserIdsFor già restituisce tutti gli ID nella cerchia corretta in base al ruolo
+                // Esclude immobili cancellati/archiviati
                 var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
                     .Include(p => p.User)
-                    .Where(p => circleUserIds.Contains(p.UserId));
+                    .Where(p => circleUserIds.Contains(p.UserId) && !p.Archived); // Esclude immobili archiviati/cancellati
 
                 // Applica filtro agencyId se specificato
                 if (!string.IsNullOrEmpty(filterAgencyId))
@@ -385,157 +409,258 @@ namespace BackEnd.Services.BusinessServices
                     }
                 }
 
-                // Filtra per anno (CreationDate o UpdateDate nell'anno)
-                // Include anche immobili venduti creati nell'anno corrente (anche se UpdateDate non è impostato)
-                // perché potrebbero essere stati venduti nell'anno corrente
-                var startYear = new DateTime(currentYear, 1, 1);
-                var endYear = new DateTime(currentYear, 12, 31, 23, 59, 59);
+                // Seleziona tutti gli immobili (con filtri applicati)
+                // Per "Corrente": tutti gli immobili degli ultimi 6 anni (non cancellati)
+                // Per anno specifico: immobili di quell'anno
+                IQueryable<RealEstateProperty> filteredPropertiesQuery = propertiesQuery;
 
-                var allProperties = await propertiesQuery
-                    .Where(p => (p.CreationDate.Year == currentYear) || 
-                               (p.UpdateDate.Year == currentYear && p.UpdateDate != default(DateTime)) ||
-                               // Include immobili venduti creati nell'anno corrente (potrebbero essere stati venduti nell'anno)
-                               (p.Sold && p.CreationDate.Year == currentYear))
-                    .ToListAsync();
-
-                // Genera array dei 12 mesi dell'anno
-                // Usa formato compatibile con frontend: "gen 25" (senza punto)
-                var months = new List<string>();
-                var culture = new System.Globalization.CultureInfo("it-IT");
-                for (int i = 0; i < 12; i++)
+                if (isCurrentMode)
                 {
-                    var date = new DateTime(currentYear, i + 1, 1);
-                    // Formato: "gen 25" (rimuove eventuali punti dal formato standard)
-                    var monthKey = date.ToString("MMM yy", culture).Replace(".", "").Trim();
-                    months.Add(monthKey);
+                    // Modalità "Corrente": ultimi 6 anni
+                    // Include TUTTI gli immobili degli ultimi 6 anni (inseriti o venduti)
+                    // Per inseriti: CreationDate negli ultimi 6 anni
+                    // Per venduti: soldDate (UpdateDate o CreationDate) negli ultimi 6 anni
+                    var startYear = currentYear - 5; // Ultimi 6 anni incluso l'anno corrente
+                    filteredPropertiesQuery = propertiesQuery
+                        .Where(p => 
+                            // Immobili inseriti negli ultimi 6 anni
+                            (p.CreationDate.Year >= startYear && p.CreationDate.Year <= currentYear) ||
+                            // Immobili venduti negli ultimi 6 anni (usa UpdateDate se valida, altrimenti CreationDate)
+                            (p.Sold && (
+                                (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1) && 
+                                 p.UpdateDate.Year >= startYear && p.UpdateDate.Year <= currentYear) ||
+                                ((p.UpdateDate == default(DateTime) || p.UpdateDate == new DateTime(1, 1, 1)) && 
+                                 p.CreationDate.Year >= startYear && p.CreationDate.Year <= currentYear)
+                            )));
                 }
-                result.Months = months;
-                
-                _logger.LogInformation($"Mesi generati per anno {currentYear}: {string.Join(", ", months)}");
+                else
+                {
+                    // Modalità anno specifico: solo quell'anno
+                    // Include SOLO:
+                    // 1. Immobili inseriti nel currentYear (CreationDate.Year == currentYear)
+                    // 2. Immobili venduti nel currentYear (UpdateDate.Year == currentYear quando Sold == true)
+                    filteredPropertiesQuery = propertiesQuery
+                        .Where(p => p.CreationDate.Year == currentYear || // Inseriti nel currentYear
+                                   (p.Sold && p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1) && p.UpdateDate.Year == currentYear)); // Venduti nel currentYear (con UpdateDate valida)
+                }
 
-                // Inizializza i dizionari per ogni mese
+                var allProperties = await filteredPropertiesQuery.ToListAsync();
+
+                // Genera array dei periodi (mesi o anni) in base alla modalità
+                var periods = new List<string>();
+                
+                if (isCurrentMode)
+                {
+                    // Modalità "Corrente": genera chiavi per anni (ultimi 6 anni)
+                    // Formato: "2021 I", "2021 V", "2022 I", "2022 V", ... "2026 I", "2026 V"
+                    var startYear = currentYear - 5; // Ultimi 6 anni
+                    for (int y = startYear; y <= currentYear; y++)
+                    {
+                        periods.Add($"{y} I"); // Inseriti
+                        periods.Add($"{y} V"); // Venduti
+                    }
+                    result.Months = periods; // Usa Months anche per anni per compatibilità
+                    _logger.LogInformation($"Anni generati per modalità Corrente: {string.Join(", ", periods)}");
+                }
+                else
+                {
+                    // Modalità anno specifico: genera mesi
+                    // Usa formato compatibile con frontend: "gen 25" (senza punto)
+                    var culture = new System.Globalization.CultureInfo("it-IT");
+                    for (int i = 0; i < 12; i++)
+                    {
+                        var date = new DateTime(currentYear, i + 1, 1);
+                        // Formato: "gen 25" (rimuove eventuali punti dal formato standard)
+                        var monthKey = date.ToString("MMM yy", culture).Replace(".", "").Trim();
+                        periods.Add(monthKey);
+                    }
+                    result.Months = periods;
+                    _logger.LogInformation($"Mesi generati per anno {currentYear}: {string.Join(", ", periods)}");
+                }
+
+                // Inizializza i dizionari per ogni periodo (mese o anno)
                 var propertiesData = new PropertiesDataModel();
                 var soldPropertiesData = new PropertiesDataModel();
                 var commissionsMonthly = new Dictionary<string, decimal>();
 
-                foreach (var month in months)
+                foreach (var period in periods)
                 {
-                    propertiesData.Sale[month] = 0;
-                    propertiesData.Rent[month] = 0;
-                    propertiesData.Auction[month] = 0;
-                    soldPropertiesData.Sale[month] = 0;
-                    soldPropertiesData.Rent[month] = 0;
-                    soldPropertiesData.Auction[month] = 0;
-                    commissionsMonthly[month] = 0;
+                    propertiesData.Sale[period] = 0;
+                    propertiesData.Rent[period] = 0;
+                    propertiesData.Auction[period] = 0;
+                    soldPropertiesData.Sale[period] = 0;
+                    soldPropertiesData.Rent[period] = 0;
+                    soldPropertiesData.Auction[period] = 0;
+                    commissionsMonthly[period] = 0;
                 }
 
                 // Processa ogni immobile
                 foreach (var property in allProperties)
                 {
-                    // Data per immobili inseriti (usa CreationDate)
-                    var creationDate = property.CreationDate;
-                    var creationMonth = creationDate.ToString("MMM yy", new System.Globalization.CultureInfo("it-IT")).Replace(".", "").Trim();
-
-                    if (creationDate.Year == currentYear && months.Contains(creationMonth))
+                    if (isCurrentMode)
                     {
-                        // Verifica che l'incarico non sia scaduto
-                        bool isAssignmentValid = false;
-                        if (property.AssignmentEnd == default(DateTime) || property.AssignmentEnd == new DateTime(1, 1, 1))
+                        // Modalità "Corrente": aggregazione per anno
+                        var creationYear = property.CreationDate.Year;
+                        var insertedKey = $"{creationYear} I";
+                        
+                        // Verifica che l'anno sia negli ultimi 6 anni
+                        var startYear = currentYear - 5;
+                        if (creationYear >= startYear && creationYear <= currentYear && periods.Contains(insertedKey))
                         {
-                            // Incarico senza scadenza, sempre valido
-                            isAssignmentValid = true;
-                        }
-                        else
-                        {
-                            // L'incarico deve essere valido (non scaduto)
-                            isAssignmentValid = property.AssignmentEnd > now;
-                        }
-
-                        // Categorizza per Status e Auction solo se l'incarico è valido
-                        if (isAssignmentValid)
-                        {
-                            if (property.Auction)
+                            // Per "Corrente", mostra tutti gli inseriti (non cancellati) indipendentemente da scadenza
+                            // Ma NON mostrare se l'immobile è stato venduto (il venduto va nel suo anno)
+                            if (!property.Sold)
                             {
-                                propertiesData.Auction[creationMonth]++;
-                            }
-                            else if (property.Status == "Vendita")
-                            {
-                                propertiesData.Sale[creationMonth]++;
-                            }
-                            else if (property.Status == "Affitto")
-                            {
-                                propertiesData.Rent[creationMonth]++;
-                            }
-                        }
-                    }
-
-                    // Data per immobili venduti (usa UpdateDate se valida, altrimenti CreationDate)
-                    if (property.Sold)
-                    {
-                        DateTime soldDate;
-                        if (property.UpdateDate != default(DateTime) && property.UpdateDate != new DateTime(1, 1, 1))
-                        {
-                            soldDate = property.UpdateDate;
-                        }
-                        else
-                        {
-                            soldDate = property.CreationDate;
-                        }
-
-                        var soldMonth = soldDate.ToString("MMM yy", new System.Globalization.CultureInfo("it-IT")).Replace(".", "").Trim();
-
-                        if (soldDate.Year == currentYear && months.Contains(soldMonth))
-                        {
-                            // Verifica che l'incarico non sia scaduto al momento della vendita
-                            bool isAssignmentValid = false;
-                            if (property.AssignmentEnd == default(DateTime) || property.AssignmentEnd == new DateTime(1, 1, 1))
-                            {
-                                // Incarico senza scadenza, sempre valido
-                                isAssignmentValid = true;
-                            }
-                            else
-                            {
-                                // L'incarico deve essere valido al momento della vendita
-                                isAssignmentValid = property.AssignmentEnd > soldDate || property.AssignmentEnd > now;
-                            }
-
-                            // Categorizza per Status e Auction (solo se l'incarico è valido)
-                            if (isAssignmentValid)
-                            {
+                                // Immobile inserito ma non venduto: mostra nell'anno di inserimento
                                 if (property.Auction)
                                 {
-                                    soldPropertiesData.Auction[soldMonth]++;
+                                    propertiesData.Auction[insertedKey]++;
                                 }
                                 else if (property.Status == "Vendita")
                                 {
-                                    soldPropertiesData.Sale[soldMonth]++;
+                                    propertiesData.Sale[insertedKey]++;
                                 }
                                 else if (property.Status == "Affitto")
                                 {
-                                    soldPropertiesData.Rent[soldMonth]++;
+                                    propertiesData.Rent[insertedKey]++;
                                 }
+                            }
+                        }
 
-                                // Aggiungi provvigione al mese di vendita solo se l'incarico è valido
-                                var commission = (decimal)property.EffectiveCommission;
-                                if (commission > 0)
-                                {
-                                    _logger.LogInformation($"Immobile {property.Id}: EffectiveCommission={commission}, soldMonth={soldMonth}, soldDate={soldDate:yyyy-MM-dd}, AssignmentEnd={property.AssignmentEnd:yyyy-MM-dd}");
-                                }
-                                commissionsMonthly[soldMonth] += commission;
+                        // Gestione immobili venduti
+                        if (property.Sold)
+                        {
+                            DateTime soldDate;
+                            if (property.UpdateDate != default(DateTime) && property.UpdateDate != new DateTime(1, 1, 1))
+                            {
+                                soldDate = property.UpdateDate;
                             }
                             else
                             {
-                                // Immobile venduto ma con incarico scaduto, non includere nelle statistiche
-                                _logger.LogWarning($"Immobile {property.Id} venduto ma incarico scaduto: soldDate={soldDate:yyyy-MM-dd}, AssignmentEnd={property.AssignmentEnd:yyyy-MM-dd}");
+                                soldDate = property.CreationDate;
+                            }
+
+                            var soldYear = soldDate.Year;
+                            var soldKey = $"{soldYear} V";
+                            
+                            if (soldYear >= startYear && soldYear <= currentYear && periods.Contains(soldKey))
+                            {
+                                // Immobile venduto: mostra nell'anno di vendita
+                                if (property.Auction)
+                                {
+                                    soldPropertiesData.Auction[soldKey]++;
+                                }
+                                else if (property.Status == "Vendita")
+                                {
+                                    soldPropertiesData.Sale[soldKey]++;
+                                }
+                                else if (property.Status == "Affitto")
+                                {
+                                    soldPropertiesData.Rent[soldKey]++;
+                                }
+
+                                // Provvigioni incassate nell'anno di vendita
+                                var commission = (decimal)property.EffectiveCommission;
+                                if (commission > 0)
+                                {
+                                    commissionsMonthly[soldKey] += commission;
+                                }
                             }
                         }
-                        else
+                    }
+                    else
+                    {
+                        // Modalità anno specifico: aggregazione per mese
+                        // Per anno specifico, mostra TUTTI gli immobili inseriti/venduti in quell'anno
+                        // indipendentemente dallo stato attuale dell'incarico (come richiesto: anche se scaduti/venduti dopo)
+                        // Data per immobili inseriti (usa CreationDate)
+                        var creationDate = property.CreationDate;
+                        var creationMonth = creationDate.ToString("MMM yy", new System.Globalization.CultureInfo("it-IT")).Replace(".", "").Trim();
+
+                        if (creationDate.Year == currentYear && periods.Contains(creationMonth))
                         {
-                            // Log per debug se non viene incluso
-                            var commission = (decimal)property.EffectiveCommission;
-                            if (commission > 0)
+                            // Per anno specifico, mostra tutti gli inseriti di quell'anno
+                            // NON verifichiamo se l'incarico è ancora valido oggi (come richiesto)
+                            // Solo verifichiamo che non sia stato venduto (il venduto va nel mese di vendita)
+                            if (!property.Sold)
                             {
-                                _logger.LogWarning($"Immobile {property.Id} venduto con provvigione {commission} ma non incluso: soldDate.Year={soldDate.Year}, currentYear={currentYear}, soldMonth={soldMonth}, months.Contains={months.Contains(soldMonth)}");
+                                // Immobile inserito ma non venduto: conta nell'anno di inserimento
+                                if (property.Auction)
+                                {
+                                    propertiesData.Auction[creationMonth]++;
+                                }
+                                else if (property.Status == "Vendita")
+                                {
+                                    propertiesData.Sale[creationMonth]++;
+                                }
+                                else if (property.Status == "Affitto")
+                                {
+                                    propertiesData.Rent[creationMonth]++;
+                                }
+                            }
+                            // Se è stato venduto, verrà contato nel mese di vendita (vedi logica sotto)
+                        }
+
+                        // Data per immobili venduti (usa UpdateDate se valida, altrimenti CreationDate)
+                        if (property.Sold)
+                        {
+                            DateTime soldDate;
+                            if (property.UpdateDate != default(DateTime) && property.UpdateDate != new DateTime(1, 1, 1))
+                            {
+                                soldDate = property.UpdateDate;
+                            }
+                            else
+                            {
+                                soldDate = property.CreationDate;
+                            }
+
+                            var soldMonth = soldDate.ToString("MMM yy", new System.Globalization.CultureInfo("it-IT")).Replace(".", "").Trim();
+
+                            if (soldDate.Year == currentYear && periods.Contains(soldMonth))
+                            {
+                                // Per anno specifico, mostra TUTTI i venduti di quell'anno
+                                // Verifica solo che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                                bool isAssignmentValid = false;
+                                if (property.AssignmentEnd == default(DateTime) || property.AssignmentEnd == new DateTime(1, 1, 1))
+                                {
+                                    // Incarico senza scadenza, sempre valido
+                                    isAssignmentValid = true;
+                                }
+                                else
+                                {
+                                    // L'incarico deve essere valido al momento della vendita (non oggi)
+                                    isAssignmentValid = property.AssignmentEnd > soldDate;
+                                }
+
+                                // Categorizza per Status e Auction (solo se l'incarico era valido al momento della vendita)
+                                if (isAssignmentValid)
+                                {
+                                    if (property.Auction)
+                                    {
+                                        soldPropertiesData.Auction[soldMonth]++;
+                                    }
+                                    else if (property.Status == "Vendita")
+                                    {
+                                        soldPropertiesData.Sale[soldMonth]++;
+                                    }
+                                    else if (property.Status == "Affitto")
+                                    {
+                                        soldPropertiesData.Rent[soldMonth]++;
+                                    }
+
+                                    // Aggiungi provvigione al mese di vendita
+                                    var commission = (decimal)property.EffectiveCommission;
+                                    if (commission > 0)
+                                    {
+                                        _logger.LogInformation($"Immobile {property.Id}: EffectiveCommission={commission}, soldMonth={soldMonth}, soldDate={soldDate:yyyy-MM-dd}, AssignmentEnd={property.AssignmentEnd:yyyy-MM-dd}");
+                                    }
+                                    commissionsMonthly[soldMonth] += commission;
+                                }
+                                else
+                                {
+                                    // Immobile venduto ma con incarico già scaduto al momento della vendita, non includere
+                                    _logger.LogWarning($"Immobile {property.Id} venduto ma incarico già scaduto al momento della vendita: soldDate={soldDate:yyyy-MM-dd}, AssignmentEnd={property.AssignmentEnd:yyyy-MM-dd}");
+                                }
                             }
                         }
                     }
@@ -571,51 +696,153 @@ namespace BackEnd.Services.BusinessServices
                 _logger.LogInformation($"TotalCommissionsPortfolio: {result.TotalCommissionsPortfolio}, TotalCommissionsEarned: {result.TotalCommissionsEarned}");
 
                 // Calcola totali provvigioni
-                // Portafoglio = somma EffectiveCommission degli immobili:
-                // - Sold = false (non venduti)
-                // - AssignmentEnd > oggi (incarico non scaduto) o AssignmentEnd è default/null (incarico senza scadenza)
-                // - CreationDate nell'anno selezionato
-                result.TotalCommissionsPortfolio = allProperties
-                    .Where(p => !p.Sold) // Solo immobili non venduti
-                    .Where(p => p.CreationDate.Year == currentYear) // Creati nell'anno selezionato
-                    .Where(p => 
-                    {
-                        // Se AssignmentEnd è default o null, considera l'incarico come non scaduto
-                        if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                if (isCurrentMode)
+                {
+                    // Modalità "Corrente": somma di tutti gli ultimi 6 anni
+                    var startYear = currentYear - 5;
+                    
+                    // Portafoglio = somma EffectiveCommission degli immobili non venduti degli ultimi 6 anni
+                    // che sono ancora attivi (incarico non scaduto)
+                    result.TotalCommissionsPortfolio = allProperties
+                        .Where(p => !p.Sold) // Solo immobili non venduti
+                        .Where(p => p.CreationDate.Year >= startYear && p.CreationDate.Year <= currentYear) // Creati negli ultimi 6 anni
+                        .Where(p => 
                         {
-                            return true; // Incarico senza scadenza, sempre valido
-                        }
-                        // Altrimenti verifica che non sia scaduto
-                        return p.AssignmentEnd > now;
-                    })
-                    .Sum(p => (decimal)p.EffectiveCommission);
+                            // Se AssignmentEnd è default o null, considera l'incarico come non scaduto
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                            {
+                                return true; // Incarico senza scadenza, sempre valido
+                            }
+                            // Altrimenti verifica che non sia scaduto
+                            return p.AssignmentEnd > now;
+                        })
+                        .Sum(p => (decimal)p.EffectiveCommission);
 
-                // Incassati = somma EffectiveCommission degli immobili venduti nell'anno
-                // ma solo se l'incarico non è scaduto (AssignmentEnd > oggi o null)
-                result.TotalCommissionsEarned = allProperties
-                    .Where(p => p.Sold) // Solo immobili venduti
-                    .Where(p =>
-                    {
-                        var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
-                            ? p.UpdateDate
-                            : p.CreationDate;
-                        return soldDate.Year == currentYear; // Venduti nell'anno selezionato
-                    })
-                    .Where(p =>
-                    {
-                        // Se AssignmentEnd è default o null, considera l'incarico come non scaduto
-                        if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                    // Incassati = somma EffectiveCommission degli immobili venduti negli ultimi 6 anni
+                    result.TotalCommissionsEarned = allProperties
+                        .Where(p => p.Sold) // Solo immobili venduti
+                        .Where(p =>
                         {
-                            return true; // Incarico senza scadenza, sempre valido
-                        }
-                        // Verifica che l'incarico non sia scaduto al momento della vendita
-                        var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
-                            ? p.UpdateDate
-                            : p.CreationDate;
-                        // L'incarico deve essere valido al momento della vendita
-                        return p.AssignmentEnd > soldDate || p.AssignmentEnd > now;
-                    })
-                    .Sum(p => (decimal)p.EffectiveCommission);
+                            var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
+                                ? p.UpdateDate
+                                : p.CreationDate;
+                            return soldDate.Year >= startYear && soldDate.Year <= currentYear; // Venduti negli ultimi 6 anni
+                        })
+                        .Sum(p => (decimal)p.EffectiveCommission);
+                }
+                else
+                {
+                    // Modalità anno specifico: mostra TUTTI gli immobili inseriti/venduti di quell'anno
+                    // anche se l'incarico è scaduto dopo (come richiesto per un resoconto affidabile)
+                    // Portafoglio = somma EffectiveCommission degli immobili NON venduti inseriti nell'anno
+                    // (non verifichiamo se l'incarico è scaduto oggi, mostriamo comunque)
+                    result.TotalCommissionsPortfolio = allProperties
+                        .Where(p => !p.Sold) // Solo immobili non venduti
+                        .Where(p => p.CreationDate.Year == currentYear) // Creati nell'anno selezionato
+                        .Sum(p => (decimal)p.EffectiveCommission);
+
+                    // Incassati = somma EffectiveCommission degli immobili venduti nell'anno
+                    // ma solo se l'incarico era valido AL MOMENTO DELLA VENDITA (non oggi)
+                    result.TotalCommissionsEarned = allProperties
+                        .Where(p => p.Sold) // Solo immobili venduti
+                        .Where(p =>
+                        {
+                            var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
+                                ? p.UpdateDate
+                                : p.CreationDate;
+                            return soldDate.Year == currentYear; // Venduti nell'anno selezionato
+                        })
+                        .Where(p =>
+                        {
+                            // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA
+                            var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
+                                ? p.UpdateDate
+                                : p.CreationDate;
+                            
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                            {
+                                return true; // Incarico senza scadenza, sempre valido
+                            }
+                            // L'incarico deve essere valido al momento della vendita (non oggi)
+                            return p.AssignmentEnd > soldDate;
+                        })
+                        .Sum(p => (decimal)p.EffectiveCommission);
+                }
+
+                // Calcola totali valori immobili (Portafoglio e Venduti)
+                if (isCurrentMode)
+                {
+                    // Modalità "Corrente": ultimi 6 anni
+                    var startYear = currentYear - 5;
+                    
+                    // Portafoglio = somma Price degli immobili non venduti degli ultimi 6 anni
+                    // che sono ancora attivi (incarico non scaduto)
+                    var portfolioPropertiesForValue = allProperties
+                        .Where(p => !p.Sold) // Solo immobili non venduti
+                        .Where(p => p.CreationDate.Year >= startYear && p.CreationDate.Year <= currentYear) // Creati negli ultimi 6 anni
+                        .Where(p => 
+                        {
+                            // Se AssignmentEnd è default o null, considera l'incarico come non scaduto
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                            {
+                                return true; // Incarico senza scadenza, sempre valido
+                            }
+                            // Altrimenti verifica che non sia scaduto
+                            return p.AssignmentEnd > now;
+                        })
+                        .ToList();
+                    
+                    result.TotalPortfolioValue = (decimal)portfolioPropertiesForValue.Sum(p => p.Price);
+
+                    // Venduti = somma Price degli immobili venduti negli ultimi 6 anni
+                    var soldPropertiesForValue = allProperties
+                        .Where(p => p.Sold) // Solo immobili venduti
+                        .Where(p =>
+                        {
+                            var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
+                                ? p.UpdateDate
+                                : p.CreationDate;
+                            return soldDate.Year >= startYear && soldDate.Year <= currentYear; // Venduti negli ultimi 6 anni
+                        })
+                        .ToList();
+                    
+                    result.TotalSoldValue = (decimal)soldPropertiesForValue.Sum(p => p.Price);
+                }
+                else
+                {
+                    // Modalità anno specifico
+                    // Portafoglio = somma Price degli immobili NON venduti inseriti nell'anno con incarico valido
+                    var portfolioPropertiesForValue = allProperties
+                        .Where(p => !p.Sold) // Solo immobili non venduti
+                        .Where(p => p.CreationDate.Year == currentYear) // Creati nell'anno selezionato
+                        .Where(p => 
+                        {
+                            // Verifica che l'incarico sia valido
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                            {
+                                return true; // Incarico senza scadenza, sempre valido
+                            }
+                            // Altrimenti verifica che non sia scaduto
+                            return p.AssignmentEnd > now;
+                        })
+                        .ToList();
+                    
+                    result.TotalPortfolioValue = (decimal)portfolioPropertiesForValue.Sum(p => p.Price);
+
+                    // Venduti = somma Price degli immobili venduti nell'anno
+                    var soldPropertiesForValue = allProperties
+                        .Where(p => p.Sold) // Solo immobili venduti
+                        .Where(p =>
+                        {
+                            var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
+                                ? p.UpdateDate
+                                : p.CreationDate;
+                            return soldDate.Year == currentYear; // Venduti nell'anno selezionato
+                        })
+                        .ToList();
+                    
+                    result.TotalSoldValue = (decimal)soldPropertiesForValue.Sum(p => p.Price);
+                }
 
                 // Salva in cache per 5 minuti
                 var cacheOptions = new MemoryCacheEntryOptions
@@ -749,21 +976,32 @@ namespace BackEnd.Services.BusinessServices
 
                     var nowDateOnly = DateTime.UtcNow.Date;
                     
-                    // Recupera immobili dell'agenzia (include anche immobili dell'admin se è l'agenzia admin)
-                    // Escludi immobili scaduti (solo incarichi validi)
-                    var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
+                    // Recupera TUTTI gli immobili dell'agenzia (non cancellati)
+                    // Per properties, customers, requests, appointments usiamo solo quelli con incarico valido OGGI
+                    // Per soldProperties e commissions dobbiamo verificare l'incarico AL MOMENTO DELLA VENDITA, non oggi
+                    var propertiesQueryForActive = _unitOfWork.dbContext.RealEstateProperties
                         .Include(p => p.User)
                         .Where(p => !string.IsNullOrEmpty(p.UserId) && 
                                    circleUserIds.Contains(p.UserId) && 
                                    ((p.User != null && !string.IsNullOrEmpty(p.User.AdminId) && p.User.AdminId == agencyId) || p.UserId == agencyId) &&
+                                   !p.Archived && // Escludi cancellati
                                    (p.AssignmentEnd == default(DateTime) || 
                                     p.AssignmentEnd == new DateTime(1, 1, 1) || 
                                     p.AssignmentEnd.Date >= nowDateOnly));
                     
-                    var allAgencyProperties = await propertiesQuery.ToListAsync();
+                    // Query per TUTTI gli immobili (inclusi quelli con incarico scaduto) per verificare vendite e commissioni
+                    var allAgencyPropertiesForSalesQuery = _unitOfWork.dbContext.RealEstateProperties
+                        .Include(p => p.User)
+                        .Where(p => !string.IsNullOrEmpty(p.UserId) && 
+                                   circleUserIds.Contains(p.UserId) && 
+                                   ((p.User != null && !string.IsNullOrEmpty(p.User.AdminId) && p.User.AdminId == agencyId) || p.UserId == agencyId) &&
+                                   !p.Archived); // Solo escludi cancellati, non filtrare per incarico
+                    
+                    var allAgencyPropertiesActive = await propertiesQueryForActive.ToListAsync();
+                    var allAgencyPropertiesAll = await allAgencyPropertiesForSalesQuery.ToListAsync();
 
-                    // Properties: totale immobili dell'agenzia creati nell'anno (già filtrati per incarico valido)
-                    var properties = allAgencyProperties
+                    // Properties: totale immobili dell'agenzia creati nell'anno (solo con incarico valido oggi)
+                    var properties = allAgencyPropertiesActive
                         .Where(p => p.CreationDate.Year == currentYear)
                         .Count();
 
@@ -773,15 +1011,25 @@ namespace BackEnd.Services.BusinessServices
                         .Where(c => c.CreationDate.Year == currentYear)
                         .CountAsync();
 
-                    // SoldProperties: immobili venduti nell'anno (già filtrati per incarico valido)
-                    var soldProperties = allAgencyProperties
+                    // SoldProperties: immobili venduti nell'anno con incarico valido AL MOMENTO DELLA VENDITA
+                    var soldProperties = allAgencyPropertiesAll
                         .Where(p => p.Sold)
                         .Where(p =>
                         {
                             var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
                                 ? p.UpdateDate
                                 : p.CreationDate;
-                            return soldDate.Year == currentYear;
+                            
+                            // Deve essere venduto nell'anno selezionato
+                            if (soldDate.Year != currentYear)
+                                return false;
+                            
+                            // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                                return true; // Incarico senza scadenza, sempre valido
+                            
+                            // L'incarico deve essere valido al momento della vendita
+                            return p.AssignmentEnd > soldDate;
                         })
                         .Count();
 
@@ -796,19 +1044,30 @@ namespace BackEnd.Services.BusinessServices
                     // Requests: richieste degli agenti dell'agenzia create nell'anno
                     var requests = await _unitOfWork.dbContext.Requests
                         .Where(r => (r.UserId != null && agencyAgentIds.Contains(r.UserId)) || r.UserId == agencyId)
+                        .Where(r => !r.Archived) // Escludi richieste cancellate
                         .Where(r => r.CreationDate.Year == currentYear)
                         .CountAsync();
 
                     // Commissions: guadagni totali (somma EffectiveCommission degli immobili venduti)
-                    // Solo immobili con incarico valido (già filtrati nella query principale)
-                    var commissions = allAgencyProperties
+                    // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA, non oggi
+                    var commissions = allAgencyPropertiesAll
                         .Where(p => p.Sold)
                         .Where(p =>
                         {
                             var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
                                 ? p.UpdateDate
                                 : p.CreationDate;
-                            return soldDate.Year == currentYear;
+                            
+                            // Deve essere venduto nell'anno selezionato
+                            if (soldDate.Year != currentYear)
+                                return false;
+                            
+                            // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                                return true; // Incarico senza scadenza, sempre valido
+                            
+                            // L'incarico deve essere valido al momento della vendita
+                            return p.AssignmentEnd > soldDate;
                         })
                         .Sum(p => (decimal)p.EffectiveCommission);
 
@@ -977,39 +1236,59 @@ namespace BackEnd.Services.BusinessServices
                     
                     var nowDateOnly = DateTime.UtcNow.Date;
                     
-                    // Recupera immobili dell'agente
-                    // Escludi immobili scaduti (solo incarichi validi)
-                    var propertiesQuery = _unitOfWork.dbContext.RealEstateProperties
+                    // Recupera immobili dell'agente con incarico valido OGGI (per loadedProperties)
+                    var propertiesQueryForActive = _unitOfWork.dbContext.RealEstateProperties
                         .Include(p => p.User)
                         .Where(p => !string.IsNullOrEmpty(p.UserId) && 
                                    circleUserIds.Contains(p.UserId) && 
                                    p.UserId == agentId &&
+                                   !p.Archived &&
                                    (p.AssignmentEnd == default(DateTime) || 
                                     p.AssignmentEnd == new DateTime(1, 1, 1) || 
                                     p.AssignmentEnd.Date >= nowDateOnly));
                     
-                    var allAgentProperties = await propertiesQuery.ToListAsync();
+                    // Query per TUTTI gli immobili (inclusi quelli con incarico scaduto) per verificare vendite e commissioni
+                    var allAgentPropertiesForSalesQuery = _unitOfWork.dbContext.RealEstateProperties
+                        .Include(p => p.User)
+                        .Where(p => !string.IsNullOrEmpty(p.UserId) && 
+                                   circleUserIds.Contains(p.UserId) && 
+                                   p.UserId == agentId &&
+                                   !p.Archived); // Solo escludi cancellati, non filtrare per incarico
+                    
+                    var allAgentPropertiesActive = await propertiesQueryForActive.ToListAsync();
+                    var allAgentPropertiesAll = await allAgentPropertiesForSalesQuery.ToListAsync();
 
-                    // SoldProperties: immobili venduti nell'anno (già filtrati per incarico valido)
-                    var soldProperties = allAgentProperties
+                    // SoldProperties: immobili venduti nell'anno con incarico valido AL MOMENTO DELLA VENDITA
+                    var soldProperties = allAgentPropertiesAll
                         .Where(p => p.Sold)
                         .Where(p =>
                         {
                             var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
                                 ? p.UpdateDate
                                 : p.CreationDate;
-                            return soldDate.Year == currentYear;
+                            
+                            // Deve essere venduto nell'anno selezionato
+                            if (soldDate.Year != currentYear)
+                                return false;
+                            
+                            // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                                return true; // Incarico senza scadenza, sempre valido
+                            
+                            // L'incarico deve essere valido al momento della vendita
+                            return p.AssignmentEnd > soldDate;
                         })
                         .Count();
 
-                    // LoadedProperties: immobili caricati nell'anno (già filtrati per incarico valido)
-                    var loadedProperties = allAgentProperties
+                    // LoadedProperties: immobili caricati nell'anno (solo con incarico valido oggi)
+                    var loadedProperties = allAgentPropertiesActive
                         .Where(p => p.CreationDate.Year == currentYear)
                         .Count();
 
                     // Requests: richieste dell'agente create nell'anno
                     var requests = await _unitOfWork.dbContext.Requests
                         .Where(r => r.UserId != null && r.UserId == agentId)
+                        .Where(r => !r.Archived) // Escludi richieste cancellate
                         .Where(r => r.CreationDate.Year == currentYear)
                         .CountAsync();
 
@@ -1021,15 +1300,25 @@ namespace BackEnd.Services.BusinessServices
                         .CountAsync();
 
                     // Commissions: guadagni totali (somma EffectiveCommission degli immobili venduti)
-                    // Solo immobili con incarico valido (già filtrati nella query principale)
-                    var commissions = allAgentProperties
+                    // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA, non oggi
+                    var commissions = allAgentPropertiesAll
                         .Where(p => p.Sold)
                         .Where(p =>
                         {
                             var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
                                 ? p.UpdateDate
                                 : p.CreationDate;
-                            return soldDate.Year == currentYear;
+                            
+                            // Deve essere venduto nell'anno selezionato
+                            if (soldDate.Year != currentYear)
+                                return false;
+                            
+                            // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                            if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                                return true; // Incarico senza scadenza, sempre valido
+                            
+                            // L'incarico deve essere valido al momento della vendita
+                            return p.AssignmentEnd > soldDate;
                         })
                         .Sum(p => (decimal)p.EffectiveCommission);
 
@@ -1415,12 +1704,18 @@ namespace BackEnd.Services.BusinessServices
                 var targetYear = year ?? now.Year;
 
                 // ===== Portafoglio (non venduti, incarico valido) =====
+                // Mostra SEMPRE tutti gli immobili attualmente in portafoglio, INDIPENDENTEMENTE dall'anno di inserimento
+                // Il portafoglio non viene filtrato per anno - mostra lo stato attuale del portafoglio
                 var portfolioPropsQuery = _unitOfWork.dbContext.RealEstateProperties
                     .Include(p => p.User)
                     .Where(p => !string.IsNullOrEmpty(p.UserId) &&
                                 circleUserIds.Contains(p.UserId) &&
                                 !p.Sold &&
-                                (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd >= now));
+                                !p.Archived && // Escludi immobili cancellati
+                                (p.AssignmentEnd == default(DateTime) || 
+                                 p.AssignmentEnd == new DateTime(1, 1, 1) || 
+                                 p.AssignmentEnd >= now)); // Incarico ancora valido
+                // NOTA: NON filtrare per CreationDate.Year - il portafoglio mostra sempre lo stato attuale
 
                 var portfolioProps = await portfolioPropsQuery.ToListAsync();
 
@@ -1442,26 +1737,34 @@ namespace BackEnd.Services.BusinessServices
                 result.Portfolio = portfolioItems;
                 result.TotalPortfolioCommission = (decimal)portfolioProps.Sum(p => p.EffectiveCommission);
 
-                // ===== Vendite anno corrente (Sold=true, anno = filtro) =====
-                // Escludi immobili scaduti (solo incarichi validi al momento della vendita)
-                var nowDateOnly = DateTime.UtcNow.Date;
+                // ===== Vendite anno selezionato (Sold=true, venduti nell'anno = filtro) =====
+                // Include solo immobili venduti nell'anno selezionato con incarico valido AL MOMENTO DELLA VENDITA
                 var salesPropsQuery = _unitOfWork.dbContext.RealEstateProperties
                     .Include(p => p.User)
                     .Where(p => !string.IsNullOrEmpty(p.UserId) &&
                                 circleUserIds.Contains(p.UserId) &&
                                 p.Sold &&
-                                (p.AssignmentEnd == default(DateTime) || 
-                                 p.AssignmentEnd == new DateTime(1, 1, 1) || 
-                                 p.AssignmentEnd.Date >= nowDateOnly));
+                                !p.Archived); // Escludi immobili cancellati
 
                 var salesProps = await salesPropsQuery.ToListAsync();
 
+                // Filtra per anno di vendita e verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA
                 var salesYearProps = salesProps.Where(p =>
                 {
                     var soldDate = (p.UpdateDate != default(DateTime) && p.UpdateDate != new DateTime(1, 1, 1))
                         ? p.UpdateDate
                         : p.CreationDate;
-                    return soldDate.Year == targetYear;
+                    
+                    // Verifica che sia venduto nell'anno selezionato
+                    if (soldDate.Year != targetYear)
+                        return false;
+                    
+                    // Verifica che l'incarico fosse valido AL MOMENTO DELLA VENDITA (non oggi)
+                    if (p.AssignmentEnd == default(DateTime) || p.AssignmentEnd == new DateTime(1, 1, 1))
+                        return true; // Incarico senza scadenza, sempre valido
+                    
+                    // L'incarico deve essere valido al momento della vendita
+                    return p.AssignmentEnd > soldDate;
                 }).ToList();
 
                 var salesItems = salesYearProps
@@ -1872,10 +2175,13 @@ namespace BackEnd.Services.BusinessServices
                     return result;
                 }
 
-                // Recupera tutte le richieste nella cerchia (non chiuse?)
+                // Recupera tutte le richieste nella cerchia (escludi chiuse e archiviate)
                 var requestsQuery = _unitOfWork.dbContext.Requests
                     .Include(r => r.Customer)
-                    .Where(r => r.UserId != null && circleUserIds.Contains(r.UserId));
+                    .Where(r => r.UserId != null && 
+                                circleUserIds.Contains(r.UserId) &&
+                                !r.Closed && // Escludi richieste chiuse
+                                !r.Archived); // Escludi richieste archiviate/cancellate
 
                 var allRequests = await requestsQuery.ToListAsync();
 
@@ -1966,7 +2272,6 @@ namespace BackEnd.Services.BusinessServices
                             CustomerLastName = request.Customer?.LastName ?? string.Empty,
                             CustomerName = request.Customer?.FirstName ?? string.Empty,
                             PropertyTitle = bestMatch.Property.Title ?? string.Empty,
-                            CreationDate = request.CreationDate,
                             MatchPercentage = bestMatch.MatchPercentage
                         });
                     }
