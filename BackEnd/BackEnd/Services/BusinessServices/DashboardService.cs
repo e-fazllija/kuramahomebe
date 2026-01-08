@@ -42,16 +42,17 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId, agencyId e year
                 // Usa "current" per modalità "Corrente" (year null) per distinguerla dall'anno specifico
-                var cacheKey = $"MapData_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
+                // var cacheKey = $"MapData_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
 
                 // Verifica se i dati sono in cache
-                if (_cache.TryGetValue(cacheKey, out MapDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati mappa recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out MapDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati mappa recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new MapDataModel();
                 var now = DateTime.UtcNow;
@@ -305,15 +306,16 @@ namespace BackEnd.Services.BusinessServices
                 result.TotalAgents = result.Agents.Count;
 
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Salva in cache per 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati mappa calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati mappa calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -328,16 +330,17 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId, agencyId e year
                 // Usa "current" per modalità "Corrente" (year null) per distinguerla dall'anno specifico
-                var cacheKey = $"Widget3Data_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
+                // var cacheKey = $"Widget3Data_{userId}_{agencyId ?? "all"}_{(year.HasValue ? year.Value.ToString() : "current")}";
 
                 // Verifica se i dati sono in cache
-                if (_cache.TryGetValue(cacheKey, out Widget3DataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Widget3 recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData;
-                }
+                // if (_cache.TryGetValue(cacheKey, out Widget3DataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Widget3 recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData;
+                // }
 
                 var result = new Widget3DataModel();
                 var now = DateTime.UtcNow;
@@ -844,15 +847,16 @@ namespace BackEnd.Services.BusinessServices
                     result.TotalSoldValue = (decimal)soldPropertiesForValue.Sum(p => p.Price);
                 }
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Salva in cache per 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Widget3 calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Widget3 calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -867,15 +871,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId, year, sortBy e sortOrder
-                var cacheKey = $"TopAgenciesData_{userId}_{year ?? DateTime.UtcNow.Year}_{sortBy ?? "SoldProperties"}_{sortOrder ?? "desc"}";
+                // var cacheKey = $"TopAgenciesData_{userId}_{year ?? DateTime.UtcNow.Year}_{sortBy ?? "SoldProperties"}_{sortOrder ?? "desc"}";
 
                 // Verifica se i dati sono in cache
-                if (_cache.TryGetValue(cacheKey, out TopAgenciesDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Top Agenzie recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out TopAgenciesDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Top Agenzie recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new TopAgenciesDataModel();
                 var now = DateTime.UtcNow;
@@ -1117,15 +1122,16 @@ namespace BackEnd.Services.BusinessServices
                 // Limita a Top 5 e converte in lista
                 result.Agencies = sortedAgencies.Take(5).ToList();
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Salva in cache per 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Top Agenzie calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Top Agenzie calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -1144,15 +1150,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId, year, sortBy e sortOrder
-                var cacheKey = $"TopAgentsData_{userId}_{year ?? DateTime.UtcNow.Year}_{sortBy ?? "SoldProperties"}_{sortOrder ?? "desc"}";
+                // var cacheKey = $"TopAgentsData_{userId}_{year ?? DateTime.UtcNow.Year}_{sortBy ?? "SoldProperties"}_{sortOrder ?? "desc"}";
 
                 // Verifica se i dati sono in cache
-                if (_cache.TryGetValue(cacheKey, out TopAgentsDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Top Agenti recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out TopAgentsDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Top Agenti recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new TopAgentsDataModel();
                 var now = DateTime.UtcNow;
@@ -1364,15 +1371,16 @@ namespace BackEnd.Services.BusinessServices
                 // Limita a Top 5 e converte in lista
                 result.Agents = sortedAgents.Take(5).ToList();
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Salva in cache per 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Top Agenti calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Top Agenti calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -1391,15 +1399,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId
-                var cacheKey = $"TopZonesData_{userId}";
+                // var cacheKey = $"TopZonesData_{userId}";
 
                 // Verifica se i dati sono in cache
-                if (_cache.TryGetValue(cacheKey, out TopZonesDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Top Zone recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out TopZonesDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Top Zone recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new TopZonesDataModel();
 
@@ -1507,15 +1516,16 @@ namespace BackEnd.Services.BusinessServices
                     });
                 }
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Salva in cache per 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Top Zone calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Top Zone calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -1534,15 +1544,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId
-                var cacheKey = $"TopTypologiesData_{userId}";
+                // var cacheKey = $"TopTypologiesData_{userId}";
 
                 // Verifica cache
-                if (_cache.TryGetValue(cacheKey, out TopTypologiesDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Top Tipologie recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out TopTypologiesDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Top Tipologie recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new TopTypologiesDataModel();
 
@@ -1650,15 +1661,16 @@ namespace BackEnd.Services.BusinessServices
                     });
                 }
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Cache 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Top Tipologie calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Top Tipologie calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -1677,13 +1689,14 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
-                var cacheKey = $"TopEarningsData_{userId}_{year ?? DateTime.UtcNow.Year}";
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
+                // var cacheKey = $"TopEarningsData_{userId}_{year ?? DateTime.UtcNow.Year}";
 
-                if (_cache.TryGetValue(cacheKey, out TopEarningsDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Top Guadagni recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out TopEarningsDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Top Guadagni recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new TopEarningsDataModel();
 
@@ -1785,15 +1798,16 @@ namespace BackEnd.Services.BusinessServices
                 result.SalesYear = salesItems;
                 result.TotalSalesYearCommission = (decimal)salesYearProps.Sum(p => p.EffectiveCommission);
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Cache 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Top Guadagni calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Top Guadagni calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -1812,15 +1826,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId, year e agencyId
-                var cacheKey = $"AnalyticsData_{userId}_{year}_{agencyId ?? "all"}";
+                // var cacheKey = $"AnalyticsData_{userId}_{year}_{agencyId ?? "all"}";
 
                 // Verifica cache
-                if (_cache.TryGetValue(cacheKey, out AnalyticsDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati Analytics recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out AnalyticsDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati Analytics recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new AnalyticsDataModel();
 
@@ -2033,15 +2048,16 @@ namespace BackEnd.Services.BusinessServices
                     result.Appointments.ConfirmedData[kvp.Key] = kvp.Value;
                 }
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Cache 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati Analytics calcolati e salvati in cache per chiave: {cacheKey}");
+                // _logger.LogInformation($"Dati Analytics calcolati e salvati in cache per chiave: {cacheKey}");
 
                 return result;
             }
@@ -2148,15 +2164,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Genera chiave cache basata su userId
-                var cacheKey = $"MatchedRequests_{userId}";
+                // var cacheKey = $"MatchedRequests_{userId}";
 
                 // Verifica cache
-                if (_cache.TryGetValue(cacheKey, out MatchedRequestsDataModel? cachedData))
-                {
-                    _logger.LogInformation($"Dati MatchedRequests recuperati dalla cache per chiave: {cacheKey}");
-                    return cachedData!;
-                }
+                // if (_cache.TryGetValue(cacheKey, out MatchedRequestsDataModel? cachedData))
+                // {
+                //     _logger.LogInformation($"Dati MatchedRequests recuperati dalla cache per chiave: {cacheKey}");
+                //     return cachedData!;
+                // }
 
                 var result = new MatchedRequestsDataModel();
 
@@ -2284,15 +2301,16 @@ namespace BackEnd.Services.BusinessServices
 
                 result.Total = result.MatchedRequests.Count;
 
+                // CACHE DISABILITATA - Dati sempre aggiornati in tempo reale
                 // Cache 5 minuti
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
-                    SlidingExpiration = TimeSpan.FromMinutes(2)
-                };
-                _cache.Set(cacheKey, result, cacheOptions);
+                // var cacheOptions = new MemoryCacheEntryOptions
+                // {
+                //     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CACHE_DURATION_MINUTES),
+                //     SlidingExpiration = TimeSpan.FromMinutes(2)
+                // };
+                // _cache.Set(cacheKey, result, cacheOptions);
 
-                _logger.LogInformation($"Dati MatchedRequests calcolati e salvati in cache per chiave: {cacheKey}, Total: {result.Total}");
+                // _logger.LogInformation($"Dati MatchedRequests calcolati e salvati in cache per chiave: {cacheKey}, Total: {result.Total}");
 
                 return result;
             }

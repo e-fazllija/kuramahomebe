@@ -62,7 +62,7 @@ namespace BackEnd.Controllers
 
         /// <summary>
         /// Recupera i dati necessari per il widget grafici immobili (Widget3)
-        /// Admin e Agency con piano Pro o Premium possono accedere
+        /// Admin e Agency solo con piano Pro o Premium
         /// </summary>
         /// <param name="agencyId">ID dell'agenzia o agente per filtrare (formato: "agency_xxx" o "agent_xxx" o "all")</param>
         /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
@@ -81,10 +81,10 @@ namespace BackEnd.Controllers
                 }
 
                 // Verifica che l'utente sia Admin o Agency con piano Pro o Premium
-                if (!await IsAdminOrAgencyProOrPremiumAsync(userId))
+                if (!await CanAccessWidget3Async(userId))
                 {
                     return StatusCode(StatusCodes.Status403Forbidden, 
-                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin o Agency con piano Pro o Premium può accedere a questa funzionalità" });
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: Admin e Agency possono accedere solo con piano Pro o Premium" });
                 }
 
                 var result = await _dashboardService.GetWidget3Data(userId, agencyId, year);
@@ -100,7 +100,7 @@ namespace BackEnd.Controllers
 
         /// <summary>
         /// Recupera i dati delle Top Agenzie per Widget7
-        /// Solo Admin con piano Premium può accedere
+        /// Admin e Agency con piano Premium possono accedere
         /// </summary>
         /// <param name="year">Anno per filtrare i dati (opzionale, default anno corrente)</param>
         /// <param name="sortBy">Campo per ordinare (properties, customers, requests, soldProperties, appointments, commissions)</param>
@@ -119,11 +119,11 @@ namespace BackEnd.Controllers
                     return Unauthorized(new AuthResponseModel { Status = "Error", Message = "Utente non autenticato" });
                 }
 
-                // Verifica che l'utente sia Admin con piano Premium
-                if (!await IsAdminPremiumAsync(userId))
+                // Verifica che l'utente sia Admin o Agency con piano Premium
+                if (!await IsAdminOrAgencyPremiumAsync(userId))
                 {
                     return StatusCode(StatusCodes.Status403Forbidden, 
-                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin con piano Premium può accedere a questa funzionalità" });
+                        new AuthResponseModel { Status = "Error", Message = "Accesso negato: solo Admin o Agency con piano Premium può accedere a questa funzionalità" });
                 }
 
                 var result = await _dashboardService.GetTopAgenciesData(userId, year, sortBy, sortOrder);
@@ -478,6 +478,41 @@ namespace BackEnd.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Errore in IsAdminOrAgencyPremiumAsync per userId {userId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Verifica se l'utente può accedere a Widget3 (Admin e Agency solo con Pro o Premium)
+        /// </summary>
+        private async Task<bool> CanAccessWidget3Async(string userId)
+        {
+            try
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return false;
+
+                var roles = await _userManager.GetRolesAsync(user);
+                
+                // Verifica se è Admin o Agency
+                if (!roles.Contains("Admin") && !roles.Contains("Agency"))
+                    return false;
+                
+                // Per le Agency, passa l'AdminId per permettere la risalita all'abbonamento dell'Admin
+                // Per gli Admin, passa null
+                var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
+                if (activeSubscription == null) return false;
+                
+                var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+                var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
+                
+                // Admin e Agency possono accedere solo con Pro o Premium
+                return (planName == "pro" || planName == "premium") && status == "active";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore in CanAccessWidget3Async per userId {userId}: {ex.Message}");
                 return false;
             }
         }
