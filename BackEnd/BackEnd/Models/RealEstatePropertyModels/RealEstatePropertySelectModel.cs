@@ -1,6 +1,7 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Models.CustomerModels;
 using BackEnd.Models.RealEstatePropertyPhotoModels;
+using BackEnd.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace BackEnd.Models.RealEstatePropertyModels
@@ -78,5 +79,11 @@ namespace BackEnd.Models.RealEstatePropertyModels
         // Proprietà usate quando l'immobile viene restituito in contesto di match con una richiesta
         public int MatchPercentage { get; set; }
         public string? AgencyName { get; set; }
+        
+        // Livello di accesso per questo immobile (1=completo, 2=solo lettura, 3=limitato)
+        public int AccessLevel { get; set; } = 1;
+        
+        // Informazioni del proprietario (popolato solo se AccessLevel == 3)
+        public OwnerInfoModel? OwnerInfo { get; set; }
     }
 }

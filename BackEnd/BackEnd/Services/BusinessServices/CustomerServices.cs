@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using BackEnd.Entities;
@@ -7,6 +7,8 @@ using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CustomerModels;
 using BackEnd.Models.Options;
 using BackEnd.Models.OutputModels;
+using Microsoft.AspNetCore.Identity;
+using BackEnd.Services;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -17,14 +19,16 @@ namespace BackEnd.Services.BusinessServices
         private readonly ILogger<CustomerServices> _logger;
         private readonly IOptionsMonitor<PaginationOptions> options;
         private readonly AccessControlService _accessControl;
+        private readonly UserManager<ApplicationUser> _userManager;
         
-        public CustomerServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CustomerServices> logger, IOptionsMonitor<PaginationOptions> options, AccessControlService accessControl)
+        public CustomerServices(IUnitOfWork unitOfWork, IMapper mapper, ILogger<CustomerServices> logger, IOptionsMonitor<PaginationOptions> options, AccessControlService accessControl, UserManager<ApplicationUser> userManager)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _logger = logger;
             this.options = options;
             _accessControl = accessControl;
+            _userManager = userManager;
         }
         public async Task<CustomerSelectModel> Create(CustomerCreateModel dto)
         {
@@ -166,10 +170,27 @@ namespace BackEnd.Services.BusinessServices
                 result.Total = await query.CountAsync();
 
                 List<Customer> queryList = await query
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     //.Include(x => x.CustomerType)
                     .ToListAsync();
 
                 result.Data = _mapper.Map<List<CustomerSelectModel>>(queryList);
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni cliente
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var customer in result.Data)
+                    {
+                        customer.AccessLevel = await _accessControl.GetAccessLevel(userId, customer.UserId);
+                        
+                        // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                        if ((customer.AccessLevel == 2 || customer.AccessLevel == 3) && !string.IsNullOrEmpty(customer.UserId))
+                        {
+                            customer.OwnerInfo = await GetOwnerInfo(customer.UserId);
+                        }
+                    }
+                }
 
                 _logger.LogInformation(nameof(Get));
 
@@ -309,6 +330,50 @@ namespace BackEnd.Services.BusinessServices
                     throw new Exception(ex.Message);
                 }
                 throw new Exception("Si è verificato un errore in fase di modifica");
+            }
+        }
+
+        /// <summary>
+        /// Ottiene le informazioni del proprietario di un'entità (usato per livello 3)
+        /// </summary>
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await _userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await _userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await _userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
     }

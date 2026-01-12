@@ -300,6 +300,8 @@ namespace BackEnd.Services.BusinessServices
             {
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
                     .Include(x => x.Photos.OrderBy(x => x.Position))
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
@@ -364,6 +366,21 @@ namespace BackEnd.Services.BusinessServices
 
                 result.Data = _mapper.Map<List<RealEstatePropertySelectModel>>(queryList);
 
+                // Calcola AccessLevel e popola OwnerInfo per ogni immobile
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var property in result.Data)
+                    {
+                        property.AccessLevel = await _accessControl.GetAccessLevel(userId, property.UserId);
+                        
+                        // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                        if ((property.AccessLevel == 2 || property.AccessLevel == 3) && !string.IsNullOrEmpty(property.UserId))
+                        {
+                            property.OwnerInfo = await GetOwnerInfo(property.UserId);
+                        }
+                    }
+                }
+
                 _logger.LogInformation(nameof(Get));
 
                 return result;
@@ -401,6 +418,8 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
                     .Include(x => x.Photos.OrderBy(x => x.Position))
                     .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
+                    .Where(x => !x.Archived && x.User!.Admin!.EmailConfirmed)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
@@ -490,6 +509,24 @@ namespace BackEnd.Services.BusinessServices
                         EffectiveCommission = x.EffectiveCommission
                     })
                     .ToListAsync();
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni immobile
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var property in queryList)
+                    {
+                        if (!string.IsNullOrEmpty(property.AgentId))
+                        {
+                            property.AccessLevel = await _accessControl.GetAccessLevel(userId, property.AgentId);
+                            
+                            // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                            if (property.AccessLevel == 2 || property.AccessLevel == 3)
+                            {
+                                property.OwnerInfo = await GetOwnerInfo(property.AgentId);
+                            }
+                        }
+                    }
+                }
 
                 result.Data = queryList;
 
@@ -869,6 +906,50 @@ namespace BackEnd.Services.BusinessServices
             {
                 _logger.LogError(ex.Message);
                 throw new Exception("Si è verificato un errore");
+            }
+        }
+
+        /// <summary>
+        /// Ottiene le informazioni del proprietario di un'entità (usato per livello 3)
+        /// </summary>
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
     }

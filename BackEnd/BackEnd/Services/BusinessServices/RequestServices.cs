@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using BackEnd.Entities;
@@ -174,7 +174,11 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
                 // Filtra per cerchia usando AccessControlService
-                query = await ApplyRoleBasedFilter(query, userId);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -203,10 +207,27 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 List<Request> queryList = await query
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     //.Include(x => x.RequestType)
                     .ToListAsync();
 
                 result.Data = _mapper.Map<List<RequestSelectModel>>(queryList);
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni richiesta
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var request in result.Data)
+                    {
+                        request.AccessLevel = await _accessControl.GetAccessLevel(userId, request.UserId);
+                        
+                        // Se livello 3, popola OwnerInfo
+                        if (request.AccessLevel == 3 && !string.IsNullOrEmpty(request.UserId))
+                        {
+                            request.OwnerInfo = await GetOwnerInfo(request.UserId);
+                        }
+                    }
+                }
 
                 _logger.LogInformation(nameof(Get));
 
@@ -307,10 +328,16 @@ namespace BackEnd.Services.BusinessServices
             {
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests
                     .Include(x => x.Customer)
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
-                query = await ApplyRoleBasedFilter(query, userId);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -346,6 +373,24 @@ namespace BackEnd.Services.BusinessServices
                         UserId = x.UserId
                     })
                     .ToListAsync();
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni richiesta
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var request in queryList)
+                    {
+                        if (!string.IsNullOrEmpty(request.UserId))
+                        {
+                            request.AccessLevel = await _accessControl.GetAccessLevel(userId, request.UserId);
+                            
+                            // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                            if (request.AccessLevel == 2 || request.AccessLevel == 3)
+                            {
+                                request.OwnerInfo = await GetOwnerInfo(request.UserId);
+                            }
+                        }
+                    }
+                }
 
                 result.Data = queryList;
 
@@ -960,6 +1005,50 @@ namespace BackEnd.Services.BusinessServices
                 {
                     throw new Exception("Si è verificato un errore in fase di modifica");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Ottiene le informazioni del proprietario di un'entità (usato per livello 3)
+        /// </summary>
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await _userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await _userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await _userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
     }

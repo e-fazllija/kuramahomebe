@@ -1,10 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
 using BackEnd.Models.RealEstatePropertyPhotoModels;
 using BackEnd.Models.CalendarModels;
+using BackEnd.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using BackEnd.Entities;
@@ -282,12 +283,71 @@ namespace BackEnd.Controllers
                 if (!canAccess)
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa proprietà" });
 
+                // Calcola il livello di accesso
+                int accessLevel = await _accessControl.GetAccessLevel(currentUserId, result.UserId);
+                result.AccessLevel = accessLevel;
+
+                // Se livello 3, restituisci solo OwnerInfo
+                if (accessLevel == 3)
+                {
+                    var ownerInfo = await GetOwnerInfo(result.UserId);
+                    var limitedResponse = new BackEnd.Models.LimitedAccessResponseModel
+                    {
+                        Id = result.Id,
+                        AccessLevel = 3,
+                        OwnerInfo = ownerInfo ?? new BackEnd.Models.OwnerInfoModel(),
+                        EntityType = "Property"
+                    };
+                    return Ok(limitedResponse);
+                }
+
                 return Ok(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await _userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await _userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await _userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
         [HttpDelete]

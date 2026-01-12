@@ -1,5 +1,6 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Models.RealEstatePropertyModels;
+using BackEnd.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace BackEnd.Models.RequestModels
@@ -39,5 +40,11 @@ namespace BackEnd.Models.RequestModels
         public ICollection<RequestNotes>? RequestNotes { get; set; }
         public string UserId { get; set; } = string.Empty;
         public ApplicationUser? User { get; set; }
+        
+        // Livello di accesso per questa richiesta (1=completo, 2=solo lettura, 3=limitato)
+        public int AccessLevel { get; set; } = 1;
+        
+        // Informazioni del proprietario (popolato solo se AccessLevel == 3)
+        public OwnerInfoModel? OwnerInfo { get; set; }
     }
 }
