@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using BackEnd.Entities;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
@@ -194,11 +194,39 @@ namespace BackEnd.Services.BusinessServices
                     .Include(x => x.User)
                     .OrderByDescending(x => x.EventStartDate);
                 
-                // Filtra per cerchia usando AccessControlService
+                // Filtra per cerchia con regole specifiche per il calendario
                 if (!string.IsNullOrEmpty(userId))
                 {
-                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
-                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                    var currentUser = await userManager.FindByIdAsync(userId);
+                    if (currentUser != null)
+                    {
+                        var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                        List<string> allowedUserIds = new List<string> { userId };
+
+                        if (currentUserRoles.Contains("Admin"))
+                        {
+                            // Admin vede tutto nella sua cerchia
+                            var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                            allowedUserIds = circleUserIds;
+                        }
+                        else if (currentUserRoles.Contains("Agency"))
+                        {
+                            // Agency vede solo: propri eventi + eventi dei suoi Agent
+                            var agents = await userManager.GetUsersInRoleAsync("Agent");
+                            var myAgents = agents.Where(x => x.AdminId == userId);
+                            allowedUserIds.AddRange(myAgents.Select(x => x.Id));
+                        }
+                        else if (currentUserRoles.Contains("Agent"))
+                        {
+                            // Agent vede solo: propri eventi + eventi della sua Agency
+                            if (!string.IsNullOrEmpty(currentUser.AdminId))
+                            {
+                                allowedUserIds.Add(currentUser.AdminId);
+                            }
+                        }
+
+                        query = query.Where(x => allowedUserIds.Contains(x.UserId));
+                    }
                 }
 
                 if (fromName != null)
@@ -308,9 +336,19 @@ namespace BackEnd.Services.BusinessServices
 
                 if(await userManager.IsInRoleAsync(user, "Agency"))
                 {
+                    // Agency non vede altre agenzie nel filtro (solo i suoi agenti)
+                    agencies = new List<UserSelectModel>();
+                    
                     var agentsList = await userManager.GetUsersInRoleAsync("Agent");
                     agentsList = agentsList.Where(x => x.AdminId == userId).ToList();
                     agents = _mapper.Map<List<UserSelectModel>>(agentsList);
+                }
+
+                if(await userManager.IsInRoleAsync(user, "Agent"))
+                {
+                    // Agent non vede altre agenzie nel filtro (solo se stesso)
+                    agencies = new List<UserSelectModel>();
+                    agents = new List<UserSelectModel>();
                 }
 
                 CalendarSearchModel result = new CalendarSearchModel()
@@ -342,8 +380,36 @@ namespace BackEnd.Services.BusinessServices
 
                 if (!string.IsNullOrEmpty(userId))
                 {
-                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
-                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                    var currentUser = await userManager.FindByIdAsync(userId);
+                    if (currentUser != null)
+                    {
+                        var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                        List<string> allowedUserIds = new List<string> { userId };
+
+                        if (currentUserRoles.Contains("Admin"))
+                        {
+                            // Admin vede tutto nella sua cerchia
+                            var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                            allowedUserIds = circleUserIds;
+                        }
+                        else if (currentUserRoles.Contains("Agency"))
+                        {
+                            // Agency vede solo: propri eventi + eventi dei suoi Agent
+                            var agents = await userManager.GetUsersInRoleAsync("Agent");
+                            var myAgents = agents.Where(x => x.AdminId == userId);
+                            allowedUserIds.AddRange(myAgents.Select(x => x.Id));
+                        }
+                        else if (currentUserRoles.Contains("Agent"))
+                        {
+                            // Agent vede solo: propri eventi + eventi della sua Agency
+                            if (!string.IsNullOrEmpty(currentUser.AdminId))
+                            {
+                                allowedUserIds.Add(currentUser.AdminId);
+                            }
+                        }
+
+                        query = query.Where(x => allowedUserIds.Contains(x.UserId));
+                    }
                 }
 
                 if (filters.FromDate.HasValue)
