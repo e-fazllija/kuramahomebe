@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using BackEnd.Entities;
@@ -8,6 +8,9 @@ using BackEnd.Models.AuthModels;
 using BackEnd.Models.MailModels;
 using BackEnd.Models.ResponseModel;
 using BackEnd.Models.UserModel;
+using BackEnd.Models.UserSubscriptionModels;
+using BackEnd.Models.PaymentModels;
+using BackEnd.Models.SubscriptionPlanModels;
 using BackEnd.Services.BusinessServices;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
@@ -34,8 +37,10 @@ namespace BackEnd.Controllers
         private readonly IConfiguration _configuration;
         private readonly IMapper _mapper;
         private readonly IUserSubscriptionServices _userSubscriptionServices;
+        private readonly ISubscriptionPlanServices _subscriptionPlanServices;
+        private readonly IPaymentServices _paymentServices;
         private string SecretForKey;
-        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper, IUserSubscriptionServices userSubscriptionServices)
+        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IMailService mailService, IConfiguration configuration, IMapper mapper, IUserSubscriptionServices userSubscriptionServices, ISubscriptionPlanServices subscriptionPlanServices, IPaymentServices paymentServices)
         {
             this.userManager = userManager;
             this.roleManager = roleManager;
@@ -43,6 +48,8 @@ namespace BackEnd.Controllers
             _configuration = configuration;
             _mapper = mapper;
             _userSubscriptionServices = userSubscriptionServices;
+            _subscriptionPlanServices = subscriptionPlanServices;
+            _paymentServices = paymentServices;
             //secretClient = new SecretClient(new Uri(_configuration.GetValue<string>("KeyVault:Url")), new DefaultAzureCredential());
             //KeyVaultSecret secret = secretClient.GetSecret(_configuration.GetValue<string>("KeyVault:Secrets:AuthKey"));
             SecretForKey = _configuration.GetValue<string>("Authentication:DevelopmentKey");//secret.Value;
@@ -84,6 +91,63 @@ namespace BackEnd.Controllers
                     ApplicationUser newUser = await userManager.FindByEmailAsync(user.Email);
                     newUser.AdminId = newUser.Id;
                     await userManager.UpdateAsync(newUser);
+
+                    // ===== CREAZIONE TRIAL DI 10 GIORNI PER ADMIN =====
+                    try
+                    {
+                        // Recupera il piano Basic (ID = 1)
+                        var basicPlan = await _subscriptionPlanServices.GetByIdAsync(1);
+                        if (basicPlan == null)
+                        {
+                            // Se il piano Basic non esiste, logga un errore ma non blocca la registrazione
+                            Console.WriteLine($"⚠️ ATTENZIONE: Piano Basic (ID=1) non trovato. Impossibile creare trial per Admin {newUser.Email}");
+                        }
+                        else
+                        {
+                            // Calcola le date: inizio oggi, fine tra 10 giorni
+                            var startDate = DateTime.UtcNow;
+                            var endDate = startDate.AddDays(10);
+
+                            // Crea il Payment con importo 0€
+                            var paymentModel = new PaymentCreateModel
+                            {
+                                UserId = newUser.Id,
+                                Amount = 0,
+                                Currency = "EUR",
+                                PaymentDate = startDate,
+                                PaymentMethod = "trial",
+                                Status = "completed",
+                                Notes = "Periodo di prova gratuito di 10 giorni"
+                            };
+
+                            var payment = await _paymentServices.CreateAsync(paymentModel);
+
+                            // Crea la UserSubscription con piano Basic
+                            var subscriptionModel = new UserSubscriptionCreateModel
+                            {
+                                UserId = newUser.Id,
+                                SubscriptionPlanId = 1, // Basic
+                                StartDate = startDate,
+                                EndDate = endDate,
+                                AutoRenew = false, // Il trial non si rinnova automaticamente
+                                Status = "active",
+                                LastPaymentId = payment.Id,
+                                StripeSubscriptionId = null, // Nessuna subscription Stripe per il trial
+                                StripeCustomerId = null
+                            };
+
+                            var subscription = await _userSubscriptionServices.CreateAsync(subscriptionModel);
+
+                            Console.WriteLine($"✅ Trial di 10 giorni creato per Admin {newUser.Email}. Scadenza: {endDate:yyyy-MM-dd}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Logga l'errore ma non blocca la registrazione
+                        Console.WriteLine($"❌ Errore durante la creazione del trial per Admin {user.Email}: {ex.Message}");
+                        Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    }
+                    // ===== FINE CREAZIONE TRIAL =====
                 }
 
                 var roleResult = await userManager.AddToRoleAsync(user, model.Role);
