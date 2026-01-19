@@ -1,4 +1,4 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Models.CalendarModels;
 using BackEnd.Models.OutputModels;
 
@@ -14,5 +14,6 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<CalendarSelectModel> Update(CalendarUpdateModel dto);
         Task<CalendarSelectModel> GetById(int id);
         Task<Calendar> Delete(int id);
+        Task<bool> CanAssociateEntityToCalendar(string currentUserId, string entityCreatorId);
     }
 }

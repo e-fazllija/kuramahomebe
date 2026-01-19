@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using BackEnd.Entities;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CalendarModels;
@@ -58,16 +58,17 @@ namespace BackEnd.Controllers
             {
                 var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 
-                // Valida che le entità associate siano nella cerchia dell'utente
+                // Valida che le entità associate possano essere associate a un appuntamento
+                // Per gli Agent: solo entità proprie, della loro Agency o di colleghi della stessa Agency
                 if (request.CustomerId.HasValue)
                 {
                     var customer = await _customerServices.GetById(request.CustomerId.Value);
                     if (customer == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Cliente non trovato" });
                     
-                    bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
-                    if (!canAccessCustomer)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, customer.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questo cliente all'appuntamento. Puoi associare solo clienti della tua Agency." });
                 }
                 
                 if (request.RealEstatePropertyId.HasValue)
@@ -76,9 +77,9 @@ namespace BackEnd.Controllers
                     if (property == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Proprietà immobiliare non trovata" });
                     
-                    bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
-                    if (!canAccessProperty)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, property.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questa proprietà all'appuntamento. Puoi associare solo proprietà della tua Agency." });
                 }
                 
                 if (request.RequestId.HasValue)
@@ -87,9 +88,9 @@ namespace BackEnd.Controllers
                     if (req == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
                     
-                    bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
-                    if (!canAccessRequest)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, req.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questa richiesta all'appuntamento. Puoi associare solo richieste della tua Agency." });
                 }
                 
                 CalendarSelectModel Result = await _calendarServices.Create(request);
@@ -118,16 +119,17 @@ namespace BackEnd.Controllers
                 if (!canModify)
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai i permessi per modificare questo evento" });
                 
-                // Valida che le entità associate siano nella cerchia dell'utente
+                // Valida che le entità associate possano essere associate a un appuntamento
+                // Per gli Agent: solo entità proprie, della loro Agency o di colleghi della stessa Agency
                 if (request.CustomerId.HasValue)
                 {
                     var customer = await _customerServices.GetById(request.CustomerId.Value);
                     if (customer == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Cliente non trovato" });
                     
-                    bool canAccessCustomer = await _accessControl.CanAccessEntity(currentUserId, customer.UserId);
-                    if (!canAccessCustomer)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso al cliente selezionato. Puoi associare solo clienti della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, customer.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questo cliente all'appuntamento. Puoi associare solo clienti della tua Agency." });
                 }
                 
                 if (request.RealEstatePropertyId.HasValue)
@@ -136,9 +138,9 @@ namespace BackEnd.Controllers
                     if (property == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Proprietà immobiliare non trovata" });
                     
-                    bool canAccessProperty = await _accessControl.CanAccessEntity(currentUserId, property.UserId);
-                    if (!canAccessProperty)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla proprietà selezionata. Puoi associare solo proprietà della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, property.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questa proprietà all'appuntamento. Puoi associare solo proprietà della tua Agency." });
                 }
                 
                 if (request.RequestId.HasValue)
@@ -147,9 +149,9 @@ namespace BackEnd.Controllers
                     if (req == null)
                         return BadRequest(new AuthResponseModel() { Status = "Error", Message = "Richiesta non trovata" });
                     
-                    bool canAccessRequest = await _accessControl.CanAccessEntity(currentUserId, req.UserId);
-                    if (!canAccessRequest)
-                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso alla richiesta selezionata. Puoi associare solo richieste della tua cerchia." });
+                    bool canAssociate = await _calendarServices.CanAssociateEntityToCalendar(currentUserId, req.UserId);
+                    if (!canAssociate)
+                        return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non puoi associare questa richiesta all'appuntamento. Puoi associare solo richieste della tua Agency." });
                 }
                 
                 CalendarSelectModel Result = await _calendarServices.Update(request);
