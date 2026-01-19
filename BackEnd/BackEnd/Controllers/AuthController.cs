@@ -95,12 +95,14 @@ namespace BackEnd.Controllers
                     // ===== CREAZIONE TRIAL DI 10 GIORNI PER ADMIN =====
                     try
                     {
-                        // Recupera il piano Basic (ID = 1)
-                        var basicPlan = await _subscriptionPlanServices.GetByIdAsync(1);
-                        if (basicPlan == null)
+                        // Recupera il piano Free (trial di benvenuto)
+                        var allPlans = await _subscriptionPlanServices.GetActivePlansAsync();
+                        var freePlan = allPlans.FirstOrDefault(p => p.Name.Equals("Free", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (freePlan == null)
                         {
-                            // Se il piano Basic non esiste, logga un errore ma non blocca la registrazione
-                            Console.WriteLine($"⚠️ ATTENZIONE: Piano Basic (ID=1) non trovato. Impossibile creare trial per Admin {newUser.Email}");
+                            // Se il piano Free non esiste, logga un errore ma non blocca la registrazione
+                            Console.WriteLine($"⚠️ ATTENZIONE: Piano Free non trovato. Impossibile creare trial per Admin {newUser.Email}");
                         }
                         else
                         {
@@ -122,11 +124,11 @@ namespace BackEnd.Controllers
 
                             var payment = await _paymentServices.CreateAsync(paymentModel);
 
-                            // Crea la UserSubscription con piano Basic
+                            // Crea la UserSubscription con piano Free
                             var subscriptionModel = new UserSubscriptionCreateModel
                             {
                                 UserId = newUser.Id,
-                                SubscriptionPlanId = 1, // Basic
+                                SubscriptionPlanId = freePlan.Id, // Piano Free
                                 StartDate = startDate,
                                 EndDate = endDate,
                                 AutoRenew = false, // Il trial non si rinnova automaticamente
@@ -138,7 +140,7 @@ namespace BackEnd.Controllers
 
                             var subscription = await _userSubscriptionServices.CreateAsync(subscriptionModel);
 
-                            Console.WriteLine($"✅ Trial di 10 giorni creato per Admin {newUser.Email}. Scadenza: {endDate:yyyy-MM-dd}");
+                            Console.WriteLine($"✅ Trial di 10 giorni creato per Admin {newUser.Email}. Piano: Free, Scadenza: {endDate:yyyy-MM-dd}");
                         }
                     }
                     catch (Exception ex)

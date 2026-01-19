@@ -8,7 +8,6 @@ using System.Security.Claims;
 
 namespace BackEnd.Controllers
 {
-    [Authorize(Policy = "ActiveSubscription")]
     [ApiController]
     [Route("/api/[controller]/")]
     public class SubscriptionLimitController : ControllerBase
@@ -30,6 +29,7 @@ namespace BackEnd.Controllers
         /// <param name="featureName">Nome della feature (es: "max_agencies", "max_properties")</param>
         /// <returns>Status del limite</returns>
         [HttpGet("check")]
+        [Authorize(Policy = "ActiveSubscription")]
         public async Task<ActionResult<SubscriptionLimitStatusResponse>> CheckFeatureLimit(
             [FromQuery] string featureName)
         {
@@ -61,6 +61,7 @@ namespace BackEnd.Controllers
         /// </summary>
         /// <returns>Dictionary con tutti i limiti (chiave = featureName)</returns>
         [HttpGet("my-status")]
+        [Authorize(Policy = "ActiveSubscription")]
         public async Task<ActionResult<Dictionary<string, SubscriptionLimitStatusResponse>>> GetMyLimitsStatus()
         {
             try
@@ -85,10 +86,13 @@ namespace BackEnd.Controllers
 
         /// <summary>
         /// Verifica se il downgrade al piano specificato è possibile
+        /// Questo endpoint NON richiede subscription attiva perché serve per verificare i requisiti
+        /// quando l'abbonamento è scaduto e si vuole sottoscrivere un nuovo piano
         /// </summary>
         /// <param name="planId">ID del piano di destinazione</param>
         /// <returns>Response con compatibilità e dettagli delle features</returns>
         [HttpGet("check-downgrade")]
+        [Authorize] // Richiede solo autenticazione, non subscription attiva
         public async Task<ActionResult<DowngradeCompatibilityResponse>> CheckDowngradeCompatibility(
             [FromQuery] int planId)
         {

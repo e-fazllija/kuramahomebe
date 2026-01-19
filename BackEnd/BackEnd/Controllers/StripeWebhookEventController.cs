@@ -21,6 +21,7 @@ namespace BackEnd.Controllers
         private readonly IPaymentServices _paymentServices;
         private readonly IUserSubscriptionServices _userSubscriptionServices;
         private readonly ISubscriptionPlanServices _subscriptionPlanServices;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<StripeWebhookEventController> _logger;
 
@@ -30,6 +31,7 @@ namespace BackEnd.Controllers
             IPaymentServices paymentServices,
             IUserSubscriptionServices userSubscriptionServices,
             ISubscriptionPlanServices subscriptionPlanServices,
+            ISubscriptionLimitService subscriptionLimitService,
             UserManager<ApplicationUser> userManager,
             ILogger<StripeWebhookEventController> logger)
         {
@@ -38,6 +40,7 @@ namespace BackEnd.Controllers
             _paymentServices = paymentServices;
             _userSubscriptionServices = userSubscriptionServices;
             _subscriptionPlanServices = subscriptionPlanServices;
+            _subscriptionLimitService = subscriptionLimitService;
             _userManager = userManager;
             _logger = logger;
         }
@@ -377,6 +380,10 @@ namespace BackEnd.Controllers
                         {
                             var today = DateTime.UtcNow;
                             var isExpired = !activeSubscription.EndDate.HasValue || activeSubscription.EndDate.Value <= today;
+                            
+                            // Verifica se è un trial (piano Free o senza StripeSubscriptionId)
+                            var isTrial = string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId) || 
+                                        activeSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
 
                             // Stesso piano = RINNOVO
                             if (activeSubscription.SubscriptionPlanId == subscriptionPlan.Id)
@@ -435,10 +442,64 @@ namespace BackEnd.Controllers
                                 bool isUpgrade = newPlanPrice > oldPlanPrice;
                                 bool isDowngrade = oldPlanPrice > newPlanPrice;
 
+                                // Verifica i requisiti se:
+                                // 1. È un downgrade (anche se l'abbonamento è scaduto)
+                                // 2. L'abbonamento è scaduto (indipendentemente da upgrade/downgrade)
+                                // Non verifica se è un upgrade e l'abbonamento è attivo (i limiti aumentano)
+                                bool needsCompatibilityCheck = isDowngrade || isExpired;
+                                
+                                if (needsCompatibilityCheck)
+                                {
+                                    try
+                                    {
+                                        var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
+                                            user.Id, 
+                                            subscriptionPlan.Id, 
+                                            user.AdminId);
+                                        
+                                        if (!compatibility.CanDowngrade)
+                                        {
+                                            _logger.LogWarning(
+                                                "Impossibile creare/aggiornare abbonamento per {Email}. " +
+                                                "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
+                                                "Limiti superati: {ExceededCount}. " +
+                                                "Dettagli: {Message}",
+                                                user.Email, subscriptionPlan.Name, 
+                                                compatibility.ExceededLimitsCount, compatibility.Message);
+                                            
+                                            // Non creiamo/aggiorniamo l'abbonamento se i requisiti non sono rispettati
+                                            // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
+                                            // Questo è un caso edge che dovrebbe essere gestito dal frontend, ma aggiungiamo il controllo per sicurezza
+                                            return;
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, 
+                                            "Errore durante la verifica dei requisiti per {Email} e piano {PlanName}. " +
+                                            "Procedo comunque con la creazione dell'abbonamento.",
+                                            user.Email, subscriptionPlan.Name);
+                                        // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
+                                    }
+                                }
+
                                 // Se è un upgrade con proration (dai metadata), cancella vecchio e crea nuovo con periodo standard
                                 if (isUpgradeFromMetadata && isUpgrade)
                                 {
-                                    // Cancella completamente il vecchio abbonamento
+                                    // Cancella completamente il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    // Se è un trial, non c'è nulla da cancellare su Stripe
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
                                     // Crea nuovo abbonamento con periodo standard (30 giorni per mensile)
@@ -474,7 +535,19 @@ namespace BackEnd.Controllers
                                 else if (isDowngrade)
                                 {
                                     // Downgrade: nessun rimborso/credito applicato
-                                    // Cancella il vecchio abbonamento
+                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
                                     // Crea nuovo abbonamento con periodo standard
@@ -505,6 +578,19 @@ namespace BackEnd.Controllers
                                 else
                                 {
                                     // Cambio piano generico (non upgrade/downgrade riconosciuto)
+                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
                                     var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
@@ -532,6 +618,38 @@ namespace BackEnd.Controllers
                         else
                         {
                             // Nuovo abbonamento (nessun abbonamento attivo)
+                            // Verifica sempre i requisiti per un nuovo abbonamento
+                            try
+                            {
+                                var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
+                                    user.Id, 
+                                    subscriptionPlan.Id, 
+                                    user.AdminId);
+                                
+                                if (!compatibility.CanDowngrade)
+                                {
+                                    _logger.LogWarning(
+                                        "Impossibile creare nuovo abbonamento per {Email}. " +
+                                        "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
+                                        "Limiti superati: {ExceededCount}. " +
+                                        "Dettagli: {Message}",
+                                        user.Email, subscriptionPlan.Name, 
+                                        compatibility.ExceededLimitsCount, compatibility.Message);
+                                    
+                                    // Non creiamo l'abbonamento se i requisiti non sono rispettati
+                                    // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, 
+                                    "Errore durante la verifica dei requisiti per nuovo abbonamento {Email} e piano {PlanName}. " +
+                                    "Procedo comunque con la creazione dell'abbonamento.",
+                                    user.Email, subscriptionPlan.Name);
+                                // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
+                            }
+                            
                             var subscriptionModel = new UserSubscriptionCreateModel
                             {
                                 UserId = user.Id,
