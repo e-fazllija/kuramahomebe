@@ -5,6 +5,7 @@ using BackEnd.Models.MailModels;
 using BackEnd.Models.Options;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
@@ -13,9 +14,18 @@ namespace BackEnd.Services;
 public class MailService : IMailService
 {
     private readonly MailOptions _mailSettings;
-    public MailService(IOptions<MailOptions> mailSettings)
+    public MailService(
+        IOptions<MailOptions> mailSettings,
+        IConfiguration configuration,
+        IKeyVaultSecretProvider secretProvider)
     {
         _mailSettings = mailSettings.Value;
+        var secretName = configuration.GetValue<string>("KeyVault:Secrets:MailPassword");
+        var secretValue = secretProvider.GetSecret(secretName, "MailOptions:Password");
+        if (!string.IsNullOrWhiteSpace(secretValue))
+        {
+            _mailSettings.Password = secretValue;
+        }
     }
 
     public async Task SendEmailAsync(MailRequest mailRequest)
@@ -75,7 +85,7 @@ public class MailService : IMailService
                 $"<strong>Contratto:</strong> {mailRequest.RequestType}<br>" +
                 $"<strong>Tipologia:</strong> {mailRequest.PropertyType}<br>" +
                 $"<strong>Provincia:</strong> {mailRequest.Province}<br>" +
-                $"<strong>Località:</strong> {mailRequest.Location}<br>" +
+                $"<strong>Localitï¿½:</strong> {mailRequest.Location}<br>" +
                 $"<strong>Indirizzo:</strong> {mailRequest.Address ?? "Non specificato"}<br>" +
                 $"<strong>Numero vani:</strong> {mailRequest.NumberRooms}<br>" +
                 $"<strong>Numero camere:</strong> {mailRequest.NumberBedRooms}<br>" +
@@ -152,7 +162,7 @@ public class MailService : IMailService
                 $"<strong>Contratto:</strong> {mailRequest.RequestType}<br>" +
                 $"<strong>Tipologia:</strong> {mailRequest.PropertyType}<br>" +
                 $"<strong>Provincia:</strong> {mailRequest.Province}<br>" +
-                $"<strong>Località:</strong> {mailRequest.Location}<br>" +
+                $"<strong>Localitï¿½:</strong> {mailRequest.Location}<br>" +
                 $"<strong>Indirizzo:</strong> {mailRequest.Address ?? "Non specificato"}<br>" +
                 $"<strong>Numero vani:</strong> {mailRequest.NumberRooms}<br>" +
                 $"<strong>Numero camere:</strong> {mailRequest.NumberBedRooms}<br>" +

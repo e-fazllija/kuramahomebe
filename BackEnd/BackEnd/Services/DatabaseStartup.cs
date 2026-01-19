@@ -18,7 +18,7 @@ namespace BackEnd.Services
         public static void ConfigureDatabase(this WebApplicationBuilder builder, string? keyVaultUrl, string? secretName)
         {
             // For development or when KeyVault parameters are null, use connection string from appsettings
-            if (builder.Environment.IsDevelopment() || string.IsNullOrEmpty(keyVaultUrl) || string.IsNullOrEmpty(secretName))
+            if (/*builder.Environment.IsDevelopment() ||*/ string.IsNullOrEmpty(keyVaultUrl) || string.IsNullOrEmpty(secretName))
             {
                 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
                 if (string.IsNullOrEmpty(connectionString))

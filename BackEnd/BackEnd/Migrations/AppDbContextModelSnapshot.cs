@@ -909,6 +909,9 @@ namespace BackEnd.Migrations
                     b.Property<bool>("Highlighted")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("IdealistaPropertyId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("InHome")
                         .HasColumnType("boolean");
 

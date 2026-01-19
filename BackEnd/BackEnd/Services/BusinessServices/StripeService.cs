@@ -1,5 +1,5 @@
+using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
-using Microsoft.Extensions.Configuration;
 using Stripe;
 
 namespace BackEnd.Services.BusinessServices
@@ -9,11 +9,17 @@ namespace BackEnd.Services.BusinessServices
         private readonly string _secretKey;
         private readonly string _webhookSecret;
 
-        public StripeService(IConfiguration configuration)
+        public StripeService(IConfiguration configuration, IKeyVaultSecretProvider secretProvider)
         {
-            // Leggi la chiave da appsettings o KeyVault
-            _secretKey = configuration["Stripe:SecretKey"] ?? throw new ArgumentNullException("Stripe:SecretKey");
-            _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
+            var secretName = configuration["KeyVault:Secrets:StripeSecretKey"];
+            _secretKey = secretProvider.GetSecret(secretName, "Stripe:SecretKey")
+                ?? configuration["Stripe:SecretKey"]
+                ?? throw new InvalidOperationException("Stripe secret key non configurata.");
+
+            var webhookSecretName = configuration["KeyVault:Secrets:StripeWebhookSecret"];
+            _webhookSecret = secretProvider.GetSecret(webhookSecretName, "Stripe:WebhookSecret")
+                ?? configuration["Stripe:WebhookSecret"]
+                ?? string.Empty;
             
             StripeConfiguration.ApiKey = _secretKey;
         }

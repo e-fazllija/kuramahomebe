@@ -322,7 +322,7 @@ namespace BackEnd
                 TypeOfProperty = "Abitativo",
                 StateOfTheProperty = "Ottimo",
                 YearOfConstruction = 2020,
-                Description = $"Immobile di test creato da {userId}",
+                Description = $"Immobile creato da {userId}",
                 UserId = userId,
                 InHome = false,
                 Highlighted = false,

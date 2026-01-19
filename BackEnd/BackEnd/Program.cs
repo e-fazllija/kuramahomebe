@@ -4,7 +4,6 @@ using BackEnd.Entities;
 using BackEnd.Models.Options;
 using BackEnd.Services;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,8 +23,10 @@ builder.Services.AddSwaggerGen();
 builder.ConfigureServices();
 builder.Services.Configure<PaginationOptions>(builder.Configuration.GetSection("PaginationOptions"));
 builder.Services.Configure<MailOptions>(builder.Configuration.GetSection("MailOptions"));
+builder.Services.Configure<KeyVaultOptions>(builder.Configuration.GetSection("KeyVault"));
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 builder.Services.AddCors();
+builder.Services.AddMemoryCache();
 
 // For Identity - DOPO JWT per non interferire
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -49,8 +50,6 @@ else
     builder.ConfigureJwtForDevelopment();
     Console.WriteLine("KeyVault non configurato, JWT configurato con chiave di sviluppo");
 }
-
-
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -87,30 +86,31 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+#region "Seed Initial Data"
 // Seed roles data
-using (var scope = app.Services.CreateScope())
-{
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    
-    string[] roleNames = { "Admin", "Agency", "Agent", "User" };
-    
-    foreach (var roleName in roleNames)
-    {
-        var roleExist = await roleManager.RoleExistsAsync(roleName);
-        if (!roleExist)
-        {
-            var role = new IdentityRole(roleName);
-            await roleManager.CreateAsync(role);
-            Console.WriteLine($"Ruolo '{roleName}' creato con successo.");
-        }
-        else
-        {
-            Console.WriteLine($"Ruolo '{roleName}' già esistente, skip.");
-        }
-    }
-    
-    Console.WriteLine("Seed dei ruoli completato.");
-}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+//    string[] roleNames = { "Admin", "Agency", "Agent", "User" };
+
+//    foreach (var roleName in roleNames)
+//    {
+//        var roleExist = await roleManager.RoleExistsAsync(roleName);
+//        if (!roleExist)
+//        {
+//            var role = new IdentityRole(roleName);
+//            await roleManager.CreateAsync(role);
+//            Console.WriteLine($"Ruolo '{roleName}' creato con successo.");
+//        }
+//        else
+//        {
+//            Console.WriteLine($"Ruolo '{roleName}' già esistente, skip.");
+//        }
+//    }
+
+//    Console.WriteLine("Seed dei ruoli completato.");
+//}
 
 // Assicura che il piano Free esista sempre (necessario per i trial)
 using (var scope = app.Services.CreateScope())
@@ -120,24 +120,25 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Seed test data (solo in Development e se abilitato nella configurazione)
-if (app.Environment.IsDevelopment())
-{
-    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", false);
-    if (seedTestData)
-    {
-        using (var scope = app.Services.CreateScope())
-        {
-            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-            
-            var seeder = new TestDataSeeder(context, userManager, roleManager);
+//if (app.Environment.IsDevelopment())
+//{
+//    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", false);
+//    if (seedTestData)
+//    {
+//        using (var scope = app.Services.CreateScope())
+//        {
+//            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+//            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+//            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
-            await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
+//            var seeder = new TestDataSeeder(context, userManager, roleManager);
 
-            await seeder.SeedTestData();
-        }
-    }
-}
+//            await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
+
+//            await seeder.SeedTestData();
+//        }
+//    }
+//}
+#endregion
 
 app.Run();

@@ -11,6 +11,7 @@ namespace BackEnd.Services
         public static void ConfigureServices(this WebApplicationBuilder builder)
         {
 
+            builder.Services.AddSingleton<IKeyVaultSecretProvider, KeyVaultSecretProvider>();
             builder.Services.AddTransient<IUnitOfWork, UnitOfWork>();
             builder.Services.AddTransient<IStorageServices, StorageServices>();
             builder.Services.AddTransient<IPropertyStorageService, PropertyStorageService>();
@@ -35,6 +36,9 @@ namespace BackEnd.Services
 
             // Memory Cache per Dashboard
             builder.Services.AddMemoryCache();
+            
+            // Idealista Service
+            builder.Services.AddHttpClient<IIdealistaService, IdealistaService>();
             
             // Access Control Service
             builder.Services.AddScoped<AccessControlService>();

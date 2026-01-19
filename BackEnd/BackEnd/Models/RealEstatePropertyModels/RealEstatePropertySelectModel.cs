@@ -85,5 +85,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         
         // Informazioni del proprietario (popolato solo se AccessLevel == 3)
         public OwnerInfoModel? OwnerInfo { get; set; }
+        public int? IdealistaPropertyId { get; set; }
     }
 }
