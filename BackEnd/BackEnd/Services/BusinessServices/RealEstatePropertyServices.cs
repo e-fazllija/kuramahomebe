@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using BackEnd.Entities;
@@ -418,6 +418,8 @@ namespace BackEnd.Services.BusinessServices
             {
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
                     .Include(x => x.Photos.OrderBy(x => x.Position))
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
@@ -482,6 +484,21 @@ namespace BackEnd.Services.BusinessServices
 
                 result.Data = _mapper.Map<List<RealEstatePropertySelectModel>>(queryList);
 
+                // Calcola AccessLevel e popola OwnerInfo per ogni immobile
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var property in result.Data)
+                    {
+                        property.AccessLevel = await _accessControl.GetAccessLevel(userId, property.UserId);
+                        
+                        // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                        if ((property.AccessLevel == 2 || property.AccessLevel == 3) && !string.IsNullOrEmpty(property.UserId))
+                        {
+                            property.OwnerInfo = await GetOwnerInfo(property.UserId);
+                        }
+                    }
+                }
+
                 _logger.LogInformation(nameof(Get));
 
                 return result;
@@ -519,6 +536,8 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<RealEstateProperty> query = _unitOfWork.dbContext.RealEstateProperties
                     .Include(x => x.Photos.OrderBy(x => x.Position))
                     .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
+                    .Where(x => !x.Archived && x.User!.Admin!.EmailConfirmed)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
@@ -585,11 +604,12 @@ namespace BackEnd.Services.BusinessServices
 
                 // Proiezione ottimizzata per la lista
                 var queryList = await query
-                    .Select(x => new
+                    .Select(x => new RealEstatePropertyListModel
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
                         AssignmentEnd = x.AssignmentEnd,
+                        UpdateDate = x.UpdateDate,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
                         City = x.City,
@@ -604,57 +624,29 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
                         AgentId = x.UserId,
-                        AgreedCommission = x.AgreedCommission,
-                        FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal
+                        EffectiveCommission = x.EffectiveCommission
                     })
                     .ToListAsync();
 
-                // Mappa e calcola EffectiveCommission
-                var mappedList = queryList.Select(x =>
+                // Calcola AccessLevel e popola OwnerInfo per ogni immobile
+                if (!string.IsNullOrEmpty(userId))
                 {
-                    double grossCommission = 0;
-                    
-                    // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && x.Price > 0)
+                    foreach (var property in queryList)
                     {
-                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
+                        if (!string.IsNullOrEmpty(property.AgentId))
+                        {
+                            property.AccessLevel = await _accessControl.GetAccessLevel(userId, property.AgentId);
+                            
+                            // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                            if (property.AccessLevel == 2 || property.AccessLevel == 3)
+                            {
+                                property.OwnerInfo = await GetOwnerInfo(property.AgentId);
+                            }
+                        }
                     }
-                    else if (x.FlatRateCommission > 0)
-                    {
-                        grossCommission = x.FlatRateCommission;
-                    }
-                    
-                    // Calcola la provvigione netta (lorda - storno)
-                    double netCommission = grossCommission - x.CommissionReversal;
-                    
-                    // Il risultato non può essere negativo (minimo 0)
-                    double effectiveCommission = Math.Max(0, netCommission);
-                    
-                    return new RealEstatePropertyListModel
-                    {
-                        Id = x.Id,
-                        CreationDate = x.CreationDate,
-                        AssignmentEnd = x.AssignmentEnd,
-                        CommercialSurfaceate = x.CommercialSurfaceate,
-                        AddressLine = x.AddressLine,
-                        City = x.City,
-                        State = x.State,
-                        Price = x.Price,
-                        Category = x.Category,
-                        Typology = x.Typology,
-                        StateOfTheProperty = x.StateOfTheProperty,
-                        Status = x.Status,
-                        Auction = x.Auction,
-                        Sold = x.Sold,
-                        FirstPhotoUrl = x.FirstPhotoUrl,
-                        AgencyId = x.AgencyId,
-                        AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission
-                    };
-                }).ToList();
+                }
 
-                result.Data = mappedList;
+                result.Data = queryList;
 
                 _logger.LogInformation(nameof(GetList));
 
@@ -773,12 +765,13 @@ namespace BackEnd.Services.BusinessServices
                     query = query.Where(x => x.Auction == filters.Auction.Value);
                 }
 
-                var queryList = await query
-                    .Select(x => new
+                var data = await query
+                    .Select(x => new RealEstatePropertyListModel
                     {
                         Id = x.Id,
                         CreationDate = x.CreationDate,
                         AssignmentEnd = x.AssignmentEnd,
+                        UpdateDate = x.UpdateDate,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         AddressLine = x.AddressLine,
                         City = x.City,
@@ -793,55 +786,9 @@ namespace BackEnd.Services.BusinessServices
                         FirstPhotoUrl = x.Photos.OrderBy(p => p.Position).Select(p => p.Url).FirstOrDefault(),
                         AgencyId = x.User.AdminId,
                         AgentId = x.UserId,
-                        AgreedCommission = x.AgreedCommission,
-                        FlatRateCommission = x.FlatRateCommission,
-                        CommissionReversal = x.CommissionReversal
+                        EffectiveCommission = x.EffectiveCommission
                     })
                     .ToListAsync();
-
-                // Mappa e calcola EffectiveCommission
-                var data = queryList.Select(x =>
-                {
-                    double grossCommission = 0;
-                    
-                    // Calcola la provvigione lorda
-                    if (x.AgreedCommission > 0 && x.Price > 0)
-                    {
-                        grossCommission = (x.Price * x.AgreedCommission) / 100.0;
-                    }
-                    else if (x.FlatRateCommission > 0)
-                    {
-                        grossCommission = x.FlatRateCommission;
-                    }
-                    
-                    // Calcola la provvigione netta (lorda - storno)
-                    double netCommission = grossCommission - x.CommissionReversal;
-                    
-                    // Il risultato non può essere negativo (minimo 0)
-                    double effectiveCommission = Math.Max(0, netCommission);
-                    
-                    return new RealEstatePropertyListModel
-                    {
-                        Id = x.Id,
-                        CreationDate = x.CreationDate,
-                        AssignmentEnd = x.AssignmentEnd,
-                        CommercialSurfaceate = x.CommercialSurfaceate,
-                        AddressLine = x.AddressLine,
-                        City = x.City,
-                        State = x.State,
-                        Price = x.Price,
-                        Category = x.Category,
-                        Typology = x.Typology,
-                        StateOfTheProperty = x.StateOfTheProperty,
-                        Status = x.Status,
-                        Auction = x.Auction,
-                        Sold = x.Sold,
-                        FirstPhotoUrl = x.FirstPhotoUrl,
-                        AgencyId = x.AgencyId,
-                        AgentId = x.AgentId,
-                        EffectiveCommission = effectiveCommission
-                    };
-                }).ToList();
 
                 return data;
             }
@@ -885,13 +832,22 @@ namespace BackEnd.Services.BusinessServices
                         !string.IsNullOrEmpty(customer.UserId) &&
                         accessibleUserIdsSet.Contains(customer.UserId));
 
+                // Recupera sia Agent che Agency
                 var agentsInCircle = (await userManager.GetUsersInRoleAsync("Agent"))
                     .Where(agent =>
                         !string.IsNullOrEmpty(agent.AdminId) &&
                         accessibleAdminIds.Contains(agent.AdminId))
                     .ToList();
 
-                var agentModels = _mapper.Map<List<UserSelectModel>>(agentsInCircle);
+                var agenciesInCircle = (await userManager.GetUsersInRoleAsync("Agency"))
+                    .Where(agency =>
+                        accessibleUserIdsSet.Contains(agency.Id) ||
+                        (!string.IsNullOrEmpty(agency.AdminId) && accessibleAdminIds.Contains(agency.AdminId)))
+                    .ToList();
+
+                // Combina agenti e agenzie
+                var allUsers = agentsInCircle.Concat(agenciesInCircle).ToList();
+                var agentModels = _mapper.Map<List<UserSelectModel>>(allUsers);
 
                 var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
                 if (currentUserModel != null)
@@ -1333,6 +1289,50 @@ namespace BackEnd.Services.BusinessServices
             {
                 _logger.LogError(ex.Message);
                 throw new Exception("Si è verificato un errore");
+            }
+        }
+
+        /// <summary>
+        /// Ottiene le informazioni del proprietario di un'entità (usato per livello 3)
+        /// </summary>
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
     }

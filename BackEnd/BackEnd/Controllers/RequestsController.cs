@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using BackEnd.Entities;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.RequestModels;
+using BackEnd.Models;
 using BackEnd.Services;
 using System.Data;
 using System.Globalization;
@@ -168,12 +169,71 @@ namespace BackEnd.Controllers
                 if (!canAccess)
                     return StatusCode(StatusCodes.Status401Unauthorized, new AuthResponseModel() { Status = "Error", Message = "Non hai accesso a questa richiesta" });
 
+                // Calcola il livello di accesso
+                int accessLevel = await _accessControl.GetAccessLevel(currentUserId, result.UserId);
+                result.AccessLevel = accessLevel;
+
+                // Se livello 3, restituisci solo OwnerInfo
+                if (accessLevel == 3)
+                {
+                    var ownerInfo = await GetOwnerInfo(result.UserId);
+                    var limitedResponse = new BackEnd.Models.LimitedAccessResponseModel
+                    {
+                        Id = result.Id,
+                        AccessLevel = 3,
+                        OwnerInfo = ownerInfo ?? new BackEnd.Models.OwnerInfoModel(),
+                        EntityType = "Request"
+                    };
+                    return Ok(limitedResponse);
+                }
+
                 return Ok(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
                 return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = ex.Message });
+            }
+        }
+
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await _userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await _userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await _userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
 
@@ -251,7 +311,6 @@ namespace BackEnd.Controllers
             table.Columns.Add("Contratto");
             table.Columns.Add("Tipologia Immobile");
             table.Columns.Add("Città");
-            table.Columns.Add("Località");
             table.Columns.Add("Budget Min (€)");
             table.Columns.Add("Budget Max (€)");
             table.Columns.Add("Data Creazione");
@@ -267,7 +326,6 @@ namespace BackEnd.Controllers
                     item.Contract,
                     item.PropertyType,
                     item.City,
-                    item.Location,
                     item.PriceFrom.ToString("N0", culture),
                     item.PriceTo.ToString("N0", culture),
                     item.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),

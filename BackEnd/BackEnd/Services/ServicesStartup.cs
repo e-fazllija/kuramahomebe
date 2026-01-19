@@ -32,6 +32,10 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ISubscriptionFeatureServices, SubscriptionFeatureServices>();
             builder.Services.AddTransient<ISubscriptionLimitService, SubscriptionLimitService>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
+            builder.Services.AddTransient<IDashboardService, DashboardService>();
+
+            // Memory Cache per Dashboard
+            builder.Services.AddMemoryCache();
             
             // Idealista Service
             builder.Services.AddHttpClient<IIdealistaService, IdealistaService>();
