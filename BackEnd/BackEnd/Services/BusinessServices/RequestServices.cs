@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using BackEnd.Entities;
@@ -9,6 +9,7 @@ using BackEnd.Models.Options;
 using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
 using Microsoft.AspNetCore.Identity;
+using BackEnd.Services;
 
 namespace BackEnd.Services.BusinessServices
 {
@@ -173,7 +174,11 @@ namespace BackEnd.Services.BusinessServices
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests.OrderByDescending(x => x.Id).Include(x => x.Customer);
 
                 // Filtra per cerchia usando AccessControlService
-                query = await ApplyRoleBasedFilter(query, userId);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -202,10 +207,27 @@ namespace BackEnd.Services.BusinessServices
                 }
 
                 List<Request> queryList = await query
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     //.Include(x => x.RequestType)
                     .ToListAsync();
 
                 result.Data = _mapper.Map<List<RequestSelectModel>>(queryList);
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni richiesta
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var request in result.Data)
+                    {
+                        request.AccessLevel = await _accessControl.GetAccessLevel(userId, request.UserId);
+                        
+                        // Se livello 3, popola OwnerInfo
+                        if (request.AccessLevel == 3 && !string.IsNullOrEmpty(request.UserId))
+                        {
+                            request.OwnerInfo = await GetOwnerInfo(request.UserId);
+                        }
+                    }
+                }
 
                 _logger.LogInformation(nameof(Get));
 
@@ -233,48 +255,59 @@ namespace BackEnd.Services.BusinessServices
 
                 foreach (var item in requests)
                 {
-                    var citys = item.City.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                         .Select(t => t.Trim().ToLower())
-                                         .ToList();
-
+                    // Filtro base: solo immobili non venduti, includendo User e Admin per determinare agenzia
                     var realEstatePropertiesQuery = _unitOfWork.dbContext.RealEstateProperties
-                        .Where(x =>
-                            !x.Sold &&
-                            x.Status == item.Contract &&
-                            x.Price <= item.PriceTo &&
-                            x.Price >= item.PriceFrom &&
-                            citys.Any(t => x.City.ToLower().Contains(t)));
+                        .Include(x => x.User)
+                            .ThenInclude(u => u.Admin)
+                        .Where(x => !x.Sold);
 
-
-                    if (!string.IsNullOrEmpty(item.PropertyType))
+                    // Applica filtro per cerchia estesa dell'utente (include Admin, Agency e Agent)
+                    if (!string.IsNullOrEmpty(item.UserId))
                     {
-                        realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(item.PropertyType));
+                        var circleUserIds = await GetExtendedCircleUserIdsForRequests(item.UserId);
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => circleUserIds.Contains(x.UserId));
                     }
 
-                    if (!string.IsNullOrEmpty(item.RoomsNumber))
+                    // FILTRO FONDAMENTALE: City - se il comune non corrisponde, escludi subito (ottimizzazione)
+                    if (!string.IsNullOrEmpty(item.City))
                     {
-                        realEstatePropertiesQuery.Where(x => x.WarehouseRooms == Convert.ToInt32(item.RoomsNumber));
+                        var requestCities = item.City.Split(',')
+                            .Select(c => c.Trim().ToLower())
+                            .Where(c => !string.IsNullOrEmpty(c))
+                            .ToList();
+                        
+                        if (requestCities.Any())
+                        {
+                            realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => 
+                                !string.IsNullOrEmpty(x.City) && 
+                                requestCities.Contains(x.City.ToLower()));
+                        }
                     }
 
-                    if (item.MQFrom > 0)
+                    List<RealEstateProperty> realEstateProperties = await realEstatePropertiesQuery.ToListAsync();
+                    
+                    // Calcola il match percentuale per ogni immobile e filtra solo quelli >= 60%
+                    var propertiesWithMatch = new List<RealEstatePropertySelectModel>();
+                    foreach (var property in realEstateProperties)
                     {
-                        realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > item.MQFrom);
+                        int matchPercentage = CalculateMatchPercentage(item, property);
+                        if (matchPercentage >= 60)
+                        {
+                            var propertyModel = _mapper.Map<RealEstatePropertySelectModel>(property);
+                            propertyModel.MatchPercentage = matchPercentage;
+                            
+                            // Calcola agenzia di competenza
+                            propertyModel.AgencyName = await GetAgencyNameForProperty(property);
+                            
+                            propertiesWithMatch.Add(propertyModel);
+                        }
                     }
 
-                    if (item.MQTo > 0)
-                    {
-                        realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < item.MQTo);
-                    }
+                    // Ordina per match percentuale decrescente (migliori match prima)
+                    propertiesWithMatch = propertiesWithMatch.OrderByDescending(p => p.MatchPercentage).ToList();
 
-                    if (item.ParkingSpaces > 0)
-                    {
-                        realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= item.ParkingSpaces);
-                    }
-
-                    List<RealEstateProperty> realEstateProperty = await realEstatePropertiesQuery.ToListAsync();
-                    List<RealEstatePropertySelectModel> realEstatePropertySelectModel = _mapper.Map<List<RealEstatePropertySelectModel>>(realEstateProperty);
                     RequestSelectModel requestSelectModel = _mapper.Map<RequestSelectModel>(item);
-                    requestSelectModel.RealEstateProperties = realEstatePropertySelectModel;
+                    requestSelectModel.RealEstateProperties = propertiesWithMatch;
                     result.Data.Add(requestSelectModel);
                 }
 
@@ -295,10 +328,16 @@ namespace BackEnd.Services.BusinessServices
             {
                 IQueryable<Request> query = _unitOfWork.dbContext.Requests
                     .Include(x => x.Customer)
+                    .Include(x => x.User)
+                    .ThenInclude(u => u.Admin)
                     .OrderByDescending(x => x.Id);
 
                 // Filtra per cerchia usando AccessControlService
-                query = await ApplyRoleBasedFilter(query, userId);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+                    query = query.Where(x => circleUserIds.Contains(x.UserId));
+                }
 
                 if (!string.IsNullOrEmpty(filterRequest))
                     query = query.Where(x => x.Customer.FirstName.Contains(filterRequest) || x.Customer.LastName.Contains(filterRequest));
@@ -325,7 +364,6 @@ namespace BackEnd.Services.BusinessServices
                         CustomerPhone = x.Customer.Phone.ToString(),
                         Contract = x.Contract,
                         CreationDate = x.CreationDate,
-                        Location = x.Location,
                         City = x.City,
                         PriceTo = x.PriceTo,
                         PriceFrom = x.PriceFrom,
@@ -335,6 +373,24 @@ namespace BackEnd.Services.BusinessServices
                         UserId = x.UserId
                     })
                     .ToListAsync();
+
+                // Calcola AccessLevel e popola OwnerInfo per ogni richiesta
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    foreach (var request in queryList)
+                    {
+                        if (!string.IsNullOrEmpty(request.UserId))
+                        {
+                            request.AccessLevel = await _accessControl.GetAccessLevel(userId, request.UserId);
+                            
+                            // Popola OwnerInfo per livello 2 e 3 (per tooltip e popup)
+                            if (request.AccessLevel == 2 || request.AccessLevel == 3)
+                            {
+                                request.OwnerInfo = await GetOwnerInfo(request.UserId);
+                            }
+                        }
+                    }
+                }
 
                 result.Data = queryList;
 
@@ -450,7 +506,6 @@ namespace BackEnd.Services.BusinessServices
                         CustomerPhone = x.Customer.Phone.ToString(),
                         Contract = x.Contract,
                         CreationDate = x.CreationDate,
-                        Location = x.Location,
                         City = x.City,
                         PriceTo = x.PriceTo,
                         PriceFrom = x.PriceFrom,
@@ -490,6 +545,351 @@ namespace BackEnd.Services.BusinessServices
             return query.Where(request => request.UserId != null && circleUserIds.Contains(request.UserId));
         }
 
+        /// <summary>
+        /// Ottiene gli ID degli utenti nella cerchia estesa per le richieste.
+        /// Include anche l'Admin per Agency e Agent, in modo che possano vedere tutti gli immobili della gerarchia.
+        /// </summary>
+        private async Task<List<string>> GetExtendedCircleUserIdsForRequests(string userId)
+        {
+            var circleUserIds = await _accessControl.GetCircleUserIdsFor(userId);
+            var extendedCircleIds = new List<string>(circleUserIds);
+
+            var currentUser = await _userManager.FindByIdAsync(userId);
+            if (currentUser == null)
+                return extendedCircleIds;
+
+            var currentUserRoles = await _userManager.GetRolesAsync(currentUser);
+
+            // Se è un'Agency, aggiungi anche l'Admin che l'ha creata
+            if (currentUserRoles.Contains("Agency") && !string.IsNullOrEmpty(currentUser.AdminId))
+            {
+                extendedCircleIds.Add(currentUser.AdminId);
+            }
+            // Se è un'Agent, aggiungi anche l'Admin (direttamente o tramite Agency)
+            else if (currentUserRoles.Contains("Agent") && !string.IsNullOrEmpty(currentUser.AdminId))
+            {
+                extendedCircleIds.Add(currentUser.AdminId);
+                
+                // Se l'Agent appartiene a un'Agency, verifica se l'Agency ha un Admin
+                var agency = await _userManager.FindByIdAsync(currentUser.AdminId);
+                if (agency != null)
+                {
+                    var agencyRoles = await _userManager.GetRolesAsync(agency);
+                    // Se l'AdminId dell'Agent punta a un'Agency, e l'Agency ha un Admin, aggiungilo
+                    if (agencyRoles.Contains("Agency") && !string.IsNullOrEmpty(agency.AdminId))
+                    {
+                        extendedCircleIds.Add(agency.AdminId);
+                    }
+                }
+            }
+
+            return extendedCircleIds.Distinct().ToList();
+        }
+
+        /// <summary>
+        /// Determina il nome dell'agenzia di competenza per un immobile
+        /// </summary>
+        private async Task<string?> GetAgencyNameForProperty(RealEstateProperty property)
+        {
+            if (property.User == null)
+                return null;
+
+            var userRoles = await _userManager.GetRolesAsync(property.User);
+            
+            // Se è un Agent, l'agenzia di competenza è il suo Admin (Agency o Admin)
+            if (userRoles.Contains("Agent"))
+            {
+                // Se Admin è già caricato, usalo
+                if (property.User.Admin != null)
+                {
+                    if (!string.IsNullOrEmpty(property.User.Admin.CompanyName))
+                        return property.User.Admin.CompanyName;
+                    return $"{property.User.Admin.FirstName} {property.User.Admin.LastName}".Trim();
+                }
+                
+                // Se Admin non è caricato ma AdminId esiste, caricalo
+                if (!string.IsNullOrEmpty(property.User.AdminId))
+                {
+                    var admin = await _userManager.FindByIdAsync(property.User.AdminId);
+                    if (admin != null)
+                    {
+                        if (!string.IsNullOrEmpty(admin.CompanyName))
+                            return admin.CompanyName;
+                        return $"{admin.FirstName} {admin.LastName}".Trim();
+                    }
+                }
+                
+                return null;
+            }
+            
+            // Se è un'Agency, l'agenzia di competenza è l'Agency stessa
+            if (userRoles.Contains("Agency"))
+            {
+                if (!string.IsNullOrEmpty(property.User.CompanyName))
+                    return property.User.CompanyName;
+                return $"{property.User.FirstName} {property.User.LastName}".Trim();
+            }
+            
+            // Se è un Admin, l'agenzia di competenza è l'Admin stesso
+            if (userRoles.Contains("Admin"))
+            {
+                if (!string.IsNullOrEmpty(property.User.CompanyName))
+                    return property.User.CompanyName;
+                return $"{property.User.FirstName} {property.User.LastName}".Trim();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Calcola la percentuale di match tra una richiesta e un immobile
+        /// </summary>
+        private int CalculateMatchPercentage(Request request, RealEstateProperty property)
+        {
+            int totalCriteria = 0;
+            int matchedCriteria = 0;
+
+            // 1. Contract (Status) - OBBLIGATORIO
+            totalCriteria++;
+            if (property.Status != null && request.Contract != null && property.Status == request.Contract)
+            {
+                matchedCriteria++;
+            }
+
+            // 2. PropertyType (Typology) - se presente nella richiesta
+            if (!string.IsNullOrEmpty(request.PropertyType))
+            {
+                totalCriteria++;
+                var requestTypes = request.PropertyType.Split(',').Select(t => t.Trim().ToLower()).ToList();
+                if (!string.IsNullOrEmpty(property.Typology))
+                {
+                    var propertyTypeLower = property.Typology.ToLower();
+                    if (requestTypes.Any(type => propertyTypeLower.Contains(type)))
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 3. Province (State) - se presente nella richiesta
+            if (!string.IsNullOrEmpty(request.Province))
+            {
+                totalCriteria++;
+                if (!string.IsNullOrEmpty(property.State) && 
+                    property.State.Equals(request.Province, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 4. City - se presente nella richiesta
+            if (!string.IsNullOrEmpty(request.City))
+            {
+                totalCriteria++;
+                var requestCities = request.City.Split(',').Select(c => c.Trim().ToLower()).ToList();
+                if (!string.IsNullOrEmpty(property.City))
+                {
+                    var propertyCityLower = property.City.ToLower();
+                    if (requestCities.Any(city => propertyCityLower.Contains(city)))
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 5. Price Range - se presente nella richiesta
+            // Usa PriceReduced se > 0, altrimenti Price
+            double propertyPriceToUse = property.GetPriceToUse();
+            if (request.PriceFrom > 0 || request.PriceTo > 0)
+            {
+                totalCriteria++;
+                if (request.PriceFrom > 0 && request.PriceTo > 0)
+                {
+                    if (propertyPriceToUse >= request.PriceFrom && propertyPriceToUse <= request.PriceTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.PriceFrom > 0)
+                {
+                    if (propertyPriceToUse >= request.PriceFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.PriceTo > 0)
+                {
+                    if (propertyPriceToUse <= request.PriceTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 6. MQ Range - se presente nella richiesta
+            if (request.MQFrom > 0 || request.MQTo > 0)
+            {
+                totalCriteria++;
+                if (request.MQFrom > 0 && request.MQTo > 0)
+                {
+                    if (property.CommercialSurfaceate > request.MQFrom && property.CommercialSurfaceate < request.MQTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.MQFrom > 0)
+                {
+                    if (property.CommercialSurfaceate > request.MQFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.MQTo > 0)
+                {
+                    if (property.CommercialSurfaceate < request.MQTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 7. Garden Range - se presente nella richiesta
+            if (request.GardenFrom > 0 || request.GardenTo > 0)
+            {
+                totalCriteria++;
+                if (request.GardenFrom > 0 && request.GardenTo > 0)
+                {
+                    if (property.MQGarden >= request.GardenFrom && property.MQGarden <= request.GardenTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.GardenFrom > 0)
+                {
+                    if (property.MQGarden >= request.GardenFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.GardenTo > 0)
+                {
+                    if (property.MQGarden <= request.GardenTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 8. PropertyState - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.PropertyState) && 
+                !string.IsNullOrEmpty(property.StateOfTheProperty))
+            {
+                totalCriteria++;
+                if (property.StateOfTheProperty == request.PropertyState)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 9. Heating - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Heating) && !string.IsNullOrEmpty(property.Heating))
+            {
+                totalCriteria++;
+                if (property.Heating.Equals(request.Heating, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 10. ParkingSpaces - se presente nella richiesta
+            if (request.ParkingSpaces > 0)
+            {
+                totalCriteria++;
+                if (property.ParkingSpaces >= request.ParkingSpaces)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 11. Rooms Range - se presente nella richiesta
+            if (request.RoomsFrom > 0 || request.RoomsTo > 0)
+            {
+                totalCriteria++;
+                if (request.RoomsFrom > 0 && request.RoomsTo > 0)
+                {
+                    if (property.Bedrooms >= request.RoomsFrom && property.Bedrooms <= request.RoomsTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.RoomsFrom > 0)
+                {
+                    if (property.Bedrooms >= request.RoomsFrom)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+                else if (request.RoomsTo > 0)
+                {
+                    if (property.Bedrooms <= request.RoomsTo)
+                    {
+                        matchedCriteria++;
+                    }
+                }
+            }
+
+            // 12. Bathrooms - se presente nella richiesta
+            if (request.Bathrooms > 0)
+            {
+                totalCriteria++;
+                if (property.Bathrooms >= request.Bathrooms)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 13. Floor - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Floor) && !string.IsNullOrEmpty(property.Floor))
+            {
+                totalCriteria++;
+                if (property.Floor.Equals(request.Floor, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 14. Furniture - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.Furniture) && !string.IsNullOrEmpty(property.Furniture))
+            {
+                totalCriteria++;
+                if (property.Furniture.Equals(request.Furniture, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 15. EnergyClass - se presente in entrambi
+            if (!string.IsNullOrEmpty(request.EnergyClass) && !string.IsNullOrEmpty(property.EnergyClass))
+            {
+                totalCriteria++;
+                if (property.EnergyClass == request.EnergyClass)
+                {
+                    matchedCriteria++;
+                }
+            }
+
+            // 16. Auction - se presente nella richiesta
+            totalCriteria++;
+            if (property.Auction == request.Auction)
+            {
+                matchedCriteria++;
+            }
+
+            // Calcola la percentuale
+            if (totalCriteria == 0) return 0;
+            return (int)Math.Round((double)matchedCriteria / totalCriteria * 100);
+        }
+
         public async Task<RequestSelectModel> GetById(int id)
         {
             try
@@ -501,50 +901,62 @@ namespace BackEnd.Services.BusinessServices
                     //.Include(x => x.RequestType)
                     .FirstOrDefaultAsync(x => x.Id == id);
 
-                var citys = request.City.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                         .Select(t => t.Trim().ToLower())
-                         .ToList();
+                if (request == null)
+                    throw new Exception("Richiesta non trovata!");
 
+                // Filtro base: solo immobili non venduti, includendo User e Admin per determinare agenzia
                 var realEstatePropertiesQuery = _unitOfWork.dbContext.RealEstateProperties
-                    .Where(x =>
-                        !x.Sold &&
-                        x.Status == request.Contract &&
-                        x.Price <= request.PriceTo &&
-                        x.Price >= request.PriceFrom &&
-                        citys.Any(t => x.City.ToLower().Contains(t)));
+                    .Include(x => x.User)
+                        .ThenInclude(u => u.Admin)
+                    .Where(x => !x.Sold);
 
-
-                if (!string.IsNullOrEmpty(request.PropertyType))
+                // Applica filtro per cerchia estesa dell'utente (include Admin, Agency e Agent)
+                if (!string.IsNullOrEmpty(request.UserId))
                 {
-                    realEstatePropertiesQuery.Where(x => (x.Typology ?? "").Contains(request.PropertyType));
+                    var circleUserIds = await GetExtendedCircleUserIdsForRequests(request.UserId);
+                    realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => circleUserIds.Contains(x.UserId));
                 }
 
-                if (!string.IsNullOrEmpty(request.RoomsNumber))
+                // FILTRO FONDAMENTALE: City - se il comune non corrisponde, escludi subito (ottimizzazione)
+                if (!string.IsNullOrEmpty(request.City))
                 {
-                    realEstatePropertiesQuery.Where(x => x.WarehouseRooms == Convert.ToInt32(request.RoomsNumber));
+                    var requestCities = request.City.Split(',')
+                        .Select(c => c.Trim().ToLower())
+                        .Where(c => !string.IsNullOrEmpty(c))
+                        .ToList();
+                    
+                    if (requestCities.Any())
+                    {
+                        realEstatePropertiesQuery = realEstatePropertiesQuery.Where(x => 
+                            !string.IsNullOrEmpty(x.City) && 
+                            requestCities.Contains(x.City.ToLower()));
+                    }
                 }
 
-                if (request.MQFrom > 0)
+                List<RealEstateProperty> realEstateProperties = await realEstatePropertiesQuery.ToListAsync();
+                
+                // Calcola il match percentuale per ogni immobile e filtra solo quelli >= 60%
+                var propertiesWithMatch = new List<RealEstatePropertySelectModel>();
+                foreach (var property in realEstateProperties)
                 {
-                    realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate > request.MQFrom);
+                    int matchPercentage = CalculateMatchPercentage(request, property);
+                    if (matchPercentage >= 60)
+                    {
+                        var propertyModel = _mapper.Map<RealEstatePropertySelectModel>(property);
+                        propertyModel.MatchPercentage = matchPercentage;
+                        
+                        // Calcola agenzia di competenza
+                        propertyModel.AgencyName = await GetAgencyNameForProperty(property);
+                        
+                        propertiesWithMatch.Add(propertyModel);
+                    }
                 }
 
-                if (request.MQTo > 0)
-                {
-                    realEstatePropertiesQuery.Where(x => x.CommercialSurfaceate < request.MQTo);
-                }
-
-                if (request.ParkingSpaces > 0)
-                {
-                    realEstatePropertiesQuery.Where(x => x.ParkingSpaces >= request.ParkingSpaces);
-                }
-
-                List<RealEstateProperty> realEstateProperty = await realEstatePropertiesQuery.ToListAsync();
-                List<RealEstatePropertySelectModel> realEstatePropertySelectModel = _mapper.Map<List<RealEstatePropertySelectModel>>(realEstateProperty);
+                // Ordina per match percentuale decrescente (migliori match prima)
+                propertiesWithMatch = propertiesWithMatch.OrderByDescending(p => p.MatchPercentage).ToList();
 
                 RequestSelectModel result = _mapper.Map<RequestSelectModel>(request);
-                result.RealEstateProperties = new List<RealEstatePropertySelectModel>();
-                result.RealEstateProperties?.AddRange(realEstatePropertySelectModel);
+                result.RealEstateProperties = propertiesWithMatch;
 
                 _logger.LogInformation(nameof(GetById));
 
@@ -593,6 +1005,50 @@ namespace BackEnd.Services.BusinessServices
                 {
                     throw new Exception("Si è verificato un errore in fase di modifica");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Ottiene le informazioni del proprietario di un'entità (usato per livello 3)
+        /// </summary>
+        private async Task<BackEnd.Models.OwnerInfoModel?> GetOwnerInfo(string ownerUserId)
+        {
+            try
+            {
+                var owner = await _userManager.FindByIdAsync(ownerUserId);
+                if (owner == null)
+                    return null;
+
+                var ownerRoles = await _userManager.GetRolesAsync(owner);
+                var role = ownerRoles.Contains("Admin") ? "Admin" 
+                    : ownerRoles.Contains("Agency") ? "Agency" 
+                    : ownerRoles.Contains("Agent") ? "Agent" 
+                    : "User";
+
+                var ownerInfo = new BackEnd.Models.OwnerInfoModel
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Role = role
+                };
+
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
+                {
+                    var agency = await _userManager.FindByIdAsync(owner.AdminId);
+                    if (agency != null)
+                    {
+                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                    }
+                }
+
+                return ownerInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Errore nel recupero delle informazioni del proprietario per userId: {ownerUserId}");
+                return null;
             }
         }
     }

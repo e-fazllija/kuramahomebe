@@ -1,6 +1,7 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Models.CustomerModels;
 using BackEnd.Models.RealEstatePropertyPhotoModels;
+using BackEnd.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace BackEnd.Models.RealEstatePropertyModels
@@ -62,7 +63,6 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public int AgreedCommission { get; set; }
         public int FlatRateCommission { get; set; }
         public int CommissionReversal { get; set; }
-        public double EffectiveCommission { get; set; }
         public string? TypeOfAssignment { get; set; }
 
         public string? VideoUrl { get; set; }
@@ -75,6 +75,16 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string UserId { get; set; }
         public virtual ApplicationUser User { get; set; } = new ApplicationUser();
         public ICollection<RealEstatePropertyNotes>? RealEstatePropertyNotes { get; set; }
+        
+        // Proprietà usate quando l'immobile viene restituito in contesto di match con una richiesta
+        public int MatchPercentage { get; set; }
+        public string? AgencyName { get; set; }
+        
+        // Livello di accesso per questo immobile (1=completo, 2=solo lettura, 3=limitato)
+        public int AccessLevel { get; set; } = 1;
+        
+        // Informazioni del proprietario (popolato solo se AccessLevel == 3)
+        public OwnerInfoModel? OwnerInfo { get; set; }
         public int? IdealistaPropertyId { get; set; }
     }
 }

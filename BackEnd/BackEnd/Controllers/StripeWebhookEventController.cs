@@ -21,6 +21,7 @@ namespace BackEnd.Controllers
         private readonly IPaymentServices _paymentServices;
         private readonly IUserSubscriptionServices _userSubscriptionServices;
         private readonly ISubscriptionPlanServices _subscriptionPlanServices;
+        private readonly ISubscriptionLimitService _subscriptionLimitService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<StripeWebhookEventController> _logger;
 
@@ -30,6 +31,7 @@ namespace BackEnd.Controllers
             IPaymentServices paymentServices,
             IUserSubscriptionServices userSubscriptionServices,
             ISubscriptionPlanServices subscriptionPlanServices,
+            ISubscriptionLimitService subscriptionLimitService,
             UserManager<ApplicationUser> userManager,
             ILogger<StripeWebhookEventController> logger)
         {
@@ -38,6 +40,7 @@ namespace BackEnd.Controllers
             _paymentServices = paymentServices;
             _userSubscriptionServices = userSubscriptionServices;
             _subscriptionPlanServices = subscriptionPlanServices;
+            _subscriptionLimitService = subscriptionLimitService;
             _userManager = userManager;
             _logger = logger;
         }
@@ -363,6 +366,13 @@ namespace BackEnd.Controllers
 
                     if (subscriptionPlan != null)
                     {
+                        // Leggi metadata per verificare se è un upgrade con proration
+                        var isUpgradeFromMetadata = paymentIntent.Metadata.GetValueOrDefault("isUpgrade", "false").ToLower() == "true";
+                        var creditAmountStr = paymentIntent.Metadata.GetValueOrDefault("creditAmount", "0");
+                        var originalAmountStr = paymentIntent.Metadata.GetValueOrDefault("originalAmount", "0");
+                        var finalAmountStr = paymentIntent.Metadata.GetValueOrDefault("finalAmount", "0");
+                        var currentPlanName = paymentIntent.Metadata.GetValueOrDefault("currentPlanName", "");
+
                         // Gestione abbonamento: upgrade, rinnovo o nuovo
                         var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
                         
@@ -370,6 +380,10 @@ namespace BackEnd.Controllers
                         {
                             var today = DateTime.UtcNow;
                             var isExpired = !activeSubscription.EndDate.HasValue || activeSubscription.EndDate.Value <= today;
+                            
+                            // Verifica se è un trial (piano Free o senza StripeSubscriptionId)
+                            var isTrial = string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId) || 
+                                        activeSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
 
                             // Stesso piano = RINNOVO
                             if (activeSubscription.SubscriptionPlanId == subscriptionPlan.Id)
@@ -425,92 +439,217 @@ namespace BackEnd.Controllers
                                 // Piano diverso = UPGRADE/DOWNGRADE
                                 var oldPlanPrice = activeSubscription.SubscriptionPlan?.Price ?? 0;
                                 var newPlanPrice = subscriptionPlan.Price;
-                                var daysInMonth = 30;
-                                var creditDays = 0;
-
-                                // Verifica se è un upgrade (newPlanPrice > oldPlanPrice) o downgrade
                                 bool isUpgrade = newPlanPrice > oldPlanPrice;
                                 bool isDowngrade = oldPlanPrice > newPlanPrice;
 
-                                // Calcola credito solo per gli UPGRADE (non per i downgrade - nessun rimborso)
-                                // TODO: Il codice del rimborso è stato commentato - può essere riattivato in futuro se necessario
-                                // Quando si fa downgrade, non viene calcolato nessun credito/rimborso
-                                // L'utente ottiene solo il periodo standard del nuovo piano pagato
-                                /*
-                                if (!isExpired && oldPlanPrice > 0 && isUpgrade) // Solo per upgrade, non per downgrade
-                                {
-                                    var daysRemaining = (int)(activeSubscription.EndDate.Value - today).TotalDays;
-                                    if (daysRemaining > 0)
-                                    {
-                                        // Calcola il credito in giorni del nuovo piano
-                                        var creditAmount = (oldPlanPrice / daysInMonth) * daysRemaining;
-                                        creditDays = (int)(creditAmount / (newPlanPrice / daysInMonth));
-                                    }
-                                }
-                                */
-
-                                // Sezione rimborso per downgrade - COMMENTATA (non viene applicato rimborso)
-                                // Quando si fa downgrade, l'utente perde i giorni rimanenti senza rimborso
-                                // Il nuovo abbonamento parte da oggi con durata standard del piano inferiore
-                                /*
-                                if (!isExpired && oldPlanPrice > 0 && isDowngrade)
-                                {
-                                    var daysRemaining = (int)(activeSubscription.EndDate.Value - today).TotalDays;
-                                    if (daysRemaining > 0)
-                                    {
-                                        // Calcola il credito in giorni del nuovo piano (rimborso convertito in giorni)
-                                        var creditAmount = (oldPlanPrice / daysInMonth) * daysRemaining;
-                                        creditDays = (int)(creditAmount / (newPlanPrice / daysInMonth));
-                                    }
-                                }
-                                */
-
-                                // Cancella il vecchio abbonamento
-                                await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
-
-                                // Crea nuovo abbonamento
-                                var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
-                                var baseEndDate = today.AddMonths(newMonths);
-                                // Per downgrade: creditDays = 0 (nessun rimborso/giorni extra)
-                                // Per upgrade: creditDays = 0 (commentato - può essere riattivato)
-                                var finalEndDate = baseEndDate.AddDays(creditDays);
-
-                                var subscriptionModel = new UserSubscriptionCreateModel
-                                {
-                                    UserId = user.Id,
-                                    SubscriptionPlanId = subscriptionPlan.Id,
-                                    StartDate = today, // Sempre data di decorrenza = oggi per upgrade/downgrade
-                                    EndDate = finalEndDate,
-                                    Status = "active",
-                                    AutoRenew = false,
-                                    LastPaymentId = payment.Id
-                                };
-
-                                await _userSubscriptionServices.CreateAsync(subscriptionModel);
+                                // Verifica i requisiti se:
+                                // 1. È un downgrade (anche se l'abbonamento è scaduto)
+                                // 2. L'abbonamento è scaduto (indipendentemente da upgrade/downgrade)
+                                // Non verifica se è un upgrade e l'abbonamento è attivo (i limiti aumentano)
+                                bool needsCompatibilityCheck = isDowngrade || isExpired;
                                 
-                                if (isExpired)
+                                if (needsCompatibilityCheck)
                                 {
-                                    _logger.LogInformation($"Cambio piano completato (abbonamento scaduto) per {user.Email}. Piano: {subscriptionPlan.Name}, Data decorrenza: {today}, Scadenza: {finalEndDate}");
+                                    try
+                                    {
+                                        var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
+                                            user.Id, 
+                                            subscriptionPlan.Id, 
+                                            user.AdminId);
+                                        
+                                        if (!compatibility.CanDowngrade)
+                                        {
+                                            _logger.LogWarning(
+                                                "Impossibile creare/aggiornare abbonamento per {Email}. " +
+                                                "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
+                                                "Limiti superati: {ExceededCount}. " +
+                                                "Dettagli: {Message}",
+                                                user.Email, subscriptionPlan.Name, 
+                                                compatibility.ExceededLimitsCount, compatibility.Message);
+                                            
+                                            // Non creiamo/aggiorniamo l'abbonamento se i requisiti non sono rispettati
+                                            // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
+                                            // Questo è un caso edge che dovrebbe essere gestito dal frontend, ma aggiungiamo il controllo per sicurezza
+                                            return;
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, 
+                                            "Errore durante la verifica dei requisiti per {Email} e piano {PlanName}. " +
+                                            "Procedo comunque con la creazione dell'abbonamento.",
+                                            user.Email, subscriptionPlan.Name);
+                                        // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
+                                    }
                                 }
-                                else if (isUpgrade)
+
+                                // Se è un upgrade con proration (dai metadata), cancella vecchio e crea nuovo con periodo standard
+                                if (isUpgradeFromMetadata && isUpgrade)
                                 {
-                                    // Upgrade: credito commentato per ora (può essere riattivato)
-                                    _logger.LogInformation($"Upgrade completato per {user.Email}. Piano: {subscriptionPlan.Name}, Scadenza: {finalEndDate}");
+                                    // Cancella completamente il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    // Se è un trial, non c'è nulla da cancellare su Stripe
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
+                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
+
+                                    // Crea nuovo abbonamento con periodo standard (30 giorni per mensile)
+                                    // Il credito è già stato applicato nel calcolo dell'importo pagato
+                                    var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                    var newEndDate = today.AddMonths(newMonths);
+
+                                    var subscriptionModel = new UserSubscriptionCreateModel
+                                    {
+                                        UserId = user.Id,
+                                        SubscriptionPlanId = subscriptionPlan.Id,
+                                        StartDate = today, // Nuovo ciclo parte da oggi
+                                        EndDate = newEndDate,
+                                        Status = "active",
+                                        AutoRenew = false,
+                                        LastPaymentId = payment.Id
+                                    };
+
+                                    await _userSubscriptionServices.CreateAsync(subscriptionModel);
+
+                                    _logger.LogInformation(
+                                        "Upgrade con proration completato per {Email}. " +
+                                        "Piano precedente: {OldPlan} (€{OldPrice}), " +
+                                        "Nuovo piano: {NewPlan} (€{NewPrice}), " +
+                                        "Credito applicato: €{Credit}, " +
+                                        "Importo originale: €{Original}, " +
+                                        "Importo pagato: €{Final}, " +
+                                        "Nuova scadenza: {EndDate}",
+                                        user.Email, currentPlanName, oldPlanPrice,
+                                        subscriptionPlan.Name, newPlanPrice,
+                                        creditAmountStr, originalAmountStr, finalAmountStr, newEndDate);
                                 }
                                 else if (isDowngrade)
                                 {
                                     // Downgrade: nessun rimborso/credito applicato
-                                    _logger.LogInformation($"Downgrade completato per {user.Email}. Piano: {subscriptionPlan.Name} (nessun rimborso applicato), Scadenza: {finalEndDate}");
+                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
+                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
+
+                                    // Crea nuovo abbonamento con periodo standard
+                                    var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                    var newEndDate = today.AddMonths(newMonths);
+
+                                    var subscriptionModel = new UserSubscriptionCreateModel
+                                    {
+                                        UserId = user.Id,
+                                        SubscriptionPlanId = subscriptionPlan.Id,
+                                        StartDate = today,
+                                        EndDate = newEndDate,
+                                        Status = "active",
+                                        AutoRenew = false,
+                                        LastPaymentId = payment.Id
+                                    };
+
+                                    await _userSubscriptionServices.CreateAsync(subscriptionModel);
+
+                                    _logger.LogInformation(
+                                        "Downgrade completato per {Email}. " +
+                                        "Piano precedente: {OldPlan} (€{OldPrice}), " +
+                                        "Nuovo piano: {NewPlan} (€{NewPrice}), " +
+                                        "Nessun rimborso applicato, Scadenza: {EndDate}",
+                                        user.Email, activeSubscription.SubscriptionPlan?.Name ?? "N/A", oldPlanPrice,
+                                        subscriptionPlan.Name, newPlanPrice, newEndDate);
                                 }
                                 else
                                 {
-                                    _logger.LogInformation($"Cambio piano completato per {user.Email}. Piano: {subscriptionPlan.Name}, Scadenza: {finalEndDate}");
+                                    // Cambio piano generico (non upgrade/downgrade riconosciuto)
+                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
+                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
+                                    {
+                                        try
+                                        {
+                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
+                                        }
+                                    }
+                                    
+                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
+
+                                    var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                    var newEndDate = today.AddMonths(newMonths);
+
+                                    var subscriptionModel = new UserSubscriptionCreateModel
+                                    {
+                                        UserId = user.Id,
+                                        SubscriptionPlanId = subscriptionPlan.Id,
+                                        StartDate = today,
+                                        EndDate = newEndDate,
+                                        Status = "active",
+                                        AutoRenew = false,
+                                        LastPaymentId = payment.Id
+                                    };
+
+                                    await _userSubscriptionServices.CreateAsync(subscriptionModel);
+
+                                    _logger.LogInformation(
+                                        "Cambio piano completato per {Email}. Piano: {Plan}, Scadenza: {EndDate}",
+                                        user.Email, subscriptionPlan.Name, newEndDate);
                                 }
                             }
                         }
                         else
                         {
                             // Nuovo abbonamento (nessun abbonamento attivo)
+                            // Verifica sempre i requisiti per un nuovo abbonamento
+                            try
+                            {
+                                var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
+                                    user.Id, 
+                                    subscriptionPlan.Id, 
+                                    user.AdminId);
+                                
+                                if (!compatibility.CanDowngrade)
+                                {
+                                    _logger.LogWarning(
+                                        "Impossibile creare nuovo abbonamento per {Email}. " +
+                                        "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
+                                        "Limiti superati: {ExceededCount}. " +
+                                        "Dettagli: {Message}",
+                                        user.Email, subscriptionPlan.Name, 
+                                        compatibility.ExceededLimitsCount, compatibility.Message);
+                                    
+                                    // Non creiamo l'abbonamento se i requisiti non sono rispettati
+                                    // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, 
+                                    "Errore durante la verifica dei requisiti per nuovo abbonamento {Email} e piano {PlanName}. " +
+                                    "Procedo comunque con la creazione dell'abbonamento.",
+                                    user.Email, subscriptionPlan.Name);
+                                // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
+                            }
+                            
                             var subscriptionModel = new UserSubscriptionCreateModel
                             {
                                 UserId = user.Id,

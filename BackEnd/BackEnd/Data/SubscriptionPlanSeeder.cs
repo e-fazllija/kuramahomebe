@@ -9,7 +9,7 @@ namespace BackEnd.Data
         {
             // Verifica se i piani esistono già
             var existingPlans = await context.SubscriptionPlans
-                .Where(p => p.Name.ToLower() == "basic" || p.Name.ToLower() == "pro" || p.Name.ToLower() == "premium")
+                .Where(p => p.Name.ToLower() == "free" || p.Name.ToLower() == "basic" || p.Name.ToLower() == "pro" || p.Name.ToLower() == "premium")
                 .ToListAsync();
 
             if (existingPlans.Any())
@@ -26,6 +26,34 @@ namespace BackEnd.Data
                 }
                 await context.SaveChangesAsync();
             }
+
+            // PIANO FREE (Trial di benvenuto)
+            var freePlan = new SubscriptionPlan
+            {
+                Name = "Free",
+                Description = "Piano gratuito di benvenuto per nuovi utenti. Periodo di prova di 10 giorni con funzionalità base.",
+                Price = 0.00m,
+                BillingPeriod = "monthly",
+                Active = true,
+                CreationDate = DateTime.UtcNow,
+                UpdateDate = DateTime.UtcNow
+            };
+            context.SubscriptionPlans.Add(freePlan);
+            await context.SaveChangesAsync();
+
+            // Features Free (stesse del Basic per il trial)
+            var freeFeatures = new List<SubscriptionFeature>
+            {
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_agencies", FeatureValue = "1", Description = "Massimo 1 agenzia", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_agents", FeatureValue = "5", Description = "Massimo 5 agenti", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_properties", FeatureValue = "20", Description = "Massimo 20 immobili", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_customers", FeatureValue = "50", Description = "Massimo 50 clienti", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_requests", FeatureValue = "100", Description = "Massimo 100 richieste", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "export_enabled", FeatureValue = "false", Description = "Export dati disabilitato", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_exports", FeatureValue = "0", Description = "Nessun export disponibile", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "storage_limit", FeatureValue = "1", Description = "Storage limitato a 1 GB", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow }
+            };
+            context.SubscriptionFeatures.AddRange(freeFeatures);
 
             // PIANO BASIC
             var basicPlan = new SubscriptionPlan
@@ -114,9 +142,58 @@ namespace BackEnd.Data
             await context.SaveChangesAsync();
 
             Console.WriteLine("✅ Piani subscription creati con successo:");
+            Console.WriteLine($"   - Free: €{freePlan.Price}/mese (Trial di benvenuto)");
             Console.WriteLine($"   - Basic: €{basicPlan.Price}/mese");
             Console.WriteLine($"   - Pro: €{proPlan.Price}/mese");
             Console.WriteLine($"   - Premium: €{premiumPlan.Price}/mese");
+        }
+
+        /// <summary>
+        /// Verifica e crea il piano Free se non esiste (sempre necessario per i trial)
+        /// </summary>
+        public static async Task EnsureFreePlanExists(AppDbContext context)
+        {
+            var freePlan = await context.SubscriptionPlans
+                .FirstOrDefaultAsync(p => p.Name.ToLower() == "free");
+
+            if (freePlan == null)
+            {
+                Console.WriteLine("⚠️  Piano Free non trovato. Creazione...");
+                
+                freePlan = new SubscriptionPlan
+                {
+                    Name = "Free",
+                    Description = "Piano gratuito di benvenuto per nuovi utenti. Periodo di prova di 10 giorni con funzionalità base.",
+                    Price = 0.00m,
+                    BillingPeriod = "monthly",
+                    Active = true,
+                    CreationDate = DateTime.UtcNow,
+                    UpdateDate = DateTime.UtcNow
+                };
+                context.SubscriptionPlans.Add(freePlan);
+                await context.SaveChangesAsync();
+
+                // Features Free (stesse del Basic per il trial)
+                var freeFeatures = new List<SubscriptionFeature>
+                {
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_agencies", FeatureValue = "1", Description = "Massimo 1 agenzia", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_agents", FeatureValue = "5", Description = "Massimo 5 agenti", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_properties", FeatureValue = "20", Description = "Massimo 20 immobili", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_customers", FeatureValue = "50", Description = "Massimo 50 clienti", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_requests", FeatureValue = "100", Description = "Massimo 100 richieste", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "export_enabled", FeatureValue = "false", Description = "Export dati disabilitato", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "max_exports", FeatureValue = "0", Description = "Nessun export disponibile", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                    new SubscriptionFeature { SubscriptionPlanId = freePlan.Id, FeatureName = "storage_limit", FeatureValue = "1", Description = "Storage limitato a 1 GB", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow }
+                };
+                context.SubscriptionFeatures.AddRange(freeFeatures);
+                await context.SaveChangesAsync();
+
+                Console.WriteLine($"✅ Piano Free creato con successo (ID: {freePlan.Id})");
+            }
+            else
+            {
+                Console.WriteLine($"✅ Piano Free già esistente (ID: {freePlan.Id})");
+            }
         }
     }
 }

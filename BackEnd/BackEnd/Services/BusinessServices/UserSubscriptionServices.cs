@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AutoMapper;
 using BackEnd.Entities;
 using BackEnd.Interfaces;
@@ -20,19 +22,104 @@ namespace BackEnd.Services.BusinessServices
         public async Task<UserSubscriptionSelectModel?> GetByIdAsync(int id)
         {
             var entity = await _unitOfWork.UserSubscriptionRepository.GetByIdAsync(id);
-            return entity != null ? _mapper.Map<UserSubscriptionSelectModel>(entity) : null;
+            if (entity == null) return null;
+            
+            var subscription = _mapper.Map<UserSubscriptionSelectModel>(entity);
+            
+            // Se il piano Free non ha features, eredita quelle del Basic
+            if (subscription?.SubscriptionPlan != null 
+                && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
+                && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
+            {
+                // Cerca il piano Basic
+                var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
+                var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
+                
+                if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
+                {
+                    // Copia le features del Basic al Free, ma mantieni il SubscriptionPlanId del Free
+                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
+                    {
+                        Id = f.Id,
+                        SubscriptionPlanId = subscription.SubscriptionPlan.Id, // Usa l'ID del Free
+                        FeatureName = f.FeatureName,
+                        FeatureValue = f.FeatureValue,
+                        Description = f.Description,
+                        CreationDate = f.CreationDate,
+                        UpdateDate = f.UpdateDate
+                    }).ToList();
+                }
+            }
+            
+            return subscription;
         }
 
         public async Task<IEnumerable<UserSubscriptionSelectModel>> GetUserSubscriptionsAsync(string userId)
         {
             var entities = await _unitOfWork.UserSubscriptionRepository.GetUserSubscriptionsAsync(userId);
-            return _mapper.Map<IEnumerable<UserSubscriptionSelectModel>>(entities);
+            var subscriptions = _mapper.Map<IEnumerable<UserSubscriptionSelectModel>>(entities).ToList();
+            
+            // Se il piano Free non ha features, eredita quelle del Basic
+            var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
+            var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
+            
+            foreach (var subscription in subscriptions)
+            {
+                if (subscription?.SubscriptionPlan != null 
+                    && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
+                    && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any())
+                    && basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
+                {
+                    // Copia le features del Basic al Free
+                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
+                    {
+                        Id = f.Id,
+                        SubscriptionPlanId = subscription.SubscriptionPlan.Id,
+                        FeatureName = f.FeatureName,
+                        FeatureValue = f.FeatureValue,
+                        Description = f.Description,
+                        CreationDate = f.CreationDate,
+                        UpdateDate = f.UpdateDate
+                    }).ToList();
+                }
+            }
+            
+            return subscriptions;
         }
 
         public async Task<UserSubscriptionSelectModel?> GetActiveUserSubscriptionAsync(string userId, string? agencyId = null)
         {
             var entity = await _unitOfWork.UserSubscriptionRepository.GetActiveUserSubscriptionAsync(userId, agencyId);
-            return entity != null ? _mapper.Map<UserSubscriptionSelectModel>(entity) : null;
+            if (entity == null) return null;
+            
+            var subscription = _mapper.Map<UserSubscriptionSelectModel>(entity);
+            
+            // Se il piano Free non ha features, eredita quelle del Basic
+            if (subscription?.SubscriptionPlan != null 
+                && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
+                && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
+            {
+                // Cerca il piano Basic
+                var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
+                var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
+                
+                if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
+                {
+                    // Copia le features del Basic al Free, ma mantieni il SubscriptionPlanId del Free
+                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
+                    {
+                        Id = f.Id,
+                        SubscriptionPlanId = subscription.SubscriptionPlan.Id, // Usa l'ID del Free
+                        FeatureName = f.FeatureName,
+                        FeatureValue = f.FeatureValue,
+                        Description = f.Description,
+                        CreationDate = f.CreationDate,
+                        UpdateDate = f.UpdateDate
+                    }).ToList();
+                }
+            }
+            
+            return subscription;
         }
 
         public async Task<UserSubscriptionSelectModel> CreateAsync(UserSubscriptionCreateModel model)
