@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using BackEnd.Entities;
 using BackEnd.Exceptions;
 using BackEnd.Interfaces;
@@ -174,14 +174,8 @@ namespace BackEnd.Controllers
 
                         // Calcola la data di fine abbonamento in base al periodo di fatturazione
                         DateTime? endDate = null;
-                        if (plan.BillingPeriod?.ToLower() == "monthly")
-                        {
-                            endDate = DateTime.UtcNow.AddMonths(1);
-                        }
-                        else if (plan.BillingPeriod?.ToLower() == "yearly")
-                        {
-                            endDate = DateTime.UtcNow.AddYears(1);
-                        }
+                        var months = GetMonthsFromBillingPeriod(plan.BillingPeriod);
+                        endDate = DateTime.UtcNow.AddMonths(months);
 
                         // Crea l'abbonamento per l'agenzia
                         var subscriptionModel = new UserSubscriptionCreateModel
@@ -468,6 +462,25 @@ namespace BackEnd.Controllers
             }
 
             return table;
+        }
+
+        /// <summary>
+        /// Calcola il numero di mesi in base al BillingPeriod
+        /// </summary>
+        private static int GetMonthsFromBillingPeriod(string? billingPeriod)
+        {
+            if (string.IsNullOrEmpty(billingPeriod))
+                return 1; // Default a 1 mese
+
+            return billingPeriod.ToLower() switch
+            {
+                "monthly" => 1,
+                "quarterly" => 3,
+                "semiannual" => 6,
+                "annual" => 12,
+                "yearly" => 12, // Manteniamo compatibilità con il vecchio valore
+                _ => 1 // Default a 1 mese se non riconosciuto
+            };
         }
     }
 }

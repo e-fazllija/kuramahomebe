@@ -68,6 +68,57 @@ namespace BackEnd.Controllers
                     return StatusCode(StatusCodes.Status429TooManyRequests, limitCheck);
                 }
 
+                // Validazione: se l'utente è Admin, l'AgentId deve essere un Agent o un'Agency (non Admin)
+                var currentUserRoles = await _userManager.GetRolesAsync(currentUser);
+                if (currentUserRoles.Contains("Admin"))
+                {
+                    // Verifica che l'AgentId non sia l'ID dell'admin stesso
+                    if (request.AgentId == userId)
+                    {
+                        return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() { Status = "Error", Message = "L'admin non può associare immobili a se stesso. Seleziona un'agente o un'agenzia." });
+                    }
+
+                    // Verifica che l'AgentId appartenga a un Agent o un'Agency nella cerchia dell'admin
+                    var targetUser = await _userManager.FindByIdAsync(request.AgentId);
+                    if (targetUser == null)
+                    {
+                        return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() { Status = "Error", Message = "Agente o agenzia non trovato." });
+                    }
+
+                    var targetUserRoles = await _userManager.GetRolesAsync(targetUser);
+                    // Se il target è un Admin, non è valido
+                    if (targetUserRoles.Contains("Admin"))
+                    {
+                        return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() { Status = "Error", Message = "Non è possibile associare un immobile a un admin. Seleziona un'agente o un'agenzia." });
+                    }
+
+                    // Verifica che l'Agent o Agency appartenga all'admin corrente
+                    if (targetUserRoles.Contains("Agent"))
+                    {
+                        // Verifica se l'Agent appartiene direttamente all'Admin o a una sua Agency
+                        if (targetUser.AdminId != userId)
+                        {
+                            var agency = await _userManager.FindByIdAsync(targetUser.AdminId);
+                            if (agency == null || agency.AdminId != userId)
+                            {
+                                return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "L'agente selezionato non appartiene alla tua cerchia." });
+                            }
+                        }
+                    }
+                    else if (targetUserRoles.Contains("Agency"))
+                    {
+                        // Verifica che l'Agency appartenga all'Admin
+                        if (targetUser.AdminId != userId)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new AuthResponseModel() { Status = "Error", Message = "L'agenzia selezionata non appartiene alla tua cerchia." });
+                        }
+                    }
+                    else
+                    {
+                        return StatusCode(StatusCodes.Status400BadRequest, new AuthResponseModel() { Status = "Error", Message = "L'utente selezionato non è un agente o un'agenzia valida." });
+                    }
+                }
+
                 // Log per debug: verifica che AssignmentEnd sia valida (la conversione a UTC è gestita nel servizio)
                 _logger.LogInformation($"AssignmentEnd ricevuta: {request.AssignmentEnd}, Kind: {request.AssignmentEnd.Kind}");
 

@@ -391,7 +391,8 @@ namespace BackEnd.Controllers
                                 if (!isExpired)
                                 {
                                     // ABBONAMENTO NON SCADUTO: estendi la data di scadenza
-                                    var newEndDate = activeSubscription.EndDate.Value.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12);
+                                    var months = GetMonthsFromBillingPeriod(subscriptionPlan.BillingPeriod);
+                                    var newEndDate = activeSubscription.EndDate.Value.AddMonths(months);
 
                                     var updateModel = new UserSubscriptionUpdateModel
                                     {
@@ -414,7 +415,8 @@ namespace BackEnd.Controllers
                                 {
                                     // ABBONAMENTO SCADUTO: nuova sottoscrizione con data di decorrenza = oggi
                                     var newStartDate = today;
-                                    var newEndDate = today.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12);
+                                    var months = GetMonthsFromBillingPeriod(subscriptionPlan.BillingPeriod);
+                                    var newEndDate = today.AddMonths(months);
 
                                     var updateModel = new UserSubscriptionUpdateModel
                                     {
@@ -502,9 +504,9 @@ namespace BackEnd.Controllers
                                     
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
-                                    // Crea nuovo abbonamento con periodo standard (30 giorni per mensile)
+                                    // Crea nuovo abbonamento con periodo standard
                                     // Il credito è già stato applicato nel calcolo dell'importo pagato
-                                    var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                    var newMonths = GetMonthsFromBillingPeriod(subscriptionPlan.BillingPeriod);
                                     var newEndDate = today.AddMonths(newMonths);
 
                                     var subscriptionModel = new UserSubscriptionCreateModel
@@ -551,7 +553,7 @@ namespace BackEnd.Controllers
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
                                     // Crea nuovo abbonamento con periodo standard
-                                    var newMonths = subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12;
+                                    var newMonths = GetMonthsFromBillingPeriod(subscriptionPlan.BillingPeriod);
                                     var newEndDate = today.AddMonths(newMonths);
 
                                     var subscriptionModel = new UserSubscriptionCreateModel
@@ -650,12 +652,13 @@ namespace BackEnd.Controllers
                                 // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
                             }
                             
+                            var months = GetMonthsFromBillingPeriod(subscriptionPlan.BillingPeriod);
                             var subscriptionModel = new UserSubscriptionCreateModel
                             {
                                 UserId = user.Id,
                                 SubscriptionPlanId = subscriptionPlan.Id,
                                 StartDate = DateTime.UtcNow,
-                                EndDate = DateTime.UtcNow.AddMonths(subscriptionPlan.BillingPeriod == "monthly" ? 1 : 12),
+                                EndDate = DateTime.UtcNow.AddMonths(months),
                                 Status = "active",
                                 AutoRenew = false,
                                 LastPaymentId = payment.Id
@@ -802,6 +805,25 @@ namespace BackEnd.Controllers
             {
                 _logger.LogError(ex, $"Errore durante il processing della subscription deleted {subscription.Id}");
             }
+        }
+
+        /// <summary>
+        /// Calcola il numero di mesi in base al BillingPeriod
+        /// </summary>
+        private static int GetMonthsFromBillingPeriod(string? billingPeriod)
+        {
+            if (string.IsNullOrEmpty(billingPeriod))
+                return 1; // Default a 1 mese
+
+            return billingPeriod.ToLower() switch
+            {
+                "monthly" => 1,
+                "quarterly" => 3,
+                "semiannual" => 6,
+                "annual" => 12,
+                "yearly" => 12, // Manteniamo compatibilità con il vecchio valore
+                _ => 1 // Default a 1 mese se non riconosciuto
+            };
         }
     }
 

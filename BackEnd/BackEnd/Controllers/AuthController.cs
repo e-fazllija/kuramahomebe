@@ -742,29 +742,64 @@ namespace BackEnd.Controllers
 
         }
 
-        //[HttpGet]
-        //[Route(nameof(ForgotPassword))]
-        //public async Task<IActionResult> ForgotPassword(string email)
-        //{
-        //    var user = await userManager.FindByEmailAsync(email);
-        //    if (user == null) return NotFound("NOT_FOUND");
+        [HttpPost]
+        [Route("forgot_password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            try
+            {
+                if (model == null || string.IsNullOrEmpty(model.Email))
+                {
+                    return BadRequest(new AuthResponseModel { Status = "Error", Message = "Email non valida" });
+                }
 
-        //    var token = await userManager.GeneratePasswordResetTokenAsync(user);
+                var user = await userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    // Per sicurezza, non riveliamo se l'email esiste o meno
+                    return Ok(new AuthResponseModel { Status = "Success", Message = "Se l'email esiste, riceverai un link per il reset della password." });
+                }
 
-        //    MailRequest mailRequest = new MailRequest()
-        //    {
-        //        ToEmail = email,
-        //        Subject = $"Richiesta reset password",
-        //        Body = $"Ci è pervenuta una richiesta di reset password! <br><br> Se non sei stato tu, ignora questo messaggio! " +
-        //         $"<br><br> Se vuoi resettare la tua password <a href='https://wepp.art/resetpassword/" + token.Replace("/", "_").Replace("+", "&") + "/" + email + "'>clicca qui!</a>" +
-        //         $"<br /> <br>" +
-        //         $"<br /><br /> Team Weppart"
-        //    };
-        //    await _mailService.SendEmailAsync(mailRequest);
+                var token = await userManager.GeneratePasswordResetTokenAsync(user);
+                
+                // Codifica il token per l'URL (sostituisce caratteri speciali)
+                var encodedToken = token.Replace("/", "_").Replace("+", "&");
+                
+                // URL del frontend per il reset password
+                var resetLink = $"https://red-mushroom-08aa33903.3.azurestaticapps.net/new-password/{user.Email}/{encodedToken}";
 
-        //    return Ok();
+                MailRequest mailRequest = new MailRequest()
+                {
+                    ToEmail = model.Email,
+                    Subject = "Richiesta reset password - MiraiHome",
+                    Body = $"<h2>Richiesta Reset Password</h2>" +
+                           $"<p>Ci è pervenuta una richiesta di reset password per il tuo account MiraiHome.</p>" +
+                           $"<p>Se non sei stato tu, ignora questo messaggio.</p>" +
+                           $"<p>Se vuoi resettare la tua password, <a href='{resetLink}'>clicca qui</a></p>" +
+                           $"<p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p>" +
+                           $"<p>{resetLink}</p>" +
+                           $"<p>Il link scadrà tra 24 ore.</p>" +
+                           $"<br><p>Team MiraiHome</p>"
+                };
+                
+                try
+                {
+                    await _mailService.SendEmailAsync(mailRequest);
+                }
+                catch (Exception emailEx)
+                {
+                    // Restituisci comunque successo per non rivelare se l'email esiste
+                    return Ok(new AuthResponseModel { Status = "Success", Message = "Se l'email esiste, riceverai un link per il reset della password." });
+                }
 
-        //}
+                return Ok(new AuthResponseModel { Status = "Success", Message = "Se l'email esiste, riceverai un link per il reset della password." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new AuthResponseModel { Status = "Error", Message = "Si è verificato un errore durante l'invio dell'email: " + ex.Message });
+            }
+        }
 
         //[HttpPost]
         //[Route(nameof(UpdatePassword))]
