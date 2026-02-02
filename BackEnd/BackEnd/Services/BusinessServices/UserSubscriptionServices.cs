@@ -125,6 +125,18 @@ namespace BackEnd.Services.BusinessServices
         public async Task<UserSubscriptionSelectModel> CreateAsync(UserSubscriptionCreateModel model)
         {
             var entity = _mapper.Map<UserSubscription>(model);
+            
+            // Imposta CreationDate e UpdateDate
+            var now = DateTime.UtcNow;
+            if (entity.CreationDate == default(DateTime) || entity.CreationDate == new DateTime(1, 1, 1))
+            {
+                entity.CreationDate = now;
+            }
+            entity.UpdateDate = now;
+            
+            // AutoRenew viene mappato automaticamente da AutoMapper dal modello
+            // Il modello ha default = true, quindi dovrebbe essere già impostato
+            
             var createdEntity = await _unitOfWork.UserSubscriptionRepository.CreateAsync(entity);
             await _unitOfWork.SaveAsync();
             return _mapper.Map<UserSubscriptionSelectModel>(createdEntity);

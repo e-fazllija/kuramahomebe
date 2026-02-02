@@ -18,8 +18,14 @@ namespace BackEnd.Interfaces.IBusinessServices
         /// Recupera un Payment Intent tramite ID
         /// </summary>
         /// <param name="paymentIntentId">ID del Payment Intent</param>
+        /// <param name="expand">Campi da espandere (es. "invoice")</param>
         /// <returns>Payment Intent</returns>
-        Task<PaymentIntent> GetPaymentIntentAsync(string paymentIntentId);
+        Task<PaymentIntent> GetPaymentIntentAsync(string paymentIntentId, List<string>? expand = null);
+
+        /// <summary>
+        /// Aggiorna i metadata di un Payment Intent (es. per il PI della prima invoice di una subscription, che non eredita i metadata dalla subscription).
+        /// </summary>
+        Task<PaymentIntent> UpdatePaymentIntentMetadataAsync(string paymentIntentId, Dictionary<string, string> metadata);
 
         /// <summary>
         /// Conferma un Payment Intent
@@ -47,11 +53,57 @@ namespace BackEnd.Interfaces.IBusinessServices
         Task<Subscription> CreateSubscriptionAsync(string customerId, string priceId, Dictionary<string, string>? metadata = null);
 
         /// <summary>
+        /// Recupera una Subscription Stripe tramite ID
+        /// </summary>
+        Task<Subscription> GetSubscriptionAsync(string subscriptionId);
+
+        /// <summary>
+        /// Recupera una Invoice Stripe tramite ID
+        /// </summary>
+        Task<Invoice> GetInvoiceAsync(string invoiceId);
+
+        /// <summary>
         /// Cancella una Subscription Stripe
         /// </summary>
         /// <param name="subscriptionId">ID della subscription</param>
         /// <returns>Subscription cancellata</returns>
         Task<Subscription> CancelSubscriptionAsync(string subscriptionId);
+
+        /// <summary>
+        /// Imposta o rimuove cancel_at_period_end sulla subscription Stripe (disattiva/riattiva rinnovo automatico).
+        /// </summary>
+        /// <param name="subscriptionId">ID della subscription Stripe</param>
+        /// <param name="cancelAtPeriodEnd">true = non rinnovare a scadenza; false = rinnova normalmente</param>
+        Task<Subscription> SetCancelAtPeriodEndAsync(string subscriptionId, bool cancelAtPeriodEnd);
+
+        /// <summary>
+        /// Crea un credito sul customer balance Stripe (riduce le prossime fatture).
+        /// </summary>
+        /// <param name="customerId">ID del customer Stripe</param>
+        /// <param name="amountInCents">Importo di credito in centesimi (sempre positivo; il servizio converte in negativo per Stripe)</param>
+        /// <param name="currency">Valuta (es. eur)</param>
+        /// <param name="description">Descrizione per l'utente (es. "Credito residuo abbonamento – X giorni")</param>
+        /// <param name="metadata">Metadata opzionali</param>
+        /// <returns>Customer balance transaction creata</returns>
+        Task<CustomerBalanceTransaction> CreateCustomerCreditAsync(string customerId, long amountInCents, string currency, string description, Dictionary<string, string>? metadata = null);
+
+        /// <summary>
+        /// Crea un SetupIntent per salvare un nuovo metodo di pagamento sul customer (senza addebitare).
+        /// </summary>
+        /// <param name="customerId">ID del customer Stripe</param>
+        /// <param name="metadata">Metadati opzionali</param>
+        /// <returns>SetupIntent con ClientSecret per il frontend</returns>
+        Task<SetupIntent> CreateSetupIntentAsync(string customerId, Dictionary<string, string>? metadata = null);
+
+        /// <summary>
+        /// Imposta il metodo di pagamento predefinito per un customer (fatture future).
+        /// </summary>
+        Task SetDefaultPaymentMethodForCustomerAsync(string customerId, string paymentMethodId);
+
+        /// <summary>
+        /// Imposta il metodo di pagamento predefinito per una subscription (rinnovi).
+        /// </summary>
+        Task SetDefaultPaymentMethodForSubscriptionAsync(string subscriptionId, string paymentMethodId);
 
         /// <summary>
         /// Processa un evento webhook di Stripe

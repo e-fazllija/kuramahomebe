@@ -11,6 +11,14 @@ namespace BackEnd.Services.Repositories
         {
         }
 
+        public override async Task<UserSubscription?> GetByIdAsync(int id)
+        {
+            return await _context.Set<UserSubscription>()
+                .Include(us => us.SubscriptionPlan)
+                .Include(us => us.LastPayment)
+                .FirstOrDefaultAsync(us => us.Id == id);
+        }
+
         public async Task<IEnumerable<UserSubscription>> GetUserSubscriptionsAsync(string userId)
         {
             return await _context.Set<UserSubscription>()

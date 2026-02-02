@@ -18,6 +18,9 @@ namespace BackEnd.Entities
 
         public bool Active { get; set; } = true;
 
+        [MaxLength(200)]
+        public string? StripePriceId { get; set; } // Price ID di Stripe per pagamenti ricorrenti
+
         // Navigation
         public ICollection<SubscriptionFeature>? Features { get; set; }
         public ICollection<UserSubscription>? UserSubscriptions { get; set; }

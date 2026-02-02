@@ -42,10 +42,21 @@ namespace BackEnd.Services.BusinessServices
             return await service.CreateAsync(options);
         }
 
-        public async Task<PaymentIntent> GetPaymentIntentAsync(string paymentIntentId)
+        public async Task<PaymentIntent> GetPaymentIntentAsync(string paymentIntentId, List<string>? expand = null)
         {
             var service = new PaymentIntentService();
-            return await service.GetAsync(paymentIntentId);
+            var options = new PaymentIntentGetOptions();
+            if (expand != null)
+                foreach (var e in expand)
+                    options.AddExpand(e);
+            return await service.GetAsync(paymentIntentId, options);
+        }
+
+        public async Task<PaymentIntent> UpdatePaymentIntentMetadataAsync(string paymentIntentId, Dictionary<string, string> metadata)
+        {
+            var service = new PaymentIntentService();
+            var options = new PaymentIntentUpdateOptions { Metadata = metadata };
+            return await service.UpdateAsync(paymentIntentId, options);
         }
 
         public async Task<PaymentIntent> ConfirmPaymentIntentAsync(string paymentIntentId)
@@ -107,10 +118,86 @@ namespace BackEnd.Services.BusinessServices
             return await service.CreateAsync(options);
         }
 
+        public async Task<Subscription> GetSubscriptionAsync(string subscriptionId)
+        {
+            var service = new SubscriptionService();
+            return await service.GetAsync(subscriptionId);
+        }
+
+        public async Task<Invoice> GetInvoiceAsync(string invoiceId)
+        {
+            var service = new InvoiceService();
+            return await service.GetAsync(invoiceId);
+        }
+
         public async Task<Subscription> CancelSubscriptionAsync(string subscriptionId)
         {
             var service = new SubscriptionService();
             return await service.CancelAsync(subscriptionId);
+        }
+
+        public async Task<Subscription> SetCancelAtPeriodEndAsync(string subscriptionId, bool cancelAtPeriodEnd)
+        {
+            var service = new SubscriptionService();
+            var options = new SubscriptionUpdateOptions
+            {
+                CancelAtPeriodEnd = cancelAtPeriodEnd
+            };
+            return await service.UpdateAsync(subscriptionId, options);
+        }
+
+        public async Task<SetupIntent> CreateSetupIntentAsync(string customerId, Dictionary<string, string>? metadata = null)
+        {
+            var options = new SetupIntentCreateOptions
+            {
+                Customer = customerId,
+                Usage = "off_session",
+                Metadata = metadata ?? new Dictionary<string, string>()
+            };
+            var service = new SetupIntentService();
+            return await service.CreateAsync(options);
+        }
+
+        public async Task SetDefaultPaymentMethodForCustomerAsync(string customerId, string paymentMethodId)
+        {
+            var options = new CustomerUpdateOptions
+            {
+                InvoiceSettings = new CustomerInvoiceSettingsOptions
+                {
+                    DefaultPaymentMethod = paymentMethodId
+                }
+            };
+            var service = new CustomerService();
+            await service.UpdateAsync(customerId, options);
+        }
+
+        public async Task SetDefaultPaymentMethodForSubscriptionAsync(string subscriptionId, string paymentMethodId)
+        {
+            var options = new SubscriptionUpdateOptions
+            {
+                DefaultPaymentMethod = paymentMethodId
+            };
+            var service = new SubscriptionService();
+            await service.UpdateAsync(subscriptionId, options);
+        }
+
+        public async Task<CustomerBalanceTransaction> CreateCustomerCreditAsync(string customerId, long amountInCents, string currency, string description, Dictionary<string, string>? metadata = null)
+        {
+            // Stripe: amount negativo = credito a favore del cliente (riduce le prossime fatture)
+            // Riceviamo amountInCents positivo, convertiamo in negativo per Stripe
+            var stripeAmount = -Math.Abs(amountInCents);
+            var options = new CustomerBalanceTransactionCreateOptions
+            {
+                Amount = stripeAmount,
+                Currency = currency.ToLower(),
+                Description = description?.Length > 350 ? description.Substring(0, 350) : description
+            };
+            if (metadata != null && metadata.Count > 0)
+            {
+                options.Metadata = metadata;
+            }
+            var service = new CustomerBalanceTransactionService();
+            return await service.CreateAsync(customerId, options);
         }
 
         public Event ConstructWebhookEvent(string json, string stripeSignature)
