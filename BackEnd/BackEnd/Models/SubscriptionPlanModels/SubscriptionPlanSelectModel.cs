@@ -10,6 +10,7 @@ namespace BackEnd.Models.SubscriptionPlanModels
         public decimal Price { get; set; }
         public string BillingPeriod { get; set; } = null!;
         public bool Active { get; set; }
+        public string? StripePriceId { get; set; }
         public DateTime CreationDate { get; set; }
         public DateTime UpdateDate { get; set; }
         public List<SubscriptionFeatureSelectModel>? Features { get; set; }

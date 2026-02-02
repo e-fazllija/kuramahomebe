@@ -20,5 +20,8 @@ namespace BackEnd.Models.SubscriptionPlanModels
         public string BillingPeriod { get; set; } = "monthly";
 
         public bool Active { get; set; } = true;
+
+        [MaxLength(200, ErrorMessage = "Lo Stripe Price ID non può superare i 200 caratteri")]
+        public string? StripePriceId { get; set; }
     }
 }

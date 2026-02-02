@@ -15,11 +15,13 @@ namespace BackEnd.Controllers
     {
         private readonly IUserSubscriptionServices _userSubscriptionServices;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IStripeService _stripeService;
 
-        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices, UserManager<ApplicationUser> userManager)
+        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices, UserManager<ApplicationUser> userManager, IStripeService stripeService)
         {
             _userSubscriptionServices = userSubscriptionServices;
             _userManager = userManager;
+            _stripeService = stripeService;
         }
 
         [HttpGet("{id}")]
@@ -211,6 +213,61 @@ namespace BackEnd.Controllers
             }
         }
 
+        [HttpPut("{id}/autorenew")]
+        public async Task<ActionResult<UserSubscriptionSelectModel>> UpdateAutoRenew(int id, [FromBody] UpdateAutoRenewRequest request)
+        {
+            try
+            {
+                // Recupera l'abbonamento corrente
+                var subscription = await _userSubscriptionServices.GetByIdAsync(id);
+                if (subscription == null)
+                    return NotFound($"Abbonamento con ID {id} non trovato");
+
+                // Verifica che l'utente sia il proprietario dell'abbonamento
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId) || subscription.UserId != userId)
+                    return Unauthorized("Non hai i permessi per modificare questo abbonamento");
+
+                // Step 6: sincronizza Stripe (cancel_at_period_end) quando si disattiva/riattiva il rinnovo automatico
+                if (!string.IsNullOrEmpty(subscription.StripeSubscriptionId))
+                {
+                    try
+                    {
+                        await _stripeService.SetCancelAtPeriodEndAsync(subscription.StripeSubscriptionId, cancelAtPeriodEnd: !request.AutoRenew);
+                    }
+                    catch (Exception exStripe)
+                    {
+                        return StatusCode(500, $"Impossibile aggiornare Stripe: {exStripe.Message}. Riprova più tardi.");
+                    }
+                }
+
+                // Aggiorna solo AutoRenew in DB
+                var updateModel = new UserSubscriptionUpdateModel
+                {
+                    Id = subscription.Id,
+                    UserId = subscription.UserId,
+                    SubscriptionPlanId = subscription.SubscriptionPlanId,
+                    StartDate = subscription.StartDate,
+                    EndDate = subscription.EndDate,
+                    Status = subscription.Status,
+                    AutoRenew = request.AutoRenew,
+                    LastPaymentId = subscription.LastPaymentId,
+                    StripeSubscriptionId = subscription.StripeSubscriptionId,
+                    StripeCustomerId = subscription.StripeCustomerId
+                };
+
+                var updated = await _userSubscriptionServices.UpdateAsync(updateModel);
+                if (updated == null)
+                    return NotFound($"Abbonamento con ID {id} non trovato");
+
+                return Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Errore interno del server: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Helper method per verificare se l'utente è Admin
         /// </summary>
@@ -227,5 +284,11 @@ namespace BackEnd.Controllers
             var roles = await _userManager.GetRolesAsync(user);
             return roles.Contains("Admin");
         }
+    }
+
+    // DTO per aggiornare AutoRenew
+    public class UpdateAutoRenewRequest
+    {
+        public bool AutoRenew { get; set; }
     }
 }

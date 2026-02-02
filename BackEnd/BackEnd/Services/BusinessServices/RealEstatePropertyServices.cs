@@ -845,15 +845,15 @@ namespace BackEnd.Services.BusinessServices
                         (!string.IsNullOrEmpty(agency.AdminId) && accessibleAdminIds.Contains(agency.AdminId)))
                     .ToList();
 
-                // Combina agenti e agenzie
+                // Combina agenti e agenzie (NON includere l'admin stesso)
                 var allUsers = agentsInCircle.Concat(agenciesInCircle).ToList();
                 var agentModels = _mapper.Map<List<UserSelectModel>>(allUsers);
 
+                // Rimuovi l'admin corrente dalla lista se presente (non deve essere selezionabile)
                 var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
                 if (currentUserModel != null)
                 {
                     agentModels.RemoveAll(agent => agent.Id == currentUserModel.Id);
-                    agentModels.Insert(0, currentUserModel);
                 }
 
                 var result = new RealEstatePropertyCreateViewModel

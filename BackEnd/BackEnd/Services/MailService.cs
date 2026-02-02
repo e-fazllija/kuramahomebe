@@ -58,7 +58,7 @@ public class MailService : IMailService
             }
         }
         builder.HtmlBody = mailRequest.Body;
-        email.Body = builder.ToMessageBody();
+        email.Body = builder.ToMessageBody();      
         using var smtp = new SmtpClient();
         smtp.Connect(_mailSettings.Host, _mailSettings.Port, SecureSocketOptions.Auto);
         smtp.Authenticate(_mailSettings.Mail, _mailSettings.Password);
