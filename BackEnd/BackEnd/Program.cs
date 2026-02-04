@@ -113,11 +113,11 @@ app.MapControllers();
 //}
 
 // Assicura che il piano Free esista sempre (necessario per i trial)
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await SubscriptionPlanSeeder.EnsureFreePlanExists(context);
-}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+//    await SubscriptionPlanSeeder.EnsureFreePlanExists(context);
+//}
 
 // Seed test data (solo in Development e se abilitato nella configurazione)
 //if (app.Environment.IsDevelopment())

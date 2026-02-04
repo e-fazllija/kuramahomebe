@@ -1,4 +1,4 @@
-﻿using System.Reflection.Emit;
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using BackEnd.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -54,6 +54,12 @@ namespace BackEnd.Services
                 .WithMany(p => p.RealEstatePropertyNotes)
                 .HasForeignKey(n => n.RealEstatePropertyId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<RealEstatePropertyNotes>()
+                .HasOne(n => n.Calendar)
+                .WithMany()
+                .HasForeignKey(n => n.CalendarId)
+                .IsRequired(false);
 
             builder.Entity<Customer>()
                 .HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId)

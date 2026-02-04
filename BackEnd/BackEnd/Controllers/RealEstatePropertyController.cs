@@ -383,14 +383,27 @@ namespace BackEnd.Controllers
                     Role = role
                 };
 
-                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency di riferimento
                 if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
                 {
                     var agency = await _userManager.FindByIdAsync(owner.AdminId);
                     if (agency != null)
                     {
-                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                        var name = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}".Trim();
+                        if (string.IsNullOrEmpty(name))
+                            name = agency.UserName;
+                        ownerInfo.AgencyName = string.IsNullOrEmpty(name) ? null : name;
                     }
+                }
+                // Se il proprietario è un'Agency, AgencyName è il nome dell'agenzia stessa
+                else if (role == "Agency")
+                {
+                    var name = !string.IsNullOrEmpty(owner.CompanyName)
+                        ? owner.CompanyName
+                        : $"{owner.FirstName} {owner.LastName}".Trim();
+                    if (string.IsNullOrEmpty(name))
+                        name = owner.UserName;
+                    ownerInfo.AgencyName = string.IsNullOrEmpty(name) ? null : name;
                 }
 
                 return ownerInfo;

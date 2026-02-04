@@ -122,6 +122,13 @@ namespace BackEnd.Services.BusinessServices
                 RealEstatePropertySelectModel response = new RealEstatePropertySelectModel();
                 _mapper.Map(propertyAdded.Entity, response);
 
+                // Popola OwnerInfo e AgencyName per allineare la risposta a GetById/GetList
+                if (!string.IsNullOrEmpty(propertyAdded.Entity.UserId))
+                {
+                    response.OwnerInfo = await GetOwnerInfo(propertyAdded.Entity.UserId);
+                    response.AgencyName = response.OwnerInfo?.AgencyName;
+                }
+
                 _logger.LogInformation(nameof(Create));
                 return response;
             }
@@ -845,15 +852,20 @@ namespace BackEnd.Services.BusinessServices
                         (!string.IsNullOrEmpty(agency.AdminId) && accessibleAdminIds.Contains(agency.AdminId)))
                     .ToList();
 
-                // Combina agenti e agenzie (NON includere l'admin stesso)
+                // Combina agenti e agenzie
                 var allUsers = agentsInCircle.Concat(agenciesInCircle).ToList();
                 var agentModels = _mapper.Map<List<UserSelectModel>>(allUsers);
 
-                // Rimuovi l'admin corrente dalla lista se presente (non deve essere selezionabile)
-                var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
-                if (currentUserModel != null)
+                // Rimuovi dalla lista solo se l'utente corrente è Admin (non può intestare a sé stesso).
+                // Agency e Agent devono poter selezionare se stessi per intestare l'immobile.
+                var currentUserRoles = await userManager.GetRolesAsync(currentUser);
+                if (currentUserRoles.Contains("Admin"))
                 {
-                    agentModels.RemoveAll(agent => agent.Id == currentUserModel.Id);
+                    var currentUserModel = _mapper.Map<UserSelectModel>(currentUser);
+                    if (currentUserModel != null)
+                    {
+                        agentModels.RemoveAll(agent => agent.Id == currentUserModel.Id);
+                    }
                 }
 
                 var result = new RealEstatePropertyCreateViewModel
@@ -928,9 +940,26 @@ namespace BackEnd.Services.BusinessServices
 
                 var query = await _unitOfWork.dbContext.RealEstateProperties.Include(x => x.Photos.OrderBy(y => y.Position)).Include(x => x.User).Include(x => x.Customer)
                     .Include(x => x.RealEstatePropertyNotes)
+                    .ThenInclude(n => n.Calendar)
                     .FirstOrDefaultAsync(x => x.Id == id);
 
                 RealEstatePropertySelectModel result = _mapper.Map<RealEstatePropertySelectModel>(query);
+
+                // Note ordinate per data appuntamento: prima con appuntamento (più recenti prima), poi senza
+                if (result.RealEstatePropertyNotes != null && result.RealEstatePropertyNotes.Count > 0)
+                {
+                    result.RealEstatePropertyNotes = result.RealEstatePropertyNotes
+                        .OrderBy(n => n.Calendar?.EventStartDate == null)
+                        .ThenByDescending(n => n.Calendar?.EventStartDate ?? DateTime.MinValue)
+                        .ToList();
+                }
+
+                // Popola OwnerInfo e AgencyName per coerenza con Create e lista
+                if (query != null && !string.IsNullOrEmpty(query.UserId))
+                {
+                    result.OwnerInfo = await GetOwnerInfo(query.UserId);
+                    result.AgencyName = result.OwnerInfo?.AgencyName;
+                }
 
                 _logger.LogInformation(nameof(GetById));
 
@@ -1317,14 +1346,27 @@ namespace BackEnd.Services.BusinessServices
                     Role = role
                 };
 
-                // Se il proprietario è un Agent, aggiungi il nome dell'Agency
+                // Se il proprietario è un Agent, aggiungi il nome dell'Agency di riferimento (per mostrare "Agente X (Agenzia Y)")
                 if (role == "Agent" && !string.IsNullOrEmpty(owner.AdminId))
                 {
                     var agency = await userManager.FindByIdAsync(owner.AdminId);
                     if (agency != null)
                     {
-                        ownerInfo.AgencyName = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}";
+                        var name = agency.CompanyName ?? $"{agency.FirstName} {agency.LastName}".Trim();
+                        if (string.IsNullOrEmpty(name))
+                            name = agency.UserName;
+                        ownerInfo.AgencyName = string.IsNullOrEmpty(name) ? null : name;
                     }
+                }
+                // Se il proprietario è un'Agency, AgencyName è il nome dell'agenzia stessa
+                else if (role == "Agency")
+                {
+                    var name = !string.IsNullOrEmpty(owner.CompanyName)
+                        ? owner.CompanyName
+                        : $"{owner.FirstName} {owner.LastName}".Trim();
+                    if (string.IsNullOrEmpty(name))
+                        name = owner.UserName;
+                    ownerInfo.AgencyName = string.IsNullOrEmpty(name) ? null : name;
                 }
 
                 return ownerInfo;

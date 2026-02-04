@@ -31,13 +31,12 @@ namespace BackEnd.Services.BusinessServices
                 && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
                 && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
             {
-                // Cerca il piano Basic
                 var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
                 var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
                 
                 if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
                 {
-                    // Copia le features del Basic al Free, ma mantieni il SubscriptionPlanId del Free
+                    // Copia le features del piano base al Free, ma mantieni il SubscriptionPlanId del Free
                     subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
                     {
                         Id = f.Id,
@@ -70,7 +69,7 @@ namespace BackEnd.Services.BusinessServices
                     && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any())
                     && basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
                 {
-                    // Copia le features del Basic al Free
+                    // Copia le features del piano base al Free
                     subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
                     {
                         Id = f.Id,
@@ -99,13 +98,12 @@ namespace BackEnd.Services.BusinessServices
                 && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
                 && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
             {
-                // Cerca il piano Basic
                 var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
                 var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
                 
                 if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
                 {
-                    // Copia le features del Basic al Free, ma mantieni il SubscriptionPlanId del Free
+                    // Copia le features del piano base al Free, ma mantieni il SubscriptionPlanId del Free
                     subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
                     {
                         Id = f.Id,

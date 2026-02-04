@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace BackEnd.Entities
 {
@@ -9,6 +9,7 @@ namespace BackEnd.Entities
         public string UserId { get; set; }
         public ApplicationUser? User { get; set; }
         public int? CalendarId { get; set; }
+        public Calendar? Calendar { get; set; }
         public int RealEstatePropertyId { get; set; }
         public RealEstateProperty RealEstateProperty { get; set; }
         [Required]
