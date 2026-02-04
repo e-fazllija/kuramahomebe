@@ -182,14 +182,7 @@ namespace BackEnd.Controllers
                     if (userRecurring == null)
                         return BadRequest("Utente non trovato.");
 
-                    // Step 4.2: blocca solo se ha già un abbonamento ricorrente con rinnovo automatico attivo (AutoRenew = true).
-                    // Se AutoRenew = false (ha disattivato il ricorrente), permettere di creare una nuova subscription = rinnovo con ricorrente.
                     var currentSubRecurring = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userRecurring.Id, userRecurring.AdminId);
-                    if (currentSubRecurring != null && !string.IsNullOrEmpty(currentSubRecurring.StripeSubscriptionId) && currentSubRecurring.AutoRenew == true)
-                    {
-                        _logger.LogWarning("Utente {Email} ha già una subscription Stripe attiva con rinnovo automatico. Blocco creazione nuova subscription.", request.Email);
-                        return BadRequest("Hai già un abbonamento ricorrente attivo. Gestiscilo da 'Gestisci abbonamento'.");
-                    }
 
                     // Recupera il piano per ottenere lo StripePriceId
                     var allPlans = await _subscriptionPlanServices.GetActivePlansAsync();
@@ -425,9 +418,8 @@ namespace BackEnd.Controllers
                                                         };
                                                         var payment = await _paymentServices.CreateAsync(paymentModel);
                                                         paymentId = payment?.Id;
-                                                        var months = subscription.SubscriptionPlan?.BillingPeriod?.ToLower() == "monthly" ? 1 : subscription.SubscriptionPlan?.BillingPeriod?.ToLower() == "yearly" ? 12 : 1;
                                                         var today = DateTime.UtcNow;
-                                                        var newEndDate = today.AddMonths(months);
+                                                        var newEndDate = GetEndDateFromBillingPeriod(today, subscription.SubscriptionPlan?.BillingPeriod);
                                                         var updateModel = new UserSubscriptionUpdateModel
                                                         {
                                                             Id = subscription.Id,
@@ -849,16 +841,11 @@ namespace BackEnd.Controllers
                 };
                 var payment = await _paymentServices.CreateAsync(paymentModel);
 
-                var months = subscription.SubscriptionPlan?.BillingPeriod?.ToLower() == "monthly" ? 1 :
-                    subscription.SubscriptionPlan?.BillingPeriod?.ToLower() == "yearly" ? 12 : 1;
                 var today = DateTime.UtcNow;
-                // Primo pagamento (LastPaymentId era null): EndDate = oggi + 1 mese. Rinnovo: EndDate esistente + 1 mese.
+                // Primo pagamento (LastPaymentId era null): EndDate = oggi + periodo. Rinnovo: EndDate esistente + periodo.
                 var isFirstPayment = subscription.LastPaymentId == null;
-                var newEndDate = isFirstPayment
-                    ? today.AddMonths(months)
-                    : (subscription.EndDate.HasValue && subscription.EndDate.Value > today
-                        ? subscription.EndDate.Value.AddMonths(months)
-                        : today.AddMonths(months));
+                var fromDate = isFirstPayment ? today : (subscription.EndDate.HasValue && subscription.EndDate.Value > today ? subscription.EndDate.Value : today);
+                var newEndDate = GetEndDateFromBillingPeriod(fromDate, subscription.SubscriptionPlan?.BillingPeriod);
 
                 var updateModel = new UserSubscriptionUpdateModel
                 {
@@ -1017,6 +1004,15 @@ namespace BackEnd.Controllers
 
             var roles = await _userManager.GetRolesAsync(user);
             return roles.Contains("Admin");
+        }
+
+        /// <summary>
+        /// Calcola la data di scadenza in base al BillingPeriod.
+        /// </summary>
+        private static DateTime GetEndDateFromBillingPeriod(DateTime fromDate, string? billingPeriod)
+        {
+            var months = billingPeriod?.ToLower() == "yearly" ? 12 : (billingPeriod?.ToLower() == "monthly" ? 1 : 1);
+            return fromDate.AddMonths(months);
         }
     }
 

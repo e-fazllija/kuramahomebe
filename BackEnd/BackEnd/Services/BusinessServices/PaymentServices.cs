@@ -38,6 +38,9 @@ namespace BackEnd.Services.BusinessServices
         public async Task<PaymentSelectModel> CreateAsync(PaymentCreateModel model)
         {
             var entity = _mapper.Map<Payment>(model);
+            var now = DateTime.UtcNow;
+            entity.CreationDate = now;
+            entity.UpdateDate = now;
             var createdEntity = await _unitOfWork.PaymentRepository.CreateAsync(entity);
             await _unitOfWork.SaveAsync();
             return _mapper.Map<PaymentSelectModel>(createdEntity);
@@ -49,6 +52,7 @@ namespace BackEnd.Services.BusinessServices
             if (existingEntity == null) return null;
 
             _mapper.Map(model, existingEntity);
+            existingEntity.UpdateDate = DateTime.UtcNow;
             var updatedEntity = await _unitOfWork.PaymentRepository.UpdateAsync(existingEntity);
             await _unitOfWork.SaveAsync();
             return _mapper.Map<PaymentSelectModel>(updatedEntity);

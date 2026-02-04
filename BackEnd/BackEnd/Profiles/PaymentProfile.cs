@@ -8,8 +8,12 @@ namespace BackEnd.Profiles
     {
         public PaymentProfile()
         {
-            // Entity -> SelectModel
-            CreateMap<Payment, PaymentSelectModel>();
+            // Entity -> SelectModel (fallback: se CreationDate/UpdateDate sono default, usa PaymentDate per visualizzazione)
+            CreateMap<Payment, PaymentSelectModel>()
+                .ForMember(dest => dest.CreationDate, opt => opt.MapFrom(src =>
+                    src.CreationDate == default ? src.PaymentDate : src.CreationDate))
+                .ForMember(dest => dest.UpdateDate, opt => opt.MapFrom(src =>
+                    src.UpdateDate == default ? src.PaymentDate : src.UpdateDate));
 
             // CreateModel -> Entity
             CreateMap<PaymentCreateModel, Payment>();

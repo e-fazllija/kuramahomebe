@@ -1,4 +1,4 @@
-﻿using BackEnd.Interfaces;
+using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Services.BusinessServices;
 
@@ -45,11 +45,15 @@ namespace BackEnd.Services
 
             builder.Services.AddAuthorization(options =>
             {
+                // Abbonamento considerato scaduto solo se scaduto da almeno un giorno (il giorno di scadenza è ancora valido)
                 options.AddPolicy("ActiveSubscription", policy =>
                     policy.RequireAssertion(context =>
                     {
                         var expiryClaim = context.User.FindFirst("subscription_expiry")?.Value;
-                        return DateTime.TryParse(expiryClaim, out var expiryDate) && expiryDate > DateTime.UtcNow;
+                        if (!DateTime.TryParse(expiryClaim, out var expiryDate))
+                            return false;
+                        var oneDayAfterExpiry = expiryDate.AddDays(1);
+                        return oneDayAfterExpiry > DateTime.UtcNow;
                     }));
             });
 

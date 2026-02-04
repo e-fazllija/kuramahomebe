@@ -173,9 +173,7 @@ namespace BackEnd.Controllers
                         }
 
                         // Calcola la data di fine abbonamento in base al periodo di fatturazione
-                        DateTime? endDate = null;
-                        var months = GetMonthsFromBillingPeriod(plan.BillingPeriod);
-                        endDate = DateTime.UtcNow.AddMonths(months);
+                        DateTime? endDate = GetEndDateFromBillingPeriod(DateTime.UtcNow, plan.BillingPeriod);
 
                         // Crea l'abbonamento per l'agenzia
                         var subscriptionModel = new UserSubscriptionCreateModel
@@ -481,6 +479,15 @@ namespace BackEnd.Controllers
                 "yearly" => 12, // Manteniamo compatibilità con il vecchio valore
                 _ => 1 // Default a 1 mese se non riconosciuto
             };
+        }
+
+        /// <summary>
+        /// Calcola la data di scadenza in base al BillingPeriod.
+        /// </summary>
+        private static DateTime GetEndDateFromBillingPeriod(DateTime fromDate, string? billingPeriod)
+        {
+            var months = GetMonthsFromBillingPeriod(billingPeriod);
+            return fromDate.AddMonths(months);
         }
     }
 }
