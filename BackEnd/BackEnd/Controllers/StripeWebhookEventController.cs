@@ -335,6 +335,13 @@ namespace BackEnd.Controllers
 
                 _logger.LogInformation($"Payment Intent {paymentIntent.Id} - Email: {email}, Plan: {plan}, IsRecurring: {isRecurringPayment}, RenewalWithRecurring: {renewalWithRecurring}");
 
+                // NON creare mai Payment o abbonamento per importo zero: evita abbonamenti "gratis" per errore
+                if (paymentIntent.Amount <= 0)
+                {
+                    _logger.LogWarning($"PaymentIntent {paymentIntent.Id} ignorato: importo zero (Amount: {paymentIntent.Amount}). Nessun Payment o Subscription creati.");
+                    return;
+                }
+
                 if (string.IsNullOrEmpty(email))
                 {
                     _logger.LogWarning($"Email mancante per PaymentIntent {paymentIntent.Id}");
@@ -394,8 +401,8 @@ namespace BackEnd.Controllers
                         var finalAmountStr = paymentIntent.Metadata.GetValueOrDefault("finalAmount", "0");
                         var currentPlanName = paymentIntent.Metadata.GetValueOrDefault("currentPlanName", "");
 
-                        // Gestione abbonamento: upgrade, rinnovo o nuovo
-                        var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+                        // Gestione abbonamento: upgrade, rinnovo o nuovo (usa AdminId per trovare la stessa subscription che usa il frontend)
+                        var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
                         
                         if (activeSubscription != null)
                         {
@@ -858,8 +865,8 @@ namespace BackEnd.Controllers
                     return;
                 }
 
-                // Verifica se esiste già un abbonamento attivo (Status == "active")
-                var existingSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id);
+                // Verifica se esiste già un abbonamento attivo (usa AdminId per coerenza con il resto dell'app)
+                var existingSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
                 
                 if (existingSubscription == null)
                 {
@@ -1171,6 +1178,14 @@ namespace BackEnd.Controllers
 
                     if (subscription != null)
                     {
+                        // Non creare Payment a importo zero né estendere l'abbonamento per fatture a zero (es. trial)
+                        var amountPaid = invoice.AmountPaid;
+                        if (amountPaid <= 0)
+                        {
+                            _logger.LogInformation($"Invoice paid {invoice.Id} ignorata per subscription {subscriptionId}: importo zero (AmountPaid: {amountPaid}). Nessun Payment creato né estensione periodo.");
+                            return;
+                        }
+
                         // Idempotenza: evita duplicati se invoice.paid arriva più volte
                         var existingPayment = await _paymentServices.GetByTransactionIdAsync(invoice.Id);
                         PaymentSelectModel? payment;
@@ -1199,9 +1214,22 @@ namespace BackEnd.Controllers
                             payment = await _paymentServices.CreateAsync(paymentModel);
                         }
 
-                        // Aggiorna la data di scadenza dell'abbonamento
+                        // Aggiorna la data di scadenza: al RINNOVO estendi dalla scadenza corrente; al PRIMO PAGAMENTO
+                        // non aggiungere un secondo periodo (la subscription è già stata creata con EndDate corretta in customer.subscription.created).
                         var today = DateTime.UtcNow;
-                        var newEndDate = GetEndDateFromBillingPeriod(today, subscription.SubscriptionPlan?.BillingPeriod);
+                        bool isRenewal = invoice.BillingReason == "subscription_cycle";
+                        DateTime newEndDate;
+                        if (isRenewal && subscription.EndDate.HasValue && subscription.EndDate.Value >= today)
+                        {
+                            newEndDate = GetEndDateFromBillingPeriod(subscription.EndDate.Value, subscription.SubscriptionPlan?.BillingPeriod);
+                        }
+                        else
+                        {
+                            // Primo pagamento: mantieni la EndDate già impostata alla creazione, oppure calcola da oggi se mancante
+                            newEndDate = subscription.EndDate.HasValue && subscription.EndDate.Value >= today
+                                ? subscription.EndDate.Value
+                                : GetEndDateFromBillingPeriod(today, subscription.SubscriptionPlan?.BillingPeriod);
+                        }
 
                         var updateModel = new UserSubscriptionUpdateModel
                         {
