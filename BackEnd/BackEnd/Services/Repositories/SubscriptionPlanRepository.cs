@@ -14,7 +14,7 @@ namespace BackEnd.Services.Repositories
         public async Task<IEnumerable<SubscriptionPlan>> GetActivePlansAsync()
         {
             return await _context.Set<SubscriptionPlan>()
-                .Include(p => p.Features)
+                .Include(p => p.Features!.OrderBy(f => f.Id))
                 .Where(p => p.Active)
                 .OrderBy(p => p.Price)
                 .ToListAsync();
@@ -23,7 +23,7 @@ namespace BackEnd.Services.Repositories
         public async Task<SubscriptionPlan?> GetPlanWithFeaturesAsync(int id)
         {
             return await _context.Set<SubscriptionPlan>()
-                .Include(p => p.Features)
+                .Include(p => p.Features!.OrderBy(f => f.Id))
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 

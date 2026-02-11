@@ -151,6 +151,13 @@ namespace BackEnd.Controllers
                 // Converti l'importo finale in centesimi per Stripe
                 long amountInCents = (long)(finalAmount * 100);
 
+                // NON permettere mai pagamenti a importo zero: nessun abbonamento deve essere attivato senza pagamento
+                if (amountInCents <= 0)
+                {
+                    _logger.LogWarning("CreatePaymentIntent rifiutato: importo <= 0 (Plan: {Plan}, Amount: {Amount}, FinalAmount: {FinalAmount}).", request.Plan, request.Amount, finalAmount);
+                    return BadRequest("L'importo del pagamento deve essere maggiore di zero. Seleziona un piano con prezzo valido.");
+                }
+
                 // Crea metadata per tracciare il piano, l'email e le info di upgrade
                 var metadata = new Dictionary<string, string>
                 {
@@ -248,6 +255,11 @@ namespace BackEnd.Controllers
                         long amountCentsRenewal = (long)Math.Round(amountRecurring * 100);
                         if (amountCentsRenewal <= 0)
                             amountCentsRenewal = (long)Math.Round(selectedPlan.Price * 100);
+                        if (amountCentsRenewal <= 0)
+                        {
+                            _logger.LogWarning("CreatePaymentIntent rifiutato (rinnovo ricorrente): importo <= 0 per piano {Plan}.", request.Plan);
+                            return BadRequest("L'importo del pagamento deve essere maggiore di zero.");
+                        }
                         var metadataRenewal = new Dictionary<string, string>
                         {
                             { "plan", request.Plan },
@@ -290,11 +302,20 @@ namespace BackEnd.Controllers
 
                     // Stripe NON copia i metadata della Subscription sul PaymentIntent della prima invoice:
                     // senza questo aggiornamento, confirm-payment non riconoscerebbe isRecurringPayment e restituirebbe 400.
+                    // Se la prima invoice ha importo 0 (credito copre tutto), Stripe NON crea un PaymentIntent.
                     var piId = subscription.LatestInvoice?.PaymentIntent?.Id;
                     if (string.IsNullOrEmpty(piId))
                     {
-                        _logger.LogError("PaymentIntent non presente sulla subscription {SubscriptionId}. Impossibile completare il flusso.", subscription.Id);
-                        return StatusCode(500, "Impossibile recuperare il PaymentIntent dalla subscription.");
+                        _logger.LogInformation(
+                            "Subscription {SubscriptionId}: prima invoice senza PaymentIntent (importo 0 dopo credito). " +
+                            "Stripe pagherà automaticamente la fattura con il balance; attendere webhook invoice.paid.",
+                            subscription.Id);
+                        return Ok(new CreatePaymentIntentResponse
+                        {
+                            ClientSecret = null!,
+                            PaymentIntentId = null!,
+                            NoPaymentRequired = true
+                        });
                     }
                     await _stripeService.UpdatePaymentIntentMetadataAsync(piId, metadata);
 
@@ -891,17 +912,36 @@ namespace BackEnd.Controllers
                     return Unauthorized();
 
                 var allSubscriptions = await _userSubscriptionServices.GetUserSubscriptionsAsync(userId);
+                // 1) Prova prima una subscription "pending" (pagamento appena completato in app)
                 var pendingWithStripe = allSubscriptions
                     .Where(s => string.Equals(s.Status, "pending", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(s.StripeSubscriptionId))
                     .OrderByDescending(s => s.CreationDate)
                     .FirstOrDefault();
 
-                if (pendingWithStripe == null)
-                    return Ok(new SyncSubscriptionPaymentResponse { Success = false, Message = "Nessuna subscription in attesa da sincronizzare" });
+                if (pendingWithStripe != null)
+                {
+                    var request = new SyncSubscriptionPaymentRequest { UserSubscriptionId = pendingWithStripe.Id };
+                    var result = await SyncSubscriptionPayment(request);
+                    return result;
+                }
 
-                var request = new SyncSubscriptionPaymentRequest { UserSubscriptionId = pendingWithStripe.Id };
-                var result = await SyncSubscriptionPayment(request);
-                return result;
+                // 2) Altrimenti: abbonamento "active" ma senza Payment (es. bonifico confermato su Stripe ma webhook invoice.paid non ricevuto)
+                var activeWithoutPayment = allSubscriptions
+                    .Where(s => string.Equals(s.Status, "active", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrEmpty(s.StripeSubscriptionId)
+                        && !s.LastPaymentId.HasValue)
+                    .OrderByDescending(s => s.CreationDate)
+                    .FirstOrDefault();
+
+                if (activeWithoutPayment != null)
+                {
+                    _logger.LogInformation("Sync my pending: trovata subscription attiva senza Payment (Id: {Id}), recupero da Stripe.", activeWithoutPayment.Id);
+                    var request = new SyncSubscriptionPaymentRequest { UserSubscriptionId = activeWithoutPayment.Id };
+                    var result = await SyncSubscriptionPayment(request);
+                    return result;
+                }
+
+                return Ok(new SyncSubscriptionPaymentResponse { Success = false, Message = "Nessuna subscription in attesa da sincronizzare" });
             }
             catch (Exception ex)
             {
@@ -1028,8 +1068,10 @@ namespace BackEnd.Controllers
 
     public class CreatePaymentIntentResponse
     {
-        public string ClientSecret { get; set; } = null!;
-        public string PaymentIntentId { get; set; } = null!;
+        public string? ClientSecret { get; set; }
+        public string? PaymentIntentId { get; set; }
+        /// <summary>True quando la prima invoice della subscription ha importo 0 (credito applicato) e non serve pagare.</summary>
+        public bool NoPaymentRequired { get; set; }
     }
 
     public class ConfirmPaymentRequest

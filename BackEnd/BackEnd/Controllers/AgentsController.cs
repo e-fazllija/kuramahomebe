@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using BackEnd.Entities;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CustomerModels;
@@ -281,8 +281,30 @@ namespace BackEnd.Controllers
                 }
                 else if (userRoles.Contains("Agency"))
                 {
-                    // Agency vede solo i propri agenti (con AgencyId pari al proprio ID)
-                    usersList = usersList.Where(x => x.AdminId == currentUserId).ToList();
+                    // Agency vede tutti gli agenti delle agenzie sotto lo stesso Admin (inclusa la propria)
+                    var adminId = currentUser.AdminId;
+                    if (string.IsNullOrEmpty(adminId))
+                    {
+                        // Fallback: solo i propri agenti se AdminId non impostato
+                        usersList = usersList.Where(x => x.AdminId == currentUserId).ToList();
+                    }
+                    else
+                    {
+                        var siblingAgencies = await userManager.GetUsersInRoleAsync("Agency");
+                        var validAgencyIds = siblingAgencies
+                            .Where(x => x.AdminId == adminId)
+                            .Select(x => x.Id)
+                            .ToList();
+                        validAgencyIds.Add(adminId); // agenti creati direttamente dall'Admin
+                        usersList = usersList.Where(x => validAgencyIds.Contains(x.AdminId)).ToList();
+
+                        // Filtro opzionale: solo una specifica agenzia (deve essere sotto lo stesso Admin)
+                        if (!string.IsNullOrEmpty(agencyFilter) && agencyFilter != "all")
+                        {
+                            if (validAgencyIds.Contains(agencyFilter))
+                                usersList = usersList.Where(x => x.AdminId == agencyFilter).ToList();
+                        }
+                    }
                 }
                 else if (userRoles.Contains("Agent"))
                 {
@@ -340,12 +362,25 @@ namespace BackEnd.Controllers
                     return StatusCode(403, "Accesso negato");
                 }
 
-                // Agency può vedere solo i propri Agent
+                // Agency può vedere i propri Agent e quelli delle agenzie sotto lo stesso Admin
                 if (currentUserRoles.Contains("Agency"))
                 {
-                    if (user.AdminId != currentUserId)
+                    var adminId = currentUser.AdminId;
+                    if (string.IsNullOrEmpty(adminId))
                     {
-                        return StatusCode(403, "Accesso negato: puoi visualizzare solo i tuoi agenti");
+                        if (user.AdminId != currentUserId)
+                            return StatusCode(403, "Accesso negato: puoi visualizzare solo i tuoi agenti");
+                    }
+                    else
+                    {
+                        var siblingAgencies = await userManager.GetUsersInRoleAsync("Agency");
+                        var validParentIds = siblingAgencies
+                            .Where(x => x.AdminId == adminId)
+                            .Select(x => x.Id)
+                            .ToList();
+                        validParentIds.Add(adminId); // agenti creati direttamente dall'Admin
+                        if (!validParentIds.Contains(user.AdminId))
+                            return StatusCode(403, "Accesso negato: puoi visualizzare solo gli agenti della tua organizzazione");
                     }
                 }
 
@@ -400,12 +435,12 @@ namespace BackEnd.Controllers
                     return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseModel() { Status = "Error", Message = "Agente non trovato" });
                 }
 
-                // Agency può eliminare solo i propri Agent
+                // Agency può eliminare solo i propri Agent (non quelli di altre agenzie sotto lo stesso Admin)
                 if (currentUserRoles.Contains("Agency"))
                 {
                     if (user.AdminId != currentUserId)
                     {
-                        return StatusCode(403, "Accesso negato: puoi eliminare solo i tuoi agenti");
+                        return StatusCode(403, "Accesso negato: puoi eliminare solo i tuoi agenti, non quelli di altre agenzie");
                     }
                 }
 

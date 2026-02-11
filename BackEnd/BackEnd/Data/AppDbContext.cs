@@ -1,4 +1,4 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Services;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
