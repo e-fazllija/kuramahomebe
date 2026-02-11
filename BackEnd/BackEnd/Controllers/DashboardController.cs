@@ -1,3 +1,4 @@
+using BackEnd.Helpers;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.ResponseModel;
 using Microsoft.AspNetCore.Authorization;
@@ -470,10 +471,10 @@ namespace BackEnd.Controllers
                 var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 if (activeSubscription == null) return false;
                 
-                var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+                var planName = activeSubscription.SubscriptionPlan?.Name;
                 var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
-                
-                return planName == "premium" && status == "active";
+                // Includi anche piani prepagati (es. "Premium 3 Months", "Premium 12 Months")
+                return SubscriptionPlanTierHelper.IsPremiumPlanName(planName) && status == "active";
             }
             catch (Exception ex)
             {
@@ -504,11 +505,10 @@ namespace BackEnd.Controllers
                 var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 if (activeSubscription == null) return false;
                 
-                var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+                var planName = activeSubscription.SubscriptionPlan?.Name;
                 var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
-                
-                // Admin e Agency possono accedere solo con Pro o Premium
-                return (planName == "pro" || planName == "premium") && status == "active";
+                // Includi anche piani prepagati (es. "Pro 6 Months", "Premium 12 Months")
+                return SubscriptionPlanTierHelper.IsProOrPremiumPlanName(planName) && status == "active";
             }
             catch (Exception ex)
             {
@@ -537,10 +537,10 @@ namespace BackEnd.Controllers
                 var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 if (activeSubscription == null) return false;
                 
-                var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+                var planName = activeSubscription.SubscriptionPlan?.Name;
                 var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
-                
-                return (planName == "pro" || planName == "premium") && status == "active";
+                // Includi anche piani prepagati (es. "Pro 6 Months", "Premium 12 Months")
+                return SubscriptionPlanTierHelper.IsProOrPremiumPlanName(planName) && status == "active";
             }
             catch (Exception ex)
             {

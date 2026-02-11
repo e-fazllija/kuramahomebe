@@ -228,6 +228,10 @@ namespace BackEnd.Controllers
                 if (string.IsNullOrEmpty(userId) || subscription.UserId != userId)
                     return Unauthorized("Non hai i permessi per modificare questo abbonamento");
 
+                // Per i piani prepagati (3/6/12 mesi, senza Stripe Subscription) non è previsto il pagamento ricorrente
+                if (request.AutoRenew && string.IsNullOrEmpty(subscription.StripeSubscriptionId))
+                    return BadRequest(new { message = "Per i piani prepagati non è previsto il pagamento ricorrente." });
+
                 // Step 6: sincronizza Stripe (cancel_at_period_end) quando si disattiva/riattiva il rinnovo automatico
                 if (!string.IsNullOrEmpty(subscription.StripeSubscriptionId))
                 {

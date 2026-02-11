@@ -1,5 +1,6 @@
 using AutoMapper;
 using BackEnd.Entities;
+using BackEnd.Exceptions;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.CalendarModels;
@@ -38,6 +39,16 @@ namespace BackEnd.Services.BusinessServices
         {
             try
             {
+                // Controllo sovrapposizione: stessa casa, stesso orario (solo se è associata una proprietà)
+                if (dto.RealEstatePropertyId.HasValue && dto.RealEstatePropertyId.Value > 0)
+                {
+                    await EnsureNoOverlappingAppointmentForPropertyAsync(
+                        dto.RealEstatePropertyId.Value,
+                        dto.EventStartDate,
+                        dto.EventEndDate,
+                        excludeEventId: null);
+                }
+
                 //dto.DataInizioEvento = dto.DataInizioEvento.AddHours(1);
                 //dto.DataFineEvento = dto.DataFineEvento.AddHours(1);
                 var entityClass = _mapper.Map<Calendar>(dto);
@@ -96,6 +107,8 @@ namespace BackEnd.Services.BusinessServices
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
+                if (ex is CalendarOverlapException)
+                    throw;
                 throw new Exception("Si è verificato un errore in fase creazione");
             }
         }
@@ -591,6 +604,16 @@ namespace BackEnd.Services.BusinessServices
                 if (entityClass == null)
                     throw new NullReferenceException("Record non trovato!");
 
+                // Controllo sovrapposizione: stessa casa, stesso orario (solo se è associata una proprietà)
+                if (dto.RealEstatePropertyId.HasValue && dto.RealEstatePropertyId.Value > 0)
+                {
+                    await EnsureNoOverlappingAppointmentForPropertyAsync(
+                        dto.RealEstatePropertyId.Value,
+                        dto.EventStartDate,
+                        dto.EventEndDate,
+                        excludeEventId: dto.Id);
+                }
+
                 //dto.DataInizioEvento = dto.DataInizioEvento.AddHours(1);
                 //dto.DataFineEvento = dto.DataFineEvento.AddHours(1);
 
@@ -613,6 +636,8 @@ namespace BackEnd.Services.BusinessServices
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
+                if (ex is CalendarOverlapException)
+                    throw;
                 if (ex is NullReferenceException)
                 {
                     throw new Exception(ex.Message);
@@ -622,6 +647,52 @@ namespace BackEnd.Services.BusinessServices
                     throw new Exception("Si è verificato un errore in fase di modifica");
                 }
             }
+        }
+
+        /// <summary>
+        /// Verifica che non esista già un appuntamento (non cancellato) per la stessa casa nello stesso orario.
+        /// In caso di sovrapposizione solleva un'eccezione con messaggio chiaro: agente e agenzia (o solo agenzia) di chi ha l'appuntamento.
+        /// </summary>
+        private async Task EnsureNoOverlappingAppointmentForPropertyAsync(int realEstatePropertyId, DateTime eventStart, DateTime eventEnd, int? excludeEventId)
+        {
+            var query = _unitOfWork.dbContext.Calendars
+                .Include(x => x.User)
+                .ThenInclude(u => u!.Admin)
+                .Where(x => x.RealEstatePropertyId == realEstatePropertyId
+                    && !x.Cancelled
+                    && x.EventStartDate < eventEnd
+                    && x.EventEndDate > eventStart);
+
+            if (excludeEventId.HasValue && excludeEventId.Value > 0)
+                query = query.Where(x => x.Id != excludeEventId.Value);
+
+            var existing = await query.AsNoTracking().FirstOrDefaultAsync();
+            if (existing == null)
+                return;
+
+            var agentName = $"{existing.User?.FirstName ?? ""} {existing.User?.LastName ?? ""}".Trim();
+            if (string.IsNullOrEmpty(agentName))
+                agentName = "—";
+
+            string existingInfo;
+            if (!string.IsNullOrEmpty(existing.User?.AdminId) && existing.User?.Admin != null)
+            {
+                var agencyName = !string.IsNullOrEmpty(existing.User.Admin.CompanyName)
+                    ? existing.User.Admin.CompanyName
+                    : $"{existing.User.Admin.FirstName} {existing.User.Admin.LastName}".Trim();
+                if (string.IsNullOrEmpty(agencyName))
+                    agencyName = "—";
+                existingInfo = $"Agente {agentName} – Agenzia {agencyName}";
+            }
+            else
+            {
+                existingInfo = $"Agenzia {agentName}";
+            }
+
+            throw new CalendarOverlapException(
+                "È già presente un altro appuntamento per questa casa in questo orario." +
+                Environment.NewLine + Environment.NewLine +
+                "Appuntamento esistente: " + existingInfo + ".");
         }
 
         /// <summary>

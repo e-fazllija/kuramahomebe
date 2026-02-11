@@ -545,22 +545,10 @@ namespace BackEnd.Controllers
                                     
                                     await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
 
-                                    // Crea nuovo abbonamento con periodo standard
-                                    // Il credito è già stato applicato nel calcolo dell'importo pagato
-                                    DateTime newEndDate;
-                                    DateTime newStartDate;
-                                    if (!isExpired && activeSubscription.EndDate.HasValue)
-                                    {
-                                        // Upgrade: mantieni i giorni rimanenti e aggiungi il nuovo periodo
-                                        newStartDate = activeSubscription.StartDate; // Mantieni la data originale
-                                        newEndDate = GetEndDateFromBillingPeriod(activeSubscription.EndDate.Value, subscriptionPlan.BillingPeriod);
-                                    }
-                                    else
-                                    {
-                                        // Abbonamento scaduto: nuovo ciclo parte da oggi
-                                        newStartDate = today;
-                                        newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-                                    }
+                                    // Crea nuovo abbonamento. Il credito (giorni non goduti) è già stato sottratto dall'importo pagato.
+                                    // La scadenza del nuovo piano parte da oggi: 12 mesi se ha scelto annuale, 6 se semestrale, ecc.
+                                    DateTime newStartDate = today;
+                                    DateTime newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
 
                                     var subscriptionModel = new UserSubscriptionCreateModel
                                     {

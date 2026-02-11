@@ -108,11 +108,13 @@ Se vuoi solo testare la logica interna senza Stripe CLI, puoi creare un endpoint
 ### Eventi supportati dal controller
 
 Il controller gestisce i seguenti eventi:
-- `payment_intent.succeeded` - Pagamento riuscito
+- `payment_intent.succeeded` - Pagamento riuscito (one-time; per subscription il Payment lo crea `invoice.paid`)
 - `payment_intent.payment_failed` - Pagamento fallito
 - `customer.subscription.created` - Abbonamento creato
 - `customer.subscription.updated` - Abbonamento aggiornato
 - `customer.subscription.deleted` - Abbonamento eliminato
+- `invoice.paid` - Fattura pagata (**crea il record in Payments per le subscription**)
+- `invoice.payment_failed` - Fattura non pagata
 
 ---
 
@@ -128,10 +130,54 @@ Quando deploy in produzione:
      - `customer.subscription.created`
      - `customer.subscription.updated`
      - `customer.subscription.deleted`
+     - `invoice.paid` (necessario per creare i Payment delle subscription)
+     - `invoice.payment_failed`
 
 2. **Aggiorna il WebhookSecret in appsettings.json** con quello di produzione
 
 3. **Verifica** che l'endpoint sia pubblicamente accessibile
+
+---
+
+## Perché non vedo i soldi in Payments (bonifico)?
+
+Con **bonifico** (o altri metodi asincroni) il flusso è:
+
+1. L’utente avvia il pagamento → su Stripe la subscription/fattura resta in attesa.
+2. Dopo qualche minuto il bonifico viene confermato su Stripe → l’abbonamento su Stripe diventa pagato.
+3. Stripe invia i webhook al **tuo** server (es. `invoice.paid`, `payment_intent.succeeded`).
+
+Nel nostro backend:
+
+- **La tabella Payments** viene aggiornata **solo** quando arriva il webhook **`invoice.paid`** (per le subscription) o `payment_intent.succeeded` (solo per pagamenti one-time).  
+  Se quel webhook **non arriva** al server (vedi sotto), il record di pagamento **non viene mai creato** → in Payments non vedi i soldi anche se su Stripe è tutto pagato.
+
+- **La tabella WebHookEvents** contiene **solo** gli eventi che il server **ha effettivamente ricevuto**.  
+  Se non vedi eventi, significa che le richieste di Stripe **non stanno raggiungendo** il tuo backend.
+
+### Quando i webhook non arrivano
+
+- **Locale (senza Stripe CLI)**  
+  Stripe invia i webhook a un URL pubblico. `localhost` non è raggiungibile da Stripe, quindi **nessun evento** arriva e non vedi né WebHookEvents né i Payment creati da `invoice.paid`.
+
+- **Produzione**  
+  URL del webhook sbagliato, server spento o errore (es. 500) nel momento in cui Stripe invia l’evento: Stripe non recapita l’evento al tuo server, quindi niente record in WebHookEvents e niente Payment.
+
+### Cosa fare
+
+1. **In locale**  
+   Usa **Stripe CLI** e inoltra i webhook al backend (vedi sopra):
+   ```bash
+   stripe listen --forward-to https://localhost:7267/api/StripeWebhookEvent/stripe
+   ```
+   Così gli eventi (incluso `invoice.paid`) arrivano e vengono salvati in WebHookEvents e creati i Payment.
+
+2. **In produzione**  
+   - Controlla in [Stripe Dashboard → Webhooks](https://dashboard.stripe.com/webhooks) che l’endpoint sia l’URL del tuo server (es. `https://tuodominio.com/api/StripeWebhookEvent/stripe`).  
+   - Controlla i log delle richieste fallite (risposta non 2xx) e assicurati che il server sia raggiungibile e che non restituisca errore quando Stripe invia `invoice.paid`.
+
+3. **Recupero Payment già pagato su Stripe ma non in DB**  
+   Se l’abbonamento è già attivo su Stripe ma in Payments non compare nulla (es. webhook perso), apri la pagina **Gestione abbonamento**. Il backend prova a **sincronizzare** l’ultima fattura pagata da Stripe e, se trova una invoice pagata senza corrispondente Payment in DB, crea il record. Così i soldi compaiono in Payments senza rifare il pagamento.
 
 ---
 
@@ -141,3 +187,4 @@ Quando deploy in produzione:
 2. La sicurezza è garantita dalla verifica della firma Stripe
 3. Gli eventi vengono salvati nel database per evitare duplicati
 4. Ogni evento viene processato solo una volta grazie al controllo `IsEventProcessedAsync`
+5. Per le **subscription**, il record in **Payments** viene creato **solo** dal webhook **`invoice.paid`** (non da `payment_intent.succeeded`). Se `invoice.paid` non arriva, il pagamento non appare in Payments anche se su Stripe è pagato.

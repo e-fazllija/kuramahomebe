@@ -2,8 +2,10 @@ using System;
 using System.Linq;
 using AutoMapper;
 using BackEnd.Entities;
+using BackEnd.Helpers;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
+using BackEnd.Models.SubscriptionFeatureModels;
 using BackEnd.Models.UserSubscriptionModels;
 
 namespace BackEnd.Services.BusinessServices
@@ -25,31 +27,7 @@ namespace BackEnd.Services.BusinessServices
             if (entity == null) return null;
             
             var subscription = _mapper.Map<UserSubscriptionSelectModel>(entity);
-            
-            // Se il piano Free non ha features, eredita quelle del Basic
-            if (subscription?.SubscriptionPlan != null 
-                && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
-                && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
-            {
-                var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
-                var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
-                
-                if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
-                {
-                    // Copia le features del piano base al Free, ma mantieni il SubscriptionPlanId del Free
-                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
-                    {
-                        Id = f.Id,
-                        SubscriptionPlanId = subscription.SubscriptionPlan.Id, // Usa l'ID del Free
-                        FeatureName = f.FeatureName,
-                        FeatureValue = f.FeatureValue,
-                        Description = f.Description,
-                        CreationDate = f.CreationDate,
-                        UpdateDate = f.UpdateDate
-                    }).ToList();
-                }
-            }
-            
+            await EnsurePlanFeaturesFromBaseMonthlyAsync(subscription);
             return subscription;
         }
 
@@ -57,32 +35,8 @@ namespace BackEnd.Services.BusinessServices
         {
             var entities = await _unitOfWork.UserSubscriptionRepository.GetUserSubscriptionsAsync(userId);
             var subscriptions = _mapper.Map<IEnumerable<UserSubscriptionSelectModel>>(entities).ToList();
-            
-            // Se il piano Free non ha features, eredita quelle del Basic
-            var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
-            var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
-            
-            foreach (var subscription in subscriptions)
-            {
-                if (subscription?.SubscriptionPlan != null 
-                    && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
-                    && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any())
-                    && basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
-                {
-                    // Copia le features del piano base al Free
-                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
-                    {
-                        Id = f.Id,
-                        SubscriptionPlanId = subscription.SubscriptionPlan.Id,
-                        FeatureName = f.FeatureName,
-                        FeatureValue = f.FeatureValue,
-                        Description = f.Description,
-                        CreationDate = f.CreationDate,
-                        UpdateDate = f.UpdateDate
-                    }).ToList();
-                }
-            }
-            
+            foreach (var sub in subscriptions)
+                await EnsurePlanFeaturesFromBaseMonthlyAsync(sub);
             return subscriptions;
         }
 
@@ -92,32 +46,68 @@ namespace BackEnd.Services.BusinessServices
             if (entity == null) return null;
             
             var subscription = _mapper.Map<UserSubscriptionSelectModel>(entity);
-            
-            // Se il piano Free non ha features, eredita quelle del Basic
-            if (subscription?.SubscriptionPlan != null 
-                && subscription.SubscriptionPlan.Name.Equals("Free", StringComparison.OrdinalIgnoreCase)
-                && (subscription.SubscriptionPlan.Features == null || !subscription.SubscriptionPlan.Features.Any()))
-            {
-                var basicEntity = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
-                var basicPlanEntity = basicEntity.FirstOrDefault(p => p.Name.Equals("Basic", StringComparison.OrdinalIgnoreCase));
-                
-                if (basicPlanEntity != null && basicPlanEntity.Features != null && basicPlanEntity.Features.Any())
-                {
-                    // Copia le features del piano base al Free, ma mantieni il SubscriptionPlanId del Free
-                    subscription.SubscriptionPlan.Features = basicPlanEntity.Features.Select(f => new Models.SubscriptionFeatureModels.SubscriptionFeatureSelectModel
-                    {
-                        Id = f.Id,
-                        SubscriptionPlanId = subscription.SubscriptionPlan.Id, // Usa l'ID del Free
-                        FeatureName = f.FeatureName,
-                        FeatureValue = f.FeatureValue,
-                        Description = f.Description,
-                        CreationDate = f.CreationDate,
-                        UpdateDate = f.UpdateDate
-                    }).ToList();
-                }
-            }
-            
+            await EnsurePlanFeaturesFromBaseMonthlyAsync(subscription);
             return subscription;
+        }
+
+        /// <summary>
+        /// Per Free senza features usa quelle del Basic mensile.
+        /// Per prepagate (Basic/Pro/Premium 3-6-12 mesi) usa le feature del piano base mensile corrispondente.
+        /// </summary>
+        private async Task EnsurePlanFeaturesFromBaseMonthlyAsync(UserSubscriptionSelectModel? subscription)
+        {
+            if (subscription?.SubscriptionPlan == null) return;
+
+            var plan = subscription.SubscriptionPlan;
+            var name = plan.Name ?? "";
+
+            // Free senza features → eredita da Basic mensile
+            if (name.Equals("Free", StringComparison.OrdinalIgnoreCase))
+            {
+                if (plan.Features != null && plan.Features.Any()) return;
+                var basePlan = await GetBaseMonthlyPlanAsync("Basic");
+                if (basePlan?.Features != null && basePlan.Features.Any())
+                    plan.Features = CopyFeatures(basePlan.Features, plan.Id);
+                return;
+            }
+
+            // Prepagate: nome tipo "Basic 3 months", "Pro 6 months", "Premium 12 months" → usa il piano base mensile
+            string? baseName = null;
+            if (name.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase)) baseName = "Basic";
+            else if (name.StartsWith("Pro ", StringComparison.OrdinalIgnoreCase)) baseName = "Pro";
+            else if (name.StartsWith("Premium ", StringComparison.OrdinalIgnoreCase)) baseName = "Premium";
+
+            if (baseName != null)
+            {
+                var basePlan = await GetBaseMonthlyPlanAsync(baseName);
+                if (basePlan?.Features != null && basePlan.Features.Any())
+                    plan.Features = CopyFeatures(basePlan.Features, plan.Id);
+            }
+        }
+
+        private async Task<Models.SubscriptionPlanModels.SubscriptionPlanSelectModel?> GetBaseMonthlyPlanAsync(string baseName)
+        {
+            var allEntities = await _unitOfWork.SubscriptionPlanRepository.GetActivePlansAsync();
+            var baseEntity = allEntities.FirstOrDefault(p =>
+                p.Name != null && p.Name.Equals(baseName, StringComparison.OrdinalIgnoreCase)
+                && (p.BillingPeriod ?? "").Trim().Equals("monthly", StringComparison.OrdinalIgnoreCase));
+            return baseEntity == null ? null : _mapper.Map<Models.SubscriptionPlanModels.SubscriptionPlanSelectModel>(baseEntity);
+        }
+
+        private static List<SubscriptionFeatureSelectModel> CopyFeatures(
+            List<SubscriptionFeatureSelectModel> source,
+            int targetPlanId)
+        {
+            return source.Select(f => new SubscriptionFeatureSelectModel
+            {
+                Id = f.Id,
+                SubscriptionPlanId = targetPlanId,
+                FeatureName = f.FeatureName,
+                FeatureValue = f.FeatureValue,
+                Description = f.Description,
+                CreationDate = f.CreationDate,
+                UpdateDate = f.UpdateDate
+            }).ToList();
         }
 
         public async Task<UserSubscriptionSelectModel> CreateAsync(UserSubscriptionCreateModel model)
@@ -195,10 +185,10 @@ namespace BackEnd.Services.BusinessServices
             var activeSubscription = await _unitOfWork.UserSubscriptionRepository.GetActiveUserSubscriptionAsync(userId, null);
             if (activeSubscription == null) return false;
             
-            var planName = activeSubscription.SubscriptionPlan?.Name?.ToLowerInvariant() ?? "";
+            var planName = activeSubscription.SubscriptionPlan?.Name;
             var status = activeSubscription.Status?.ToLowerInvariant() ?? "";
-            
-            return planName == "premium" && status == "active";
+            // Includi anche piani prepagati (es. "Premium 3 Months", "Premium 12 Months")
+            return SubscriptionPlanTierHelper.IsPremiumPlanName(planName) && status == "active";
         }
 
         public async Task<UserSubscriptionSelectModel?> GetByStripeSubscriptionIdAsync(string stripeSubscriptionId)
