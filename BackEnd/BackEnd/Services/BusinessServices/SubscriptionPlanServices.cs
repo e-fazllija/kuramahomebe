@@ -60,6 +60,22 @@ namespace BackEnd.Services.BusinessServices
             return plans;
         }
 
+        public async Task<IEnumerable<SubscriptionPlanSelectModel>> GetLandingPlansAsync()
+        {
+            var all = await GetActivePlansAsync();
+            var names = new[] { "Basic", "Pro", "Premium" };
+            var result = new List<SubscriptionPlanSelectModel>();
+            foreach (var name in names)
+            {
+                var plan = all.FirstOrDefault(p =>
+                    string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(p.BillingPeriod, "monthly", StringComparison.OrdinalIgnoreCase));
+                if (plan != null)
+                    result.Add(plan);
+            }
+            return result;
+        }
+
         public async Task<SubscriptionPlanSelectModel> CreateAsync(SubscriptionPlanCreateModel model)
         {
             var entity = _mapper.Map<SubscriptionPlan>(model);
