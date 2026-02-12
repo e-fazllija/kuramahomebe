@@ -703,6 +703,25 @@ namespace BackEnd.Controllers
         }
 
         /// <summary>
+        /// Recupera i piani per la landing page: solo Basic, Pro, Premium mensili
+        /// </summary>
+        [HttpGet("landing-plans")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<SubscriptionPlanSelectModel>>> GetLandingPlans()
+        {
+            try
+            {
+                var plans = await _subscriptionPlanServices.GetLandingPlansAsync();
+                return Ok(plans);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore durante il recupero dei piani landing");
+                return StatusCode(500, $"Errore durante il recupero dei piani: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Recupera i piani di abbonamento disponibili
         /// </summary>
         [HttpGet("plans")]
