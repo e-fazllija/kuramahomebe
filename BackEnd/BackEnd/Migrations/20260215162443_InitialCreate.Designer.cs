@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEnd.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260126102351_StripePriceId")]
-    partial class StripePriceId
+    [Migration("20260215162443_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1068,6 +1068,8 @@ namespace BackEnd.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CalendarId");
+
                     b.HasIndex("RealEstatePropertyId");
 
                     b.HasIndex("UserId");
@@ -1731,6 +1733,10 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.RealEstatePropertyNotes", b =>
                 {
+                    b.HasOne("BackEnd.Entities.Calendar", "Calendar")
+                        .WithMany()
+                        .HasForeignKey("CalendarId");
+
                     b.HasOne("BackEnd.Entities.RealEstateProperty", "RealEstateProperty")
                         .WithMany("RealEstatePropertyNotes")
                         .HasForeignKey("RealEstatePropertyId")
@@ -1742,6 +1748,8 @@ namespace BackEnd.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Calendar");
 
                     b.Navigation("RealEstateProperty");
 

@@ -1065,6 +1065,8 @@ namespace BackEnd.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CalendarId");
+
                     b.HasIndex("RealEstatePropertyId");
 
                     b.HasIndex("UserId");
@@ -1728,6 +1730,10 @@ namespace BackEnd.Migrations
 
             modelBuilder.Entity("BackEnd.Entities.RealEstatePropertyNotes", b =>
                 {
+                    b.HasOne("BackEnd.Entities.Calendar", "Calendar")
+                        .WithMany()
+                        .HasForeignKey("CalendarId");
+
                     b.HasOne("BackEnd.Entities.RealEstateProperty", "RealEstateProperty")
                         .WithMany("RealEstatePropertyNotes")
                         .HasForeignKey("RealEstatePropertyId")
@@ -1739,6 +1745,8 @@ namespace BackEnd.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Calendar");
 
                     b.Navigation("RealEstateProperty");
 
