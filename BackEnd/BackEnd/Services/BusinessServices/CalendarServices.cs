@@ -9,10 +9,8 @@ using BackEnd.Models.OutputModels;
 using BackEnd.Models.RealEstatePropertyModels;
 using BackEnd.Models.RequestModels;
 using BackEnd.Models.UserModel;
-using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.WindowsAzure.Storage.File.Protocol;
 
 namespace BackEnd.Services.BusinessServices
 {
