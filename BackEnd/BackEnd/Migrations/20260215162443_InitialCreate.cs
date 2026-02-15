@@ -202,6 +202,7 @@ namespace BackEnd.Migrations
                     Price = table.Column<decimal>(type: "numeric", nullable: false),
                     BillingPeriod = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     Active = table.Column<bool>(type: "boolean", nullable: false),
+                    StripePriceId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -554,12 +555,17 @@ namespace BackEnd.Migrations
                     PropertyType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Province = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     City = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Location = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    RoomsNumber = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    RoomsFrom = table.Column<int>(type: "integer", nullable: false),
+                    RoomsTo = table.Column<int>(type: "integer", nullable: false),
+                    Bathrooms = table.Column<int>(type: "integer", nullable: false),
+                    Floor = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
                     MQFrom = table.Column<int>(type: "integer", nullable: false),
                     MQTo = table.Column<int>(type: "integer", nullable: false),
                     PropertyState = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Heating = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Furniture = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    EnergyClass = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: true),
+                    Auction = table.Column<bool>(type: "boolean", nullable: false),
                     ParkingSpaces = table.Column<int>(type: "integer", nullable: false),
                     PriceTo = table.Column<double>(type: "double precision", nullable: false),
                     PriceFrom = table.Column<double>(type: "double precision", nullable: false),
@@ -585,36 +591,6 @@ namespace BackEnd.Migrations
                         name: "FK_Requests_Customers_CustomerId",
                         column: x => x.CustomerId,
                         principalTable: "Customers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "RealEstatePropertyNotes",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
-                    CalendarId = table.Column<int>(type: "integer", nullable: true),
-                    RealEstatePropertyId = table.Column<int>(type: "integer", nullable: false),
-                    Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
-                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_RealEstatePropertyNotes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_RealEstatePropertyNotes_AspNetUsers_UserId",
-                        column: x => x.UserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_RealEstatePropertyNotes_RealEstateProperties_RealEstateProp~",
-                        column: x => x.RealEstatePropertyId,
-                        principalTable: "RealEstateProperties",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -720,6 +696,41 @@ namespace BackEnd.Migrations
                         name: "FK_RequestNotes_Requests_RequestId",
                         column: x => x.RequestId,
                         principalTable: "Requests",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RealEstatePropertyNotes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    CalendarId = table.Column<int>(type: "integer", nullable: true),
+                    RealEstatePropertyId = table.Column<int>(type: "integer", nullable: false),
+                    Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RealEstatePropertyNotes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RealEstatePropertyNotes_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_RealEstatePropertyNotes_Calendars_CalendarId",
+                        column: x => x.CalendarId,
+                        principalTable: "Calendars",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_RealEstatePropertyNotes_RealEstateProperties_RealEstateProp~",
+                        column: x => x.RealEstatePropertyId,
+                        principalTable: "RealEstateProperties",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -953,6 +964,11 @@ namespace BackEnd.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_RealEstatePropertyNotes_CalendarId",
+                table: "RealEstatePropertyNotes",
+                column: "CalendarId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RealEstatePropertyNotes_RealEstatePropertyId",
                 table: "RealEstatePropertyNotes",
                 column: "RealEstatePropertyId");
@@ -1078,9 +1094,6 @@ namespace BackEnd.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
-                name: "Calendars");
-
-            migrationBuilder.DropTable(
                 name: "CustomerNotes");
 
             migrationBuilder.DropTable(
@@ -1109,6 +1122,9 @@ namespace BackEnd.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Calendars");
 
             migrationBuilder.DropTable(
                 name: "RealEstateProperties");

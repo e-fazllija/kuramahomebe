@@ -112,30 +112,30 @@ app.MapControllers();
 //    Console.WriteLine("Seed dei ruoli completato.");
 //}
 
-// Assicura che il piano Free esista sempre (necessario per i trial)
+////Assicura che il piano Free esista sempre (necessario per i trial)
 //using (var scope = app.Services.CreateScope())
 //{
 //    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 //    await SubscriptionPlanSeeder.EnsureFreePlanExists(context);
 //}
 
-// Seed test data (solo in Development e se abilitato nella configurazione)
+////Seed test data (solo in Development e se abilitato nella configurazione)
 //if (app.Environment.IsDevelopment())
 //{
-//    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", false);
+//    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", true);
 //    if (seedTestData)
 //    {
 //        using (var scope = app.Services.CreateScope())
 //        {
 //            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-//            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-//            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+//            //var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+//            //var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
-//            var seeder = new TestDataSeeder(context, userManager, roleManager);
+//            //var seeder = new TestDataSeeder(context, userManager, roleManager);
+//            //await seeder.SeedTestData();
 
 //            await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
 
-//            await seeder.SeedTestData();
 //        }
 //    }
 //}
