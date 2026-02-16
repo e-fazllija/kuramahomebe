@@ -14,6 +14,8 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.WriteIndented = false;
         options.JsonSerializerOptions.PropertyNamingPolicy = null;
+        // Accetta camelCase dal frontend (keyword, province, city...) nella deserializzazione delle richieste
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

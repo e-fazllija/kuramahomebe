@@ -1066,9 +1066,30 @@ namespace BackEnd.Services.BusinessServices
                 var pageSize = request.PageSize <= 0 ? 12 : request.PageSize;
                 pageSize = Math.Min(pageSize, 24);
 
+                var now = DateTime.UtcNow;
+                var activeSubscriptionUserIds = await _unitOfWork.dbContext.UserSubscriptions
+                    .AsNoTracking()
+                    .Where(us => us.Status.ToLower() == "active" &&
+                        (!us.EndDate.HasValue || us.EndDate.Value > now))
+                    .Select(us => us.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
                 var query = _unitOfWork.dbContext.RealEstateProperties
                     .AsNoTracking()
                     .Where(x => !x.Archived && !x.Sold);
+
+                if (activeSubscriptionUserIds.Count > 0)
+                {
+                    query = query.Where(p =>
+                        activeSubscriptionUserIds.Contains(p.UserId) ||
+                        (p.User != null && p.User.AdminId != null && activeSubscriptionUserIds.Contains(p.User.AdminId)) ||
+                        (p.User != null && p.User.Admin != null && p.User.Admin.AdminId != null && activeSubscriptionUserIds.Contains(p.User.Admin.AdminId)));
+                }
+                else
+                {
+                    query = query.Where(x => false);
+                }
 
                 if (!string.IsNullOrWhiteSpace(request.Province))
                 {
@@ -1148,11 +1169,13 @@ namespace BackEnd.Services.BusinessServices
                         City = x.City,
                         State = x.State,
                         Price = x.Price,
+                        PriceReduced = x.PriceReduced,
                         CommercialSurfaceate = x.CommercialSurfaceate,
                         Bedrooms = x.Bedrooms,
                         Bathrooms = x.Bathrooms,
                         Highlighted = x.Highlighted,
                         Auction = x.Auction,
+                        Negotiation = x.Negotiation,
                         Status = x.Status,
                         MainPhotoUrl = x.Photos
                             .OrderBy(p => p.Position)
@@ -1187,6 +1210,21 @@ namespace BackEnd.Services.BusinessServices
                     .FirstOrDefaultAsync();
 
                 if (property == null)
+                {
+                    return null;
+                }
+
+                var now = DateTime.UtcNow;
+                var hasActiveSubscription = await _unitOfWork.dbContext.UserSubscriptions
+                    .AsNoTracking()
+                    .AnyAsync(us =>
+                        us.Status.ToLower() == "active" &&
+                        (!us.EndDate.HasValue || us.EndDate.Value > now) &&
+                        (us.UserId == property.UserId ||
+                         (property.User != null && property.User.AdminId != null && us.UserId == property.User.AdminId) ||
+                         (property.User != null && property.User.Admin != null && property.User.Admin.AdminId != null && us.UserId == property.User.Admin.AdminId)));
+
+                if (!hasActiveSubscription)
                 {
                     return null;
                 }
@@ -1231,6 +1269,7 @@ namespace BackEnd.Services.BusinessServices
                     VideoUrl = property.VideoUrl,
                     Highlighted = property.Highlighted,
                     Auction = property.Auction,
+                    Negotiation = property.Negotiation,
                     CreationDate = property.CreationDate,
                     Photos = property.Photos.Select(p => new PropertyPhotoModel
                     {
