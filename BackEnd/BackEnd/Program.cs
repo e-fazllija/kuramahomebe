@@ -14,6 +14,8 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.WriteIndented = false;
         options.JsonSerializerOptions.PropertyNamingPolicy = null;
+        // Accetta camelCase dal frontend (keyword, province, city...) nella deserializzazione delle richieste
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -24,7 +26,7 @@ builder.ConfigureServices();
 builder.Services.Configure<PaginationOptions>(builder.Configuration.GetSection("PaginationOptions"));
 builder.Services.Configure<MailOptions>(builder.Configuration.GetSection("MailOptions"));
 builder.Services.Configure<KeyVaultOptions>(builder.Configuration.GetSection("KeyVault"));
-builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+builder.Services.AddAutoMapper(cfg => { }, typeof(BackEnd.Profiles.PaymentProfile).Assembly);
 builder.Services.AddCors();
 builder.Services.AddMemoryCache();
 

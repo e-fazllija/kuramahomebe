@@ -42,6 +42,7 @@ namespace BackEnd.Models.RealEstatePropertyModels
         public string? VideoUrl { get; set; }
         public bool Highlighted { get; set; }
         public bool Auction { get; set; }
+        public bool Negotiation { get; set; }
         public DateTime CreationDate { get; set; }
         public List<PropertyPhotoModel> Photos { get; set; } = new List<PropertyPhotoModel>();
         
