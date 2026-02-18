@@ -918,17 +918,15 @@ namespace BackEnd.Controllers
                         _logger.LogInformation($"Vecchio abbonamento {existingSubscription.Id} eliminato dal database");
 
                         // Crea nuovo abbonamento con la nuova Stripe Subscription
-                        // USA LA STESSA LOGICA DELL'UPGRADE NORMALE per preservare i giorni rimanenti
+                        // Preserviamo i giorni solo se il piano precedente era a pagamento. Free (trial) non conta: nuovo ciclo da oggi.
                         DateTime newStartDate;
                         DateTime newEndDate;
+                        var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
                         
-                        if (!isExpired && existingSubscription.EndDate.HasValue)
+                        if (!isExpired && existingSubscription.EndDate.HasValue && !isOldPlanFree)
                         {
-                            // UPGRADE/RINNOVO: mantieni i giorni rimanenti e aggiungi il nuovo periodo
-                            // Esempio: se mancano 3 giorni (scade il 29 gennaio, oggi è 26 gennaio)
-                            // Il nuovo abbonamento parte da oggi (26 gennaio) e dura fino al 29 gennaio + 1 mese = 29 febbraio
-                            // Questo preserva i 3 giorni pagati e aggiunge il nuovo periodo
-                            newStartDate = existingSubscription.StartDate; // Mantieni la data originale
+                            // UPGRADE/RINNOVO da piano a pagamento: mantieni i giorni rimanenti e aggiungi il nuovo periodo
+                            newStartDate = existingSubscription.StartDate;
                             newEndDate = GetEndDateFromBillingPeriod(existingSubscription.EndDate.Value, subscriptionPlan.BillingPeriod);
                             
                             _logger.LogInformation(
@@ -940,7 +938,7 @@ namespace BackEnd.Controllers
                         }
                         else
                         {
-                            // Abbonamento scaduto o senza EndDate: nuovo ciclo parte da oggi
+                            // Piano Free (trial), scaduto o senza EndDate: nuovo ciclo parte da oggi
                             newStartDate = today;
                             newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
                             
@@ -970,22 +968,52 @@ namespace BackEnd.Controllers
                     }
                     else
                     {
-                        // Aggiorna abbonamento esistente con StripeSubscriptionId (caso in cui non aveva ancora una subscription)
-                        var updateModel = new UserSubscriptionUpdateModel
+                        // Caso: non aveva Stripe Subscription (es. piano Free/trial) oppure stessa subscription
+                        var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
+                        
+                        if (isOldPlanFree)
                         {
-                            Id = existingSubscription.Id,
-                            UserId = user.Id,
-                            SubscriptionPlanId = subscriptionPlan.Id,
-                            StartDate = existingSubscription.StartDate,
-                            EndDate = existingSubscription.EndDate,
-                            Status = dbStatus,
-                            AutoRenew = true,
-                            StripeSubscriptionId = subscription.Id,
-                            StripeCustomerId = subscription.CustomerId
-                        };
-
-                        await _userSubscriptionServices.UpdateAsync(updateModel);
-                        _logger.LogInformation($"Abbonamento aggiornato con StripeSubscriptionId {subscription.Id} - Utente: {email}, Status: {dbStatus}");
+                            // Da Free (trial) a piano a pagamento: annulla il trial e crea nuovo abbonamento da oggi.
+                            // I giorni del trial non contano: nuovo ciclo con durata piena.
+                            await _userSubscriptionServices.CancelSubscriptionAsync(existingSubscription.Id);
+                            
+                            var today = DateTime.UtcNow;
+                            var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
+                            var newSubscriptionModel = new UserSubscriptionCreateModel
+                            {
+                                UserId = user.Id,
+                                SubscriptionPlanId = subscriptionPlan.Id,
+                                StartDate = today,
+                                EndDate = newEndDate,
+                                Status = dbStatus,
+                                AutoRenew = true,
+                                StripeSubscriptionId = subscription.Id,
+                                StripeCustomerId = subscription.CustomerId
+                            };
+                            await _userSubscriptionServices.CreateAsync(newSubscriptionModel);
+                            _logger.LogInformation(
+                                "Upgrade da Free (trial) a piano a pagamento per {Email}. " +
+                                "Nuovo abbonamento creato: Piano {Plan}, StartDate: {Start}, EndDate: {End}",
+                                email, plan, today, newEndDate);
+                        }
+                        else
+                        {
+                            // Aggiorna abbonamento esistente (stessa Stripe subscription, es. primo pagamento)
+                            var updateModel = new UserSubscriptionUpdateModel
+                            {
+                                Id = existingSubscription.Id,
+                                UserId = user.Id,
+                                SubscriptionPlanId = subscriptionPlan.Id,
+                                StartDate = existingSubscription.StartDate,
+                                EndDate = existingSubscription.EndDate,
+                                Status = dbStatus,
+                                AutoRenew = true,
+                                StripeSubscriptionId = subscription.Id,
+                                StripeCustomerId = subscription.CustomerId
+                            };
+                            await _userSubscriptionServices.UpdateAsync(updateModel);
+                            _logger.LogInformation($"Abbonamento aggiornato con StripeSubscriptionId {subscription.Id} - Utente: {email}, Status: {dbStatus}");
+                        }
                     }
                 }
             }

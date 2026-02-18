@@ -26,7 +26,7 @@ builder.ConfigureServices();
 builder.Services.Configure<PaginationOptions>(builder.Configuration.GetSection("PaginationOptions"));
 builder.Services.Configure<MailOptions>(builder.Configuration.GetSection("MailOptions"));
 builder.Services.Configure<KeyVaultOptions>(builder.Configuration.GetSection("KeyVault"));
-builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+builder.Services.AddAutoMapper(cfg => { }, typeof(BackEnd.Profiles.PaymentProfile).Assembly);
 builder.Services.AddCors();
 builder.Services.AddMemoryCache();
 
