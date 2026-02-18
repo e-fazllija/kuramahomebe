@@ -132,11 +132,11 @@ namespace BackEnd.Data
             context.SubscriptionPlans.Add(premiumPlan);
             await context.SaveChangesAsync();
 
-            // Features Premium
+            // Features Premium (max 10 agenzie, 50 agenti)
             var premiumFeatures = new List<SubscriptionFeature>
             {
-                new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_agencies", FeatureValue = "unlimited", Description = "Agenzie illimitate", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
-                new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_agents", FeatureValue = "unlimited", Description = "Agenti illimitati", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_agencies", FeatureValue = "10", Description = "Massimo 10 agenzie", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
+                new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_agents", FeatureValue = "50", Description = "Massimo 50 agenti", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
                 new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_properties", FeatureValue = "unlimited", Description = "Immobili illimitati", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
                 new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_customers", FeatureValue = "unlimited", Description = "Clienti illimitati", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
                 new SubscriptionFeature { SubscriptionPlanId = premiumPlan.Id, FeatureName = "max_requests", FeatureValue = "unlimited", Description = "Richieste illimitate", CreationDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow },
@@ -147,6 +147,7 @@ namespace BackEnd.Data
             context.SubscriptionFeatures.AddRange(premiumFeatures);
 
             // ========== PIANI PREPAGATI MULTI-MESE ==========
+            // I prepagati NON hanno features proprie: UserSubscriptionServices le ricava sempre da Basic/Pro/Premium mensile.
             
             // BASIC 3 MONTHS
             var basic3Months = new SubscriptionPlan
@@ -161,18 +162,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(basic3Months);
             await context.SaveChangesAsync();
-            
-            // Features Basic 3 Months (stesse del Basic)
-            var basic3MonthsFeatures = basicFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = basic3Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(basic3MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Basic
 
             // BASIC 6 MONTHS
             var basic6Months = new SubscriptionPlan
@@ -187,18 +177,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(basic6Months);
             await context.SaveChangesAsync();
-            
-            // Features Basic 6 Months (stesse del Basic)
-            var basic6MonthsFeatures = basicFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = basic6Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(basic6MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Basic
 
             // BASIC 12 MONTHS
             var basic12Months = new SubscriptionPlan
@@ -213,18 +192,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(basic12Months);
             await context.SaveChangesAsync();
-            
-            // Features Basic 12 Months (stesse del Basic)
-            var basic12MonthsFeatures = basicFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = basic12Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(basic12MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Basic
 
             // PRO 3 MONTHS
             var pro3Months = new SubscriptionPlan
@@ -239,18 +207,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(pro3Months);
             await context.SaveChangesAsync();
-            
-            // Features Pro 3 Months (stesse del Pro)
-            var pro3MonthsFeatures = proFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = pro3Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(pro3MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Pro
 
             // PRO 6 MONTHS
             var pro6Months = new SubscriptionPlan
@@ -265,18 +222,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(pro6Months);
             await context.SaveChangesAsync();
-            
-            // Features Pro 6 Months (stesse del Pro)
-            var pro6MonthsFeatures = proFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = pro6Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(pro6MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Pro
 
             // PRO 12 MONTHS
             var pro12Months = new SubscriptionPlan
@@ -291,18 +237,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(pro12Months);
             await context.SaveChangesAsync();
-            
-            // Features Pro 12 Months (stesse del Pro)
-            var pro12MonthsFeatures = proFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = pro12Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(pro12MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Pro
 
             // PREMIUM 3 MONTHS
             var premium3Months = new SubscriptionPlan
@@ -317,18 +252,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(premium3Months);
             await context.SaveChangesAsync();
-            
-            // Features Premium 3 Months (stesse del Premium)
-            var premium3MonthsFeatures = premiumFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = premium3Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(premium3MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Premium
 
             // PREMIUM 6 MONTHS
             var premium6Months = new SubscriptionPlan
@@ -343,18 +267,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(premium6Months);
             await context.SaveChangesAsync();
-            
-            // Features Premium 6 Months (stesse del Premium)
-            var premium6MonthsFeatures = premiumFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = premium6Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(premium6MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Premium
 
             // PREMIUM 12 MONTHS
             var premium12Months = new SubscriptionPlan
@@ -369,18 +282,7 @@ namespace BackEnd.Data
             };
             context.SubscriptionPlans.Add(premium12Months);
             await context.SaveChangesAsync();
-            
-            // Features Premium 12 Months (stesse del Premium)
-            var premium12MonthsFeatures = premiumFeatures.Select(f => new SubscriptionFeature
-            {
-                SubscriptionPlanId = premium12Months.Id,
-                FeatureName = f.FeatureName,
-                FeatureValue = f.FeatureValue,
-                Description = f.Description,
-                CreationDate = DateTime.UtcNow,
-                UpdateDate = DateTime.UtcNow
-            }).ToList();
-            context.SubscriptionFeatures.AddRange(premium12MonthsFeatures);
+            // Prepagate: nessuna feature propria, usa quelle del Premium
 
             await context.SaveChangesAsync();
 
