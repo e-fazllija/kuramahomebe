@@ -2,6 +2,7 @@ using BackEnd.Data;
 using BackEnd.Interfaces.IRepositories;
 using BackEnd.Services.Repositories;
 
+
 namespace BackEnd.Interfaces
 {
     public interface IUnitOfWork : IDisposable
@@ -20,6 +21,10 @@ namespace BackEnd.Interfaces
         IUserSubscriptionRepository UserSubscriptionRepository { get; }
         IPaymentRepository PaymentRepository { get; }
         IStripeWebhookEventRepository StripeWebhookEventRepository { get; }
+
+        // Chat System
+        IConversationRepository ConversationRepository { get; }
+        IMessageRepository MessageRepository { get; }
         
         Task<int> SaveAsync();
         int Save();

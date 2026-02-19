@@ -26,7 +26,13 @@ namespace BackEnd.Data
         public DbSet<Payment> Payments { get; set; }
         public DbSet<StripeWebhookEvent> StripeWebhookEvents { get; set; }
         public DbSet<ExportHistory> ExportHistory { get; set; }
-        
+
+        // Chat System
+        public DbSet<Conversation> Conversations { get; set; }
+        public DbSet<ConversationParticipant> ConversationParticipants { get; set; }
+        public DbSet<Message> Messages { get; set; }
+        public DbSet<MessageAttachment> MessageAttachments { get; set; }
+        public DbSet<MessageReadStatus> MessageReadStatuses { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)

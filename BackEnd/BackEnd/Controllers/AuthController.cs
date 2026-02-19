@@ -727,13 +727,8 @@ namespace BackEnd.Controllers
                 MailRequest mailRequest = new MailRequest()
                 {
                     ToEmail = "e.fazllija@gruppointent.com",
-<<<<<<< HEAD
-                    Subject = "Conferma la tua email - Mirai Home",
-                    Body = $"<h2>Benvenuto in Mirai Home!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href=''>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p></p><p>Il link scadrà tra 24 ore.</p>"
-=======
                     Subject = "Conferma la tua email - MiraiHome",
                     Body = $"<h2>Benvenuto in MiraiHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href=''>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p></p><p>Il link scadrà tra 24 ore.</p>"
->>>>>>> d64034ac3459f621046c8239101ab5df679399f5
                 };
                 await _mailService.SendEmailAsync(mailRequest);
                 return Ok();
