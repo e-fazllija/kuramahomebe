@@ -229,10 +229,13 @@ namespace BackEnd.Services.BusinessServices
                         }
                         else if (currentUserRoles.Contains("Agent"))
                         {
-                            // Agent vede solo: propri eventi + eventi della sua Agency
+                            // Agent vede: propri eventi + eventi della sua Agency + eventi dei colleghi (altri Agent della stessa Agency)
                             if (!string.IsNullOrEmpty(currentUser.AdminId))
                             {
                                 allowedUserIds.Add(currentUser.AdminId);
+                                var agents = await userManager.GetUsersInRoleAsync("Agent");
+                                var colleagues = agents.Where(x => x.AdminId == currentUser.AdminId).Select(x => x.Id);
+                                allowedUserIds.AddRange(colleagues);
                             }
                         }
 
@@ -412,10 +415,13 @@ namespace BackEnd.Services.BusinessServices
                         }
                         else if (currentUserRoles.Contains("Agent"))
                         {
-                            // Agent vede solo: propri eventi + eventi della sua Agency
+                            // Agent vede: propri eventi + eventi della sua Agency + eventi dei colleghi (altri Agent della stessa Agency)
                             if (!string.IsNullOrEmpty(currentUser.AdminId))
                             {
                                 allowedUserIds.Add(currentUser.AdminId);
+                                var agents = await userManager.GetUsersInRoleAsync("Agent");
+                                var colleagues = agents.Where(x => x.AdminId == currentUser.AdminId).Select(x => x.Id);
+                                allowedUserIds.AddRange(colleagues);
                             }
                         }
 

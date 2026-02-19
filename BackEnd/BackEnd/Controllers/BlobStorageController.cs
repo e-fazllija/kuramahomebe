@@ -1,4 +1,4 @@
-﻿using BackEnd.Entities;
+using BackEnd.Entities;
 using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Models.InputModels;
@@ -151,10 +151,21 @@ namespace BackEnd.Controllers
                 if (request.File == null)
                     return BadRequest("Nessun file selezionato");
 
+                const long MaxFileSizeBytes = 30L * 1024 * 1024; // 30 MB
+                long fileSizeBytes = request.File.Length;
+                if (fileSizeBytes > MaxFileSizeBytes)
+                {
+                    return StatusCode(StatusCodes.Status400BadRequest,
+                        new AuthResponseModel()
+                        {
+                            Status = "Error",
+                            Message = "È stato superato il limite. Puoi caricare un solo file alla volta con dimensione massima di 30 MB."
+                        });
+                }
+
                 var (userId, adminId, user, _) = await GetCurrentUserInfo();
 
                 // Verifica limite storage prima dell'upload
-                long fileSizeBytes = request.File.Length;
                 
                 // Ottieni l'admin per verificare e aggiornare lo storage in un'unica query
                 var admin = userId == adminId ? user : await _userManager.FindByIdAsync(adminId);
@@ -273,6 +284,7 @@ namespace BackEnd.Controllers
                     IsFolder = document.IsFolder,
                     IsPrivate = document.IsPrivate,
                     ParentPath = document.ParentPath,
+                    FileSizeBytes = document.FileSizeBytes,
                     AgencyId = document.AgencyId,
                     UserId = document.UserId,
                     CreationDate = document.CreationDate
@@ -390,6 +402,7 @@ namespace BackEnd.Controllers
                             IsFolder = document.IsFolder,
                             IsPrivate = document.IsPrivate,
                             ParentPath = document.ParentPath,
+                            FileSizeBytes = document.FileSizeBytes,
                             AgencyId = document.AgencyId,
                             UserId = document.UserId,
                             CreationDate = document.CreationDate,
@@ -405,7 +418,17 @@ namespace BackEnd.Controllers
                     .ThenBy(d => d.DisplayName)
                     .ToList();
 
-                return Ok(result);
+                // Somma del peso di tutti i file nella cerchia dell'utente (non solo quelli nella cartella corrente)
+                var totalStorageQuery = _unitOfWork.dbContext.Documentation
+                    .Where(d => circleUserIds.Contains(d.UserId ?? "") && !d.IsFolder && d.FileSizeBytes != null);
+                long totalStorageUsedBytes = await totalStorageQuery.SumAsync(d => d.FileSizeBytes ?? 0);
+
+                var storageLimitCheck = await _subscriptionLimitService.CheckFeatureLimitAsync(userId, "storage_limit", adminId);
+                long? limitBytes = null;
+                if (storageLimitCheck.Limit != null && int.TryParse(storageLimitCheck.Limit, out int limitGB) && limitGB > 0)
+                    limitBytes = (long)limitGB * 1024L * 1024L * 1024L;
+
+                return Ok(new { Documents = result, TotalStorageUsedBytes = totalStorageUsedBytes, LimitBytes = limitBytes });
             }
             catch (UnauthorizedAccessException)
             {

@@ -535,6 +535,30 @@ namespace BackEnd.Services.BusinessServices
 
             return null;
         }
+
+        public async Task<(long UsedBytes, long? LimitBytes)> GetStorageUsageAsync(string userId, string? agencyId = null)
+        {
+            var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, agencyId);
+            string adminId = subscription?.UserId ?? userId;
+
+            var admin = await _userManager.FindByIdAsync(adminId);
+            long usedBytes = admin?.StorageUsedBytes ?? 0;
+
+            long? limitBytes = null;
+            if (subscription?.SubscriptionPlan?.Features != null)
+            {
+                var storageFeature = subscription.SubscriptionPlan.Features
+                    .FirstOrDefault(f => string.Equals(f.FeatureName, "storage_limit", StringComparison.OrdinalIgnoreCase));
+                if (storageFeature != null && !string.IsNullOrEmpty(storageFeature.FeatureValue))
+                {
+                    var value = storageFeature.FeatureValue.Trim().ToLower();
+                    if (value != "unlimited" && value != "-1" && int.TryParse(value, out int limitGB) && limitGB > 0)
+                        limitBytes = (long)limitGB * 1024L * 1024L * 1024L;
+                }
+            }
+
+            return (usedBytes, limitBytes);
+        }
     }
 }
 

@@ -55,6 +55,11 @@ namespace BackEnd.Interfaces.IBusinessServices
         /// </summary>
         /// <param name="userId">ID dell'utente (Admin root)</param>
         Task<bool?> EnsureExportPermissions(string userId);
+
+        /// <summary>
+        /// Recupera l'utilizzo storage in bytes e il limite del piano (null se illimitato)
+        /// </summary>
+        Task<(long UsedBytes, long? LimitBytes)> GetStorageUsageAsync(string userId, string? agencyId = null);
     }
 }
 

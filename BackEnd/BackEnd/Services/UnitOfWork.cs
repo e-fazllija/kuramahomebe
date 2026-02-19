@@ -27,6 +27,10 @@ namespace BackEnd.Services
             UserSubscriptionRepository = new UserSubscriptionRepository(this._context);
             PaymentRepository = new PaymentRepository(this._context);
             StripeWebhookEventRepository = new StripeWebhookEventRepository(this._context);
+
+            // Chat System
+            ConversationRepository = new ConversationRepository(this._context);
+            MessageRepository = new MessageRepository(this._context);
         }
 
       
@@ -83,6 +87,18 @@ namespace BackEnd.Services
             private set;
         }
         public IStripeWebhookEventRepository StripeWebhookEventRepository
+        {
+            get;
+            private set;
+        }
+
+        // Chat System
+        public IConversationRepository ConversationRepository
+        {
+            get;
+            private set;
+        }
+        public IMessageRepository MessageRepository
         {
             get;
             private set;

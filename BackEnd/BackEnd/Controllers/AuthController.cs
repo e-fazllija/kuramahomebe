@@ -165,9 +165,11 @@ namespace BackEnd.Controllers
 
                 var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
 
-                // ===== MODALITÀ TEST: Link di conferma email =====
-                // Link che porta alla pagina di conferma email
-                var confirmationLink = $"https://red-mushroom-08aa33903.3.azurestaticapps.net/email-confirmation/{user.Email}/{token}";
+                // ===== Link di conferma email =====
+                // In locale (appsettings.Development.json) usa http://localhost:5173
+                // In produzione usa l'URL Azure se AppSettings:FrontendBaseUrl non è impostato
+                var frontendBaseUrl = _configuration["AppSettings:FrontendBaseUrl"] ?? "www.miraihome.it";
+                var confirmationLink = $"{frontendBaseUrl}/email-confirmation/{user.Email}/{token}";
                 Console.WriteLine("========================================");
                 Console.WriteLine("LINK DI CONFERMA REGISTRAZIONE (TEST):");
                 Console.WriteLine(confirmationLink);
@@ -177,8 +179,8 @@ namespace BackEnd.Controllers
                 MailRequest mailRequest = new MailRequest()
                 {
                     ToEmail = user.Email,
-                    Subject = "Conferma la tua email - MiraiHome",
-                    Body = $"<h2>Benvenuto in MiraiHome!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href='{confirmationLink}'>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p>{confirmationLink}</p><p>Il link scadrà tra 24 ore.</p>"
+                    Subject = "Conferma la tua email - Mirai Home",
+                    Body = $"<h2>Benvenuto in Mirai Home!</h2><p>Per attivare le tue credenziali e completare la registrazione, <a href='{confirmationLink}'>clicca qui</a></p><p>Se il link non funziona, copia e incolla questo URL nel tuo browser:</p><p>{confirmationLink}</p><p>Il link scadrà tra 24 ore.</p>"
                 };
                 await _mailService.SendEmailAsync(mailRequest);
 

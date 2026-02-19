@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo   STRIPE WEBHOOK LISTENER - Kurama Home
+echo   STRIPE WEBHOOK LISTENER - Mirai Home
 echo ============================================
 echo.
 echo Porta Backend: https://localhost:7267

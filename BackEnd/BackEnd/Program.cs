@@ -1,11 +1,19 @@
 using BackEnd;
 using BackEnd.Data;
 using BackEnd.Entities;
+using BackEnd.Hubs;
 using BackEnd.Models.Options;
 using BackEnd.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configura limiti upload file (multipart form) - necessario per file fino a 35 MB
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 35 * 1024 * 1024; // 35 MB (leggermente oltre il limite 30 MB per overhead)
+});
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -29,6 +37,14 @@ builder.Services.Configure<KeyVaultOptions>(builder.Configuration.GetSection("Ke
 builder.Services.AddAutoMapper(cfg => { }, typeof(BackEnd.Profiles.PaymentProfile).Assembly);
 builder.Services.AddCors();
 builder.Services.AddMemoryCache();
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        // Usa PascalCase per coerenza con i controller REST
+        options.PayloadSerializerOptions.PropertyNamingPolicy = null;
+        options.PayloadSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 
 // For Identity - DOPO JWT per non interferire
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -76,17 +92,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// CORS deve essere configurato PRIMA di Authentication e Authorization
+// CORS: AllowCredentials richiesto da SignalR WebSocket
 app.UseCors(options => options
-    .AllowAnyOrigin()
+    .SetIsOriginAllowed(_ => true)
     .AllowAnyMethod()
-    .AllowAnyHeader());
+    .AllowAnyHeader()
+    .AllowCredentials());
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 #region "Seed Initial Data"
 // Seed roles data

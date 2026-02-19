@@ -2,6 +2,7 @@ using BackEnd.Interfaces;
 using BackEnd.Interfaces.IBusinessServices;
 using BackEnd.Services.BusinessServices;
 
+
 namespace BackEnd.Services
 {
     public static class ServicesStartup
@@ -33,6 +34,9 @@ namespace BackEnd.Services
             builder.Services.AddTransient<ISubscriptionLimitService, SubscriptionLimitService>();
             builder.Services.AddTransient<IStripeWebhookEventServices, StripeWebhookEventServices>();
             builder.Services.AddTransient<IDashboardService, DashboardService>();
+
+            // Chat System
+            builder.Services.AddScoped<IConversationServices, ConversationServices>();
 
             // Memory Cache per Dashboard
             builder.Services.AddMemoryCache();

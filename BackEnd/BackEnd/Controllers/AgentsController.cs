@@ -212,15 +212,15 @@ namespace BackEnd.Controllers
                 // MailRequest mailRequest = new MailRequest()
                 // {
                 //     ToEmail = user.Email,
-                //     Subject = "Benvenuto in MiraiHome - Credenziali Agente",
+                //     Subject = "Benvenuto in Mirai Home - Credenziali Agente",
                 //     Body = $@"
-                //         <h2>Benvenuto in MiraiHome!</h2>
+                //         <h2>Benvenuto in Mirai Home!</h2>
                 //         <p>Il tuo account agente è stato creato con successo.</p>
                 //         <p><strong>Credenziali temporanee:</strong></p>
                 //         <p>Email: {user.Email}</p>
                 //         <p>Password: {randomPassword}</p>
                 //         <p><strong>IMPORTANTE:</strong> Cambia la password al primo accesso per motivi di sicurezza.</p>
-                //         <p>Per accedere alla piattaforma, visita il portale MiraiHome e inserisci le tue credenziali.</p>
+                //         <p>Per accedere alla piattaforma, visita il portale Mirai Home e inserisci le tue credenziali.</p>
                 //     "
                 // };
                 // await _mailService.SendEmailAsync(mailRequest);
