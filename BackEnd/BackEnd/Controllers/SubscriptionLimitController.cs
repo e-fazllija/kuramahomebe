@@ -85,6 +85,33 @@ namespace BackEnd.Controllers
         }
 
         /// <summary>
+        /// Recupera l'utilizzo storage in bytes e il limite del piano (null se illimitato)
+        /// </summary>
+        [HttpGet("storage-usage")]
+        [Authorize(Policy = "ActiveSubscription")]
+        public async Task<ActionResult<object>> GetStorageUsage()
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Utente non autorizzato");
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return NotFound("Utente non trovato");
+
+                var (usedBytes, limitBytes) = await _subscriptionLimitService.GetStorageUsageAsync(userId, user.AdminId);
+
+                return Ok(new { UsedBytes = usedBytes, LimitBytes = limitBytes });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Errore interno del server: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Verifica se il downgrade al piano specificato è possibile
         /// Questo endpoint NON richiede subscription attiva perché serve per verificare i requisiti
         /// quando l'abbonamento è scaduto e si vuole sottoscrivere un nuovo piano

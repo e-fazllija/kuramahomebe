@@ -1,4 +1,4 @@
-﻿namespace BackEnd.Models.OutputModels
+namespace BackEnd.Models.OutputModels
 {
     public class DocumentationSelectModel
     {
@@ -9,6 +9,7 @@
         public bool IsPrivate { get; set; }
         public string? ParentPath { get; set; }
         public string? DisplayName { get; set; }
+        public long? FileSizeBytes { get; set; }
         public string? AgencyId { get; set; }
         public string? UserId { get; set; }
         public DateTime CreationDate { get; set; }

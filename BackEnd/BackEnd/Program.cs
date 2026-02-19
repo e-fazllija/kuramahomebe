@@ -4,8 +4,15 @@ using BackEnd.Entities;
 using BackEnd.Models.Options;
 using BackEnd.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configura limiti upload file (multipart form) - necessario per file fino a 35 MB
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 35 * 1024 * 1024; // 35 MB (leggermente oltre il limite 30 MB per overhead)
+});
 
 // Add services to the container.
 builder.Services.AddControllers()
