@@ -248,6 +248,68 @@ namespace BackEnd.Services
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // ==================== CHAT SYSTEM ====================
+
+            builder.Entity<Conversation>()
+                .HasOne(c => c.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Conversation>()
+                .HasMany(c => c.Participants)
+                .WithOne(p => p.Conversation)
+                .HasForeignKey(p => p.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Conversation>()
+                .HasMany(c => c.Messages)
+                .WithOne(m => m.Conversation)
+                .HasForeignKey(m => m.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<ConversationParticipant>()
+                .HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<ConversationParticipant>()
+                .HasIndex(p => new { p.ConversationId, p.UserId })
+                .IsUnique()
+                .HasDatabaseName("IX_ConversationParticipant_ConvId_UserId");
+
+            builder.Entity<Message>()
+                .HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Message>()
+                .HasMany(m => m.Attachments)
+                .WithOne(a => a.Message)
+                .HasForeignKey(a => a.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Message>()
+                .HasMany(m => m.ReadStatuses)
+                .WithOne(r => r.Message)
+                .HasForeignKey(r => r.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<MessageReadStatus>()
+                .HasKey(r => new { r.MessageId, r.UserId });
+
+            builder.Entity<MessageReadStatus>()
+                .HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Message>()
+                .HasIndex(m => new { m.ConversationId, m.CreationDate })
+                .HasDatabaseName("IX_Message_ConversationId_CreationDate");
+
             return builder;
         }
 
