@@ -53,7 +53,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 }).AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-var keyVaultUrl = builder.Configuration.GetSection("KeyVault:Url").Value;
+// In Development non usare mai KeyVault: solo DB locale, storage locale, JWT da config
+string? keyVaultUrl = builder.Environment.IsDevelopment()
+    ? null
+    : builder.Configuration.GetSection("KeyVault:Url").Value;
 var authKeySecret = builder.Configuration.GetSection("KeyVault:Secrets:AuthKey").Value;
 var dbSecret = builder.Configuration.GetSection("KeyVault:Secrets:DbConnectionString").Value;
 
@@ -64,9 +67,9 @@ if (!string.IsNullOrEmpty(keyVaultUrl) && !string.IsNullOrEmpty(authKeySecret))
     Console.WriteLine("JWT configurato con KeyVault");
 }
 else
-{    
+{
     builder.ConfigureJwtForDevelopment();
-    Console.WriteLine("KeyVault non configurato, JWT configurato con chiave di sviluppo");
+    Console.WriteLine("KeyVault non configurato, JWT configurato con chiave di sviluppo (Development o fallback)");
 }
 
 builder.Services.ConfigureApplicationCookie(options =>
@@ -105,60 +108,4 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
-
-#region "Seed Initial Data"
-// Seed roles data
-//using (var scope = app.Services.CreateScope())
-//{
-//    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-
-//    string[] roleNames = { "Admin", "Agency", "Agent", "User" };
-
-//    foreach (var roleName in roleNames)
-//    {
-//        var roleExist = await roleManager.RoleExistsAsync(roleName);
-//        if (!roleExist)
-//        {
-//            var role = new IdentityRole(roleName);
-//            await roleManager.CreateAsync(role);
-//            Console.WriteLine($"Ruolo '{roleName}' creato con successo.");
-//        }
-//        else
-//        {
-//            Console.WriteLine($"Ruolo '{roleName}' già esistente, skip.");
-//        }
-//    }
-
-//    Console.WriteLine("Seed dei ruoli completato.");
-//}
-
-////Assicura che il piano Free esista sempre (necessario per i trial)
-//using (var scope = app.Services.CreateScope())
-//{
-//    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-//    await SubscriptionPlanSeeder.EnsureFreePlanExists(context);
-//}
-
-////Seed test data (solo in Development e se abilitato nella configurazione)
-//if (app.Environment.IsDevelopment())
-//{
-//    var seedTestData = builder.Configuration.GetValue<bool>("SeedTestData", true);
-//    if (seedTestData)
-//    {
-//        using (var scope = app.Services.CreateScope())
-//        {
-//            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-//            //var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-//            //var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-
-//            //var seeder = new TestDataSeeder(context, userManager, roleManager);
-//            //await seeder.SeedTestData();
-
-//            await SubscriptionPlanSeeder.SeedSubscriptionPlans(context);
-
-//        }
-//    }
-//}
-#endregion
-
 app.Run();

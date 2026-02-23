@@ -6,13 +6,12 @@ namespace BackEnd.Services.BusinessServices
 {
     public class StripeService : IStripeService
     {
-        private readonly string _secretKey;
         private readonly string _webhookSecret;
 
         public StripeService(IConfiguration configuration, IKeyVaultSecretProvider secretProvider)
         {
             var secretName = configuration["KeyVault:Secrets:StripeSecretKey"];
-            _secretKey = secretProvider.GetSecret(secretName, "Stripe:SecretKey")
+            StripeConfiguration.ApiKey = secretProvider.GetSecret(secretName, "Stripe:SecretKey")
                 ?? configuration["Stripe:SecretKey"]
                 ?? throw new InvalidOperationException("Stripe secret key non configurata.");
 
@@ -20,8 +19,6 @@ namespace BackEnd.Services.BusinessServices
             _webhookSecret = secretProvider.GetSecret(webhookSecretName, "Stripe:WebhookSecret")
                 ?? configuration["Stripe:WebhookSecret"]
                 ?? string.Empty;
-            
-            StripeConfiguration.ApiKey = _secretKey;
         }
 
         public async Task<PaymentIntent> CreatePaymentIntentAsync(long amount, string currency, string email, Dictionary<string, string>? metadata = null)
@@ -44,11 +41,12 @@ namespace BackEnd.Services.BusinessServices
 
         public async Task<PaymentIntent> GetPaymentIntentAsync(string paymentIntentId, List<string>? expand = null)
         {
-            var service = new PaymentIntentService();
             var options = new PaymentIntentGetOptions();
             if (expand != null)
                 foreach (var e in expand)
                     options.AddExpand(e);
+
+            var service = new PaymentIntentService();
             return await service.GetAsync(paymentIntentId, options);
         }
 
@@ -68,29 +66,17 @@ namespace BackEnd.Services.BusinessServices
         public async Task<Stripe.Customer> CreateOrGetCustomerAsync(string email, string? name = null, Dictionary<string, string>? metadata = null)
         {
             var service = new CustomerService();
+            var customers = await service.SearchAsync(new CustomerSearchOptions { Query = $"email:'{email}'" });
 
-            // Cerca se esiste già un customer con questa email
-            var searchOptions = new CustomerSearchOptions
-            {
-                Query = $"email:'{email}'",
-            };
-
-            var customers = await service.SearchAsync(searchOptions);
-            
             if (customers.Data.Any())
-            {
                 return customers.Data.First();
-            }
 
-            // Se non esiste, crealo
-            var createOptions = new CustomerCreateOptions
+            return await service.CreateAsync(new CustomerCreateOptions
             {
                 Email = email,
                 Name = name,
                 Metadata = metadata ?? new Dictionary<string, string>()
-            };
-
-            return await service.CreateAsync(createOptions);
+            });
         }
 
         public async Task<Subscription> CreateSubscriptionAsync(string customerId, string priceId, Dictionary<string, string>? metadata = null)
@@ -100,10 +86,7 @@ namespace BackEnd.Services.BusinessServices
                 Customer = customerId,
                 Items = new List<SubscriptionItemOptions>
                 {
-                    new SubscriptionItemOptions
-                    {
-                        Price = priceId,
-                    },
+                    new SubscriptionItemOptions { Price = priceId },
                 },
                 PaymentBehavior = "default_incomplete",
                 PaymentSettings = new SubscriptionPaymentSettingsOptions
@@ -139,10 +122,7 @@ namespace BackEnd.Services.BusinessServices
         public async Task<Subscription> SetCancelAtPeriodEndAsync(string subscriptionId, bool cancelAtPeriodEnd)
         {
             var service = new SubscriptionService();
-            var options = new SubscriptionUpdateOptions
-            {
-                CancelAtPeriodEnd = cancelAtPeriodEnd
-            };
+            var options = new SubscriptionUpdateOptions { CancelAtPeriodEnd = cancelAtPeriodEnd };
             return await service.UpdateAsync(subscriptionId, options);
         }
 
@@ -173,10 +153,7 @@ namespace BackEnd.Services.BusinessServices
 
         public async Task SetDefaultPaymentMethodForSubscriptionAsync(string subscriptionId, string paymentMethodId)
         {
-            var options = new SubscriptionUpdateOptions
-            {
-                DefaultPaymentMethod = paymentMethodId
-            };
+            var options = new SubscriptionUpdateOptions { DefaultPaymentMethod = paymentMethodId };
             var service = new SubscriptionService();
             await service.UpdateAsync(subscriptionId, options);
         }
@@ -184,18 +161,16 @@ namespace BackEnd.Services.BusinessServices
         public async Task<CustomerBalanceTransaction> CreateCustomerCreditAsync(string customerId, long amountInCents, string currency, string description, Dictionary<string, string>? metadata = null)
         {
             // Stripe: amount negativo = credito a favore del cliente (riduce le prossime fatture)
-            // Riceviamo amountInCents positivo, convertiamo in negativo per Stripe
-            var stripeAmount = -Math.Abs(amountInCents);
             var options = new CustomerBalanceTransactionCreateOptions
             {
-                Amount = stripeAmount,
+                Amount = -Math.Abs(amountInCents),
                 Currency = currency.ToLower(),
                 Description = description?.Length > 350 ? description.Substring(0, 350) : description
             };
-            if (metadata != null && metadata.Count > 0)
-            {
+
+            if (metadata?.Count > 0)
                 options.Metadata = metadata;
-            }
+
             var service = new CustomerBalanceTransactionService();
             return await service.CreateAsync(customerId, options);
         }
@@ -203,19 +178,10 @@ namespace BackEnd.Services.BusinessServices
         public Event ConstructWebhookEvent(string json, string stripeSignature)
         {
             if (string.IsNullOrEmpty(_webhookSecret))
-            {
                 throw new InvalidOperationException("Webhook secret non configurato");
-            }
 
-            // Disabilita il controllo della versione API per evitare errori di mismatch
-            // tra la versione API di Stripe e quella della libreria Stripe.net
-            return EventUtility.ConstructEvent(
-                json, 
-                stripeSignature, 
-                _webhookSecret, 
-                throwOnApiVersionMismatch: false
-            );
+            // throwOnApiVersionMismatch=false evita errori di mismatch tra versione API Stripe e libreria Stripe.net
+            return EventUtility.ConstructEvent(json, stripeSignature, _webhookSecret, throwOnApiVersionMismatch: false);
         }
     }
 }
-
