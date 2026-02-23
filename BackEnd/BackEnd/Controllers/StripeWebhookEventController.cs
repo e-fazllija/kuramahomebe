@@ -759,9 +759,32 @@ namespace BackEnd.Controllers
                     }
                     else
                     {
-                        if (isOldPlanFree)
+                        // Se il pagamento non è ancora confermato (es. "pending"/"incomplete"), non toccare
+                        // l'abbonamento esistente: creiamo solo il nuovo in pending e attendiamo invoice.paid.
+                        // La cancellazione del vecchio avverrà solo dopo il primo pagamento riuscito.
+                        if (dbStatus != "active")
                         {
-                            // Da Free (trial) a piano a pagamento: annulla il trial e crea nuovo ciclo pieno
+                            var today = DateTime.UtcNow;
+                            var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
+                            await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
+                            {
+                                UserId = user.Id,
+                                SubscriptionPlanId = subscriptionPlan.Id,
+                                StartDate = today,
+                                EndDate = newEndDate,
+                                Status = dbStatus,
+                                AutoRenew = true,
+                                StripeSubscriptionId = subscription.Id,
+                                StripeCustomerId = subscription.CustomerId
+                            });
+                            _logger.LogInformation(
+                                "Nuovo abbonamento in {Status} creato per {Email} (Piano: {Plan}). " +
+                                "Abbonamento precedente mantenuto attivo fino a conferma pagamento.",
+                                dbStatus, email, plan);
+                        }
+                        else if (isOldPlanFree)
+                        {
+                            // Da Free (trial) a piano a pagamento con pagamento già confermato: annulla il trial e crea nuovo ciclo pieno
                             await _userSubscriptionServices.CancelSubscriptionAsync(existingSubscription.Id);
                             var today = DateTime.UtcNow;
                             var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
@@ -782,7 +805,7 @@ namespace BackEnd.Controllers
                         }
                         else
                         {
-                            // Aggiorna abbonamento esistente con la nuova Stripe subscription
+                            // Aggiorna abbonamento esistente con la nuova Stripe subscription (pagamento già confermato)
                             await _userSubscriptionServices.UpdateAsync(new UserSubscriptionUpdateModel
                             {
                                 Id = existingSubscription.Id,
@@ -1035,37 +1058,42 @@ namespace BackEnd.Controllers
                     "Pagamento ricorrente processato per subscription {SubscriptionId} - Invoice: {InvoiceId}",
                     subscriptionId, invoice.Id);
 
-                // Primo pagamento: cancella ora il vecchio abbonamento rimasto attivo
+                // Primo pagamento: cancella ora il vecchio abbonamento rimasto attivo.
+                // Include sia le vecchie subscription Stripe sia i piani Free/una-tantum (senza StripeSubscriptionId).
                 // (per i ricorrenti la cancellazione avviene qui, non in customer.subscription.created)
                 if (!isRenewal)
                 {
                     var allUserSubs = await _userSubscriptionServices.GetUserSubscriptionsAsync(subscription.UserId);
                     var othersActive = allUserSubs
                         .Where(s => string.Equals(s.Status, "active", StringComparison.OrdinalIgnoreCase)
-                                 && !string.IsNullOrEmpty(s.StripeSubscriptionId)
-                                 && s.StripeSubscriptionId != subscriptionId)
+                                 && s.Id != subscription.Id
+                                 && (string.IsNullOrEmpty(s.StripeSubscriptionId)
+                                     || s.StripeSubscriptionId != subscriptionId))
                         .ToList();
 
                     foreach (var oldSub in othersActive)
                     {
-                        try
+                        if (!string.IsNullOrEmpty(oldSub.StripeSubscriptionId))
                         {
-                            await _stripeService.CancelSubscriptionAsync(oldSub.StripeSubscriptionId!);
-                            _logger.LogInformation(
-                                "Vecchia subscription Stripe {StripeSubId} cancellata su Stripe dopo attivazione nuovo abbonamento.",
-                                oldSub.StripeSubscriptionId);
-                        }
-                        catch (Exception exStripe)
-                        {
-                            _logger.LogWarning(exStripe,
-                                "Errore cancellazione subscription Stripe {StripeSubId}. Procedo con cancellazione in DB.",
-                                oldSub.StripeSubscriptionId);
+                            try
+                            {
+                                await _stripeService.CancelSubscriptionAsync(oldSub.StripeSubscriptionId);
+                                _logger.LogInformation(
+                                    "Vecchia subscription Stripe {StripeSubId} cancellata su Stripe dopo attivazione nuovo abbonamento.",
+                                    oldSub.StripeSubscriptionId);
+                            }
+                            catch (Exception exStripe)
+                            {
+                                _logger.LogWarning(exStripe,
+                                    "Errore cancellazione subscription Stripe {StripeSubId}. Procedo con cancellazione in DB.",
+                                    oldSub.StripeSubscriptionId);
+                            }
                         }
 
                         await _userSubscriptionServices.CancelSubscriptionAsync(oldSub.Id);
                         _logger.LogInformation(
                             "Vecchio abbonamento DB Id {SubscriptionId} (Stripe {StripeSubId}) cancellato dopo primo pagamento.",
-                            oldSub.Id, oldSub.StripeSubscriptionId);
+                            oldSub.Id, oldSub.StripeSubscriptionId ?? "N/A");
                     }
                 }
             }
