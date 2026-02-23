@@ -84,29 +84,18 @@ namespace BackEnd.Services.BusinessServices
 
         public async Task<bool> ProcessWebhookEventAsync(string eventId, string eventType, string data)
         {
-            // Verifica se l'evento è già stato processato
             if (await IsEventProcessedAsync(eventId))
                 return true;
 
-            // Crea il record dell'evento
-            var createModel = new StripeWebhookEventCreateModel
+            var eventRecord = await CreateAsync(new StripeWebhookEventCreateModel
             {
                 EventId = eventId,
                 Type = eventType,
                 Data = data,
                 Processed = false
-            };
+            });
 
-            var eventRecord = await CreateAsync(createModel);
-            
-            // Qui implementeresti la logica specifica per processare ogni tipo di evento
-            // Per ora segniamo come processato
-            if (eventRecord != null)
-            {
-                return await MarkAsProcessedAsync(eventRecord.Id);
-            }
-
-            return false;
+            return eventRecord != null && await MarkAsProcessedAsync(eventRecord.Id);
         }
     }
 }

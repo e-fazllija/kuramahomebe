@@ -244,70 +244,55 @@ namespace BackEnd.Controllers
                     return BadRequest("Firma non valida");
                 }
 
-                _logger.LogInformation($"Webhook ricevuto: {stripeEvent.Type}");
+                _logger.LogInformation("Webhook ricevuto: {EventType}", stripeEvent.Type);
 
-                // Verifica se l'evento è già stato processato
                 var isProcessed = await _stripeWebhookEventServices.IsEventProcessedAsync(stripeEvent.Id);
                 if (isProcessed)
                 {
-                    _logger.LogInformation($"Evento {stripeEvent.Id} già processato");
+                    _logger.LogInformation("Evento {EventId} già processato", stripeEvent.Id);
                     return Ok();
                 }
 
-                // Salva l'evento nel database
-                var webhookEventModel = new StripeWebhookEventCreateModel
+                await _stripeWebhookEventServices.CreateAsync(new StripeWebhookEventCreateModel
                 {
                     EventId = stripeEvent.Id,
                     Type = stripeEvent.Type,
                     Data = json,
                     Processed = false,
                     ReceivedAt = DateTime.UtcNow
-                };
+                });
 
-                await _stripeWebhookEventServices.CreateAsync(webhookEventModel);
-
-                // Processa l'evento in base al tipo
                 switch (stripeEvent.Type)
                 {
                     case "payment_intent.succeeded":
                         await HandlePaymentIntentSucceeded(stripeEvent);
                         break;
-
                     case "payment_intent.payment_failed":
                         await HandlePaymentIntentFailed(stripeEvent);
                         break;
-
                     case "customer.subscription.created":
                         await HandleSubscriptionCreated(stripeEvent);
                         break;
-
                     case "customer.subscription.updated":
                         await HandleSubscriptionUpdated(stripeEvent);
                         break;
-
                     case "customer.subscription.deleted":
                         await HandleSubscriptionDeleted(stripeEvent);
                         break;
-
                     case "invoice.paid":
                         await HandleInvoicePaid(stripeEvent, json);
                         break;
-
                     case "invoice.payment_failed":
                         await HandleInvoicePaymentFailed(stripeEvent, json);
                         break;
-
                     default:
-                        _logger.LogInformation($"Evento non gestito: {stripeEvent.Type}");
+                        _logger.LogInformation("Evento non gestito: {EventType}", stripeEvent.Type);
                         break;
                 }
 
-                // Marca l'evento come processato
                 var webhookEvent = await _stripeWebhookEventServices.GetByEventIdAsync(stripeEvent.Id);
                 if (webhookEvent != null)
-                {
                     await _stripeWebhookEventServices.MarkAsProcessedAsync(webhookEvent.Id);
-                }
 
                 return Ok();
             }
@@ -323,57 +308,60 @@ namespace BackEnd.Controllers
             var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
             if (paymentIntent == null) return;
 
-            _logger.LogInformation($"Payment Intent succeeded: {paymentIntent.Id}, Status: {paymentIntent.Status}");
+            _logger.LogInformation("Payment Intent succeeded: {PaymentIntentId}, Status: {Status}",
+                paymentIntent.Id, paymentIntent.Status);
 
             try
             {
-                // Estrai metadati
                 var email = paymentIntent.ReceiptEmail ?? paymentIntent.Metadata.GetValueOrDefault("email", "");
                 var plan = paymentIntent.Metadata.GetValueOrDefault("plan", "");
                 var isRecurringPayment = paymentIntent.Metadata.GetValueOrDefault("isRecurringPayment", "false").ToLower() == "true";
                 var renewalWithRecurring = paymentIntent.Metadata.GetValueOrDefault("renewalWithRecurring", "false").ToLower() == "true";
 
-                _logger.LogInformation($"Payment Intent {paymentIntent.Id} - Email: {email}, Plan: {plan}, IsRecurring: {isRecurringPayment}, RenewalWithRecurring: {renewalWithRecurring}");
+                _logger.LogInformation(
+                    "Payment Intent {PaymentIntentId} - Email: {Email}, Plan: {Plan}, IsRecurring: {IsRecurring}, RenewalWithRecurring: {RenewalWithRecurring}",
+                    paymentIntent.Id, email, plan, isRecurringPayment, renewalWithRecurring);
 
-                // NON creare mai Payment o abbonamento per importo zero: evita abbonamenti "gratis" per errore
                 if (paymentIntent.Amount <= 0)
                 {
-                    _logger.LogWarning($"PaymentIntent {paymentIntent.Id} ignorato: importo zero (Amount: {paymentIntent.Amount}). Nessun Payment o Subscription creati.");
+                    _logger.LogWarning(
+                        "PaymentIntent {PaymentIntentId} ignorato: importo zero (Amount: {Amount}). Nessun Payment o Subscription creati.",
+                        paymentIntent.Id, paymentIntent.Amount);
                     return;
                 }
 
                 if (string.IsNullOrEmpty(email))
                 {
-                    _logger.LogWarning($"Email mancante per PaymentIntent {paymentIntent.Id}");
+                    _logger.LogWarning("Email mancante per PaymentIntent {PaymentIntentId}", paymentIntent.Id);
                     return;
                 }
 
-                // Cerca l'utente per email
                 var user = await _userManager.FindByEmailAsync(email);
                 if (user == null)
                 {
-                    _logger.LogWarning($"Utente non trovato per email {email}. Il pagamento verrà associato quando l'utente si registrerà.");
-                    // Il pagamento verrà creato/associato durante la registrazione
+                    _logger.LogWarning(
+                        "Utente non trovato per email {Email}. Il pagamento verrà associato quando l'utente si registrerà.",
+                        email);
                     return;
                 }
 
-                // Verifica se il pagamento esiste già
                 var existingPayment = await _paymentServices.GetByStripePaymentIntentIdAsync(paymentIntent.Id);
-                
+
                 if (existingPayment == null)
                 {
-                    // Pagamento ricorrente (subscription): non creare Payment qui, lo creerà invoice.paid con SubscriptionId
+                    // Pagamenti da subscription: il Payment viene creato da invoice.paid con SubscriptionId corretto
                     if (isRecurringPayment)
                     {
-                        _logger.LogInformation($"Payment Intent {paymentIntent.Id} proviene da una subscription. Il Payment verrà creato da invoice.paid con SubscriptionId.");
+                        _logger.LogInformation(
+                            "Payment Intent {PaymentIntentId} proviene da una subscription. Il Payment verrà creato da invoice.paid.",
+                            paymentIntent.Id);
                         return;
                     }
 
-                    // Crea un nuovo pagamento (solo one-time)
-                    var paymentModel = new PaymentCreateModel
+                    var payment = await _paymentServices.CreateAsync(new PaymentCreateModel
                     {
                         UserId = user.Id,
-                        Amount = paymentIntent.Amount / 100m, // Converti da centesimi
+                        Amount = paymentIntent.Amount / 100m,
                         Currency = paymentIntent.Currency.ToUpper(),
                         PaymentMethod = "stripe",
                         Status = "completed",
@@ -381,334 +369,174 @@ namespace BackEnd.Controllers
                         TransactionId = paymentIntent.Id,
                         PaymentDate = DateTime.UtcNow,
                         Notes = $"Piano: {plan}"
-                    };
+                    });
 
-                    var payment = await _paymentServices.CreateAsync(paymentModel);
-                    _logger.LogInformation($"Pagamento creato: {payment.Id} per Payment Intent {paymentIntent.Id}");
+                    _logger.LogInformation("Pagamento creato: {PaymentId} per Payment Intent {PaymentIntentId}",
+                        payment.Id, paymentIntent.Id);
 
-                    // Cerca il piano di abbonamento
                     var plans = await _subscriptionPlanServices.GetAllAsync();
-                    var subscriptionPlan = plans.FirstOrDefault(p => 
+                    var subscriptionPlan = plans.FirstOrDefault(p =>
                         p.Name.Equals(plan, StringComparison.OrdinalIgnoreCase));
 
                     if (subscriptionPlan != null)
                     {
                         int? subscriptionIdForPayment = null;
-                        // Leggi metadata per verificare se è un upgrade con proration
+
                         var isUpgradeFromMetadata = paymentIntent.Metadata.GetValueOrDefault("isUpgrade", "false").ToLower() == "true";
                         var creditAmountStr = paymentIntent.Metadata.GetValueOrDefault("creditAmount", "0");
                         var originalAmountStr = paymentIntent.Metadata.GetValueOrDefault("originalAmount", "0");
                         var finalAmountStr = paymentIntent.Metadata.GetValueOrDefault("finalAmount", "0");
                         var currentPlanName = paymentIntent.Metadata.GetValueOrDefault("currentPlanName", "");
 
-                        // Gestione abbonamento: upgrade, rinnovo o nuovo (usa AdminId per trovare la stessa subscription che usa il frontend)
                         var activeSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
-                        
+
                         if (activeSubscription != null)
                         {
                             var today = DateTime.UtcNow;
                             var isExpired = !activeSubscription.EndDate.HasValue || activeSubscription.EndDate.Value <= today;
-                            
-                            // Verifica se è un trial (piano Free o senza StripeSubscriptionId)
-                            var isTrial = string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId) || 
-                                        activeSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
+                            var isTrial = string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId) ||
+                                          activeSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
 
-                            // Stesso piano = RINNOVO
                             if (activeSubscription.SubscriptionPlanId == subscriptionPlan.Id)
                             {
-                                // Se AutoRenew è già true, non permettere rinnovo manuale (il rinnovo è automatico)
-                                if (activeSubscription.AutoRenew == true)
+                                // RINNOVO: stesso piano
+                                if (activeSubscription.AutoRenew)
                                 {
-                                    _logger.LogWarning($"Tentativo di rinnovo manuale per abbonamento con AutoRenew=true. Utente: {user.Email}, Piano: {subscriptionPlan.Name}. Il rinnovo è automatico, ignorando il pagamento.");
-                                    return; // Ignora il pagamento, il rinnovo avverrà automaticamente
+                                    _logger.LogWarning(
+                                        "Tentativo di rinnovo manuale per abbonamento con AutoRenew=true. Utente: {Email}, Piano: {Plan}. Il rinnovo è automatico, ignorando il pagamento.",
+                                        user.Email, subscriptionPlan.Name);
+                                    return;
                                 }
-                                
-                                if (!isExpired)
+
+                                // I due rami (scaduto / non scaduto) differiscono solo per StartDate e fonte della EndDate
+                                var newAutoRenew = (isRecurringPayment || renewalWithRecurring) ? true : activeSubscription.AutoRenew;
+                                var newStartDate = isExpired ? today : activeSubscription.StartDate;
+                                var endDateBase = isExpired ? today : activeSubscription.EndDate!.Value;
+                                var newEndDate = GetEndDateFromBillingPeriod(endDateBase, subscriptionPlan.BillingPeriod);
+
+                                await _userSubscriptionServices.UpdateAsync(new UserSubscriptionUpdateModel
                                 {
-                                    // ABBONAMENTO NON SCADUTO: estendi la data di scadenza
-                                    var newEndDate = GetEndDateFromBillingPeriod(activeSubscription.EndDate.Value, subscriptionPlan.BillingPeriod);
+                                    Id = activeSubscription.Id,
+                                    UserId = user.Id,
+                                    SubscriptionPlanId = subscriptionPlan.Id,
+                                    StartDate = newStartDate,
+                                    EndDate = newEndDate,
+                                    Status = "active",
+                                    AutoRenew = newAutoRenew,
+                                    LastPaymentId = payment.Id,
+                                    StripeSubscriptionId = activeSubscription.StripeSubscriptionId,
+                                    StripeCustomerId = activeSubscription.StripeCustomerId
+                                });
 
-                                    // Se isRecurringPayment o renewalWithRecurring è true, aggiorna AutoRenew a true
-                                    var newAutoRenew = (isRecurringPayment || renewalWithRecurring) ? true : activeSubscription.AutoRenew;
-
-                                    var updateModel = new UserSubscriptionUpdateModel
-                                    {
-                                        Id = activeSubscription.Id,
-                                        UserId = user.Id,
-                                        SubscriptionPlanId = subscriptionPlan.Id,
-                                        StartDate = activeSubscription.StartDate, // Mantieni data originale
-                                        EndDate = newEndDate,
-                                        Status = "active",
-                                        AutoRenew = newAutoRenew,
-                                        LastPaymentId = payment.Id,
-                                        StripeSubscriptionId = activeSubscription.StripeSubscriptionId,
-                                        StripeCustomerId = activeSubscription.StripeCustomerId
-                                    };
-
-                                    await _userSubscriptionServices.UpdateAsync(updateModel);
-                                    subscriptionIdForPayment = activeSubscription.Id;
-                                    _logger.LogInformation($"Abbonamento rinnovato (esteso) per {user.Email}. Piano: {subscriptionPlan.Name}, Nuova scadenza: {updateModel.EndDate}, AutoRenew: {newAutoRenew}");
-                                }
-                                else
-                                {
-                                    // ABBONAMENTO SCADUTO: nuova sottoscrizione con data di decorrenza = oggi
-                                    var newStartDate = today;
-                                    var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-
-                                    // Se isRecurringPayment o renewalWithRecurring è true, aggiorna AutoRenew a true
-                                    var newAutoRenew = (isRecurringPayment || renewalWithRecurring) ? true : activeSubscription.AutoRenew;
-
-                                    var updateModel = new UserSubscriptionUpdateModel
-                                    {
-                                        Id = activeSubscription.Id,
-                                        UserId = user.Id,
-                                        SubscriptionPlanId = subscriptionPlan.Id,
-                                        StartDate = newStartDate, // NUOVA data di decorrenza
-                                        EndDate = newEndDate,
-                                        Status = "active",
-                                        AutoRenew = newAutoRenew,
-                                        LastPaymentId = payment.Id,
-                                        StripeSubscriptionId = activeSubscription.StripeSubscriptionId,
-                                        StripeCustomerId = activeSubscription.StripeCustomerId
-                                    };
-
-                                    await _userSubscriptionServices.UpdateAsync(updateModel);
-                                    subscriptionIdForPayment = activeSubscription.Id;
-                                    _logger.LogInformation($"Abbonamento rinnovato (nuova sottoscrizione) per {user.Email}. Piano: {subscriptionPlan.Name}, Data decorrenza: {updateModel.StartDate}, Scadenza: {updateModel.EndDate}, AutoRenew: {newAutoRenew}");
-                                }
+                                subscriptionIdForPayment = activeSubscription.Id;
+                                _logger.LogInformation(
+                                    "Abbonamento rinnovato per {Email}. Piano: {Plan}, StartDate: {Start}, EndDate: {End}, AutoRenew: {AutoRenew}",
+                                    user.Email, subscriptionPlan.Name, newStartDate, newEndDate, newAutoRenew);
                             }
                             else
                             {
-                                // Piano diverso = UPGRADE/DOWNGRADE
+                                // Piano diverso: UPGRADE / DOWNGRADE / CAMBIO GENERICO
                                 var oldPlanPrice = activeSubscription.SubscriptionPlan?.Price ?? 0;
                                 var newPlanPrice = subscriptionPlan.Price;
                                 bool isUpgrade = newPlanPrice > oldPlanPrice;
                                 bool isDowngrade = oldPlanPrice > newPlanPrice;
-
-                                // Verifica i requisiti se:
-                                // 1. È un downgrade (anche se l'abbonamento è scaduto)
-                                // 2. L'abbonamento è scaduto (indipendentemente da upgrade/downgrade)
-                                // Non verifica se è un upgrade e l'abbonamento è attivo (i limiti aumentano)
                                 bool needsCompatibilityCheck = isDowngrade || isExpired;
-                                
+
                                 if (needsCompatibilityCheck)
                                 {
                                     try
                                     {
                                         var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
-                                            user.Id, 
-                                            subscriptionPlan.Id, 
-                                            user.AdminId);
-                                        
+                                            user.Id, subscriptionPlan.Id, user.AdminId);
+
                                         if (!compatibility.CanDowngrade)
                                         {
                                             _logger.LogWarning(
-                                                "Impossibile creare/aggiornare abbonamento per {Email}. " +
-                                                "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
-                                                "Limiti superati: {ExceededCount}. " +
-                                                "Dettagli: {Message}",
-                                                user.Email, subscriptionPlan.Name, 
-                                                compatibility.ExceededLimitsCount, compatibility.Message);
-                                            
-                                            // Non creiamo/aggiorniamo l'abbonamento se i requisiti non sono rispettati
-                                            // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
-                                            // Questo è un caso edge che dovrebbe essere gestito dal frontend, ma aggiungiamo il controllo per sicurezza
+                                                "Impossibile creare/aggiornare abbonamento per {Email}. Piano richiesto: {PlanName}, Requisiti non rispettati. Limiti superati: {ExceededCount}. Dettagli: {Message}",
+                                                user.Email, subscriptionPlan.Name, compatibility.ExceededLimitsCount, compatibility.Message);
                                             return;
                                         }
                                     }
                                     catch (Exception ex)
                                     {
-                                        _logger.LogError(ex, 
-                                            "Errore durante la verifica dei requisiti per {Email} e piano {PlanName}. " +
-                                            "Procedo comunque con la creazione dell'abbonamento.",
+                                        _logger.LogError(ex,
+                                            "Errore durante la verifica dei requisiti per {Email} e piano {PlanName}. Procedo comunque.",
                                             user.Email, subscriptionPlan.Name);
-                                        // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
                                     }
                                 }
 
-                                // Se è un upgrade con proration (dai metadata), cancella vecchio e crea nuovo con periodo standard
+                                // Tutti i cambi di piano hanno la stessa struttura: cancella vecchio, crea nuovo da oggi
+                                await CancelOldSubscriptionAsync(activeSubscription, isTrial);
+
+                                var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
+                                var newSub = await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
+                                {
+                                    UserId = user.Id,
+                                    SubscriptionPlanId = subscriptionPlan.Id,
+                                    StartDate = today,
+                                    EndDate = newEndDate,
+                                    Status = "active",
+                                    AutoRenew = false,
+                                    LastPaymentId = payment.Id
+                                });
+
+                                subscriptionIdForPayment = newSub.Id;
+
                                 if (isUpgradeFromMetadata && isUpgrade)
-                                {
-                                    // Cancella completamente il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
-                                    // Se è un trial, non c'è nulla da cancellare su Stripe
-                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
-                                    {
-                                        try
-                                        {
-                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
-                                        }
-                                    }
-                                    
-                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
-
-                                    // Crea nuovo abbonamento. Il credito (giorni non goduti) è già stato sottratto dall'importo pagato.
-                                    // La scadenza del nuovo piano parte da oggi: 12 mesi se ha scelto annuale, 6 se semestrale, ecc.
-                                    DateTime newStartDate = today;
-                                    DateTime newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-
-                                    var subscriptionModel = new UserSubscriptionCreateModel
-                                    {
-                                        UserId = user.Id,
-                                        SubscriptionPlanId = subscriptionPlan.Id,
-                                        StartDate = newStartDate,
-                                        EndDate = newEndDate,
-                                        Status = "active",
-                                        AutoRenew = false,
-                                        LastPaymentId = payment.Id
-                                    };
-
-                                    var newSub = await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                                    subscriptionIdForPayment = newSub.Id;
-
                                     _logger.LogInformation(
-                                        "Upgrade con proration completato per {Email}. " +
-                                        "Piano precedente: {OldPlan} (€{OldPrice}), " +
-                                        "Nuovo piano: {NewPlan} (€{NewPrice}), " +
-                                        "Credito applicato: €{Credit}, " +
-                                        "Importo originale: €{Original}, " +
-                                        "Importo pagato: €{Final}, " +
-                                        "Nuova scadenza: {EndDate}",
-                                        user.Email, currentPlanName, oldPlanPrice,
-                                        subscriptionPlan.Name, newPlanPrice,
+                                        "Upgrade con proration completato per {Email}. Piano precedente: {OldPlan} (€{OldPrice}), Nuovo piano: {NewPlan} (€{NewPrice}), Credito applicato: €{Credit}, Importo originale: €{Original}, Importo pagato: €{Final}, Nuova scadenza: {EndDate}",
+                                        user.Email, currentPlanName, oldPlanPrice, subscriptionPlan.Name, newPlanPrice,
                                         creditAmountStr, originalAmountStr, finalAmountStr, newEndDate);
-                                }
                                 else if (isDowngrade)
-                                {
-                                    // Downgrade: nessun rimborso/credito applicato
-                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
-                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
-                                    {
-                                        try
-                                        {
-                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
-                                        }
-                                    }
-                                    
-                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
-
-                                    // Crea nuovo abbonamento con periodo standard
-                                    var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-
-                                    var subscriptionModel = new UserSubscriptionCreateModel
-                                    {
-                                        UserId = user.Id,
-                                        SubscriptionPlanId = subscriptionPlan.Id,
-                                        StartDate = today,
-                                        EndDate = newEndDate,
-                                        Status = "active",
-                                        AutoRenew = false,
-                                        LastPaymentId = payment.Id
-                                    };
-
-                                    var newSubDowngrade = await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                                    subscriptionIdForPayment = newSubDowngrade.Id;
-
                                     _logger.LogInformation(
-                                        "Downgrade completato per {Email}. " +
-                                        "Piano precedente: {OldPlan} (€{OldPrice}), " +
-                                        "Nuovo piano: {NewPlan} (€{NewPrice}), " +
-                                        "Nessun rimborso applicato, Scadenza: {EndDate}",
+                                        "Downgrade completato per {Email}. Piano precedente: {OldPlan} (€{OldPrice}), Nuovo piano: {NewPlan} (€{NewPrice}), Scadenza: {EndDate}",
                                         user.Email, activeSubscription.SubscriptionPlan?.Name ?? "N/A", oldPlanPrice,
                                         subscriptionPlan.Name, newPlanPrice, newEndDate);
-                                }
                                 else
-                                {
-                                    // Cambio piano generico (non upgrade/downgrade riconosciuto)
-                                    // Cancella il vecchio abbonamento (solo nel database, non su Stripe se è un trial)
-                                    if (!isTrial && !string.IsNullOrEmpty(activeSubscription.StripeSubscriptionId))
-                                    {
-                                        try
-                                        {
-                                            await _stripeService.CancelSubscriptionAsync(activeSubscription.StripeSubscriptionId);
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            _logger.LogWarning(ex, $"Errore durante la cancellazione della subscription Stripe {activeSubscription.StripeSubscriptionId} per {user.Email}");
-                                        }
-                                    }
-                                    
-                                    await _userSubscriptionServices.CancelSubscriptionAsync(activeSubscription.Id);
-
-                                    var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-
-                                    var subscriptionModel = new UserSubscriptionCreateModel
-                                    {
-                                        UserId = user.Id,
-                                        SubscriptionPlanId = subscriptionPlan.Id,
-                                        StartDate = today,
-                                        EndDate = newEndDate,
-                                        Status = "active",
-                                        AutoRenew = false,
-                                        LastPaymentId = payment.Id
-                                    };
-
-                                    var newSubChange = await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                                    subscriptionIdForPayment = newSubChange.Id;
-
                                     _logger.LogInformation(
                                         "Cambio piano completato per {Email}. Piano: {Plan}, Scadenza: {EndDate}",
                                         user.Email, subscriptionPlan.Name, newEndDate);
-                                }
                             }
                         }
                         else
                         {
-                            // Nuovo abbonamento (nessun abbonamento attivo)
-                            // Verifica sempre i requisiti per un nuovo abbonamento
+                            // Nessun abbonamento attivo: nuovo abbonamento
                             try
                             {
                                 var compatibility = await _subscriptionLimitService.CheckDowngradeCompatibilityAsync(
-                                    user.Id, 
-                                    subscriptionPlan.Id, 
-                                    user.AdminId);
-                                
+                                    user.Id, subscriptionPlan.Id, user.AdminId);
+
                                 if (!compatibility.CanDowngrade)
                                 {
                                     _logger.LogWarning(
-                                        "Impossibile creare nuovo abbonamento per {Email}. " +
-                                        "Piano richiesto: {PlanName}, Requisiti non rispettati. " +
-                                        "Limiti superati: {ExceededCount}. " +
-                                        "Dettagli: {Message}",
-                                        user.Email, subscriptionPlan.Name, 
-                                        compatibility.ExceededLimitsCount, compatibility.Message);
-                                    
-                                    // Non creiamo l'abbonamento se i requisiti non sono rispettati
-                                    // Il pagamento è già stato processato, ma l'abbonamento non viene attivato
+                                        "Impossibile creare nuovo abbonamento per {Email}. Piano richiesto: {PlanName}, Requisiti non rispettati. Limiti superati: {ExceededCount}. Dettagli: {Message}",
+                                        user.Email, subscriptionPlan.Name, compatibility.ExceededLimitsCount, compatibility.Message);
                                     return;
                                 }
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogError(ex, 
-                                    "Errore durante la verifica dei requisiti per nuovo abbonamento {Email} e piano {PlanName}. " +
-                                    "Procedo comunque con la creazione dell'abbonamento.",
+                                _logger.LogError(ex,
+                                    "Errore durante la verifica dei requisiti per nuovo abbonamento {Email} e piano {PlanName}. Procedo comunque.",
                                     user.Email, subscriptionPlan.Name);
-                                // In caso di errore, procediamo comunque (non blocchiamo il pagamento)
                             }
-                            
-                            var newEndDateNew = GetEndDateFromBillingPeriod(DateTime.UtcNow, subscriptionPlan.BillingPeriod);
-                            var subscriptionModel = new UserSubscriptionCreateModel
+
+                            var today = DateTime.UtcNow;
+                            var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
+                            var newSub = await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                             {
                                 UserId = user.Id,
                                 SubscriptionPlanId = subscriptionPlan.Id,
-                                StartDate = DateTime.UtcNow,
-                                EndDate = newEndDateNew,
+                                StartDate = today,
+                                EndDate = newEndDate,
                                 Status = "active",
                                 AutoRenew = false,
                                 LastPaymentId = payment.Id
-                            };
+                            });
 
-                            var newSubNew = await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                            subscriptionIdForPayment = newSubNew.Id;
-                            _logger.LogInformation($"Nuovo abbonamento creato per {user.Email} - Piano: {subscriptionPlan.Name}");
+                            subscriptionIdForPayment = newSub.Id;
+                            _logger.LogInformation("Nuovo abbonamento creato per {Email} - Piano: {Plan}",
+                                user.Email, subscriptionPlan.Name);
                         }
 
                         if (subscriptionIdForPayment.HasValue)
@@ -727,14 +555,14 @@ namespace BackEnd.Controllers
                                 Notes = payment.Notes,
                                 StripePaymentIntentId = payment.StripePaymentIntentId
                             });
-                            _logger.LogInformation($"Payment {payment.Id} aggiornato con SubscriptionId {subscriptionIdForPayment}");
+                            _logger.LogInformation("Payment {PaymentId} aggiornato con SubscriptionId {SubscriptionId}",
+                                payment.Id, subscriptionIdForPayment);
                         }
                     }
                 }
                 else
                 {
-                    // Aggiorna il pagamento esistente
-                    var updateModel = new PaymentUpdateModel
+                    await _paymentServices.UpdateAsync(new PaymentUpdateModel
                     {
                         Id = existingPayment.Id,
                         UserId = user.Id,
@@ -746,14 +574,13 @@ namespace BackEnd.Controllers
                         TransactionId = existingPayment.TransactionId,
                         PaymentDate = existingPayment.PaymentDate,
                         Notes = existingPayment.Notes
-                    };
-
-                    await _paymentServices.UpdateAsync(updateModel);
+                    });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing del payment intent succeeded {paymentIntent.Id}");
+                _logger.LogError(ex, "Errore durante il processing del payment intent succeeded {PaymentIntentId}",
+                    paymentIntent.Id);
             }
         }
 
@@ -762,15 +589,14 @@ namespace BackEnd.Controllers
             var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
             if (paymentIntent == null) return;
 
-            _logger.LogWarning($"Payment Intent failed: {paymentIntent.Id}");
+            _logger.LogWarning("Payment Intent failed: {PaymentIntentId}", paymentIntent.Id);
 
             try
             {
                 var existingPayment = await _paymentServices.GetByStripePaymentIntentIdAsync(paymentIntent.Id);
-                
                 if (existingPayment != null)
                 {
-                    var updateModel = new PaymentUpdateModel
+                    await _paymentServices.UpdateAsync(new PaymentUpdateModel
                     {
                         Id = existingPayment.Id,
                         UserId = existingPayment.UserId,
@@ -782,14 +608,13 @@ namespace BackEnd.Controllers
                         TransactionId = existingPayment.TransactionId,
                         PaymentDate = existingPayment.PaymentDate,
                         Notes = $"{existingPayment.Notes} - Pagamento fallito: {paymentIntent.LastPaymentError?.Message}"
-                    };
-
-                    await _paymentServices.UpdateAsync(updateModel);
+                    });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing del payment intent failed {paymentIntent.Id}");
+                _logger.LogError(ex, "Errore durante il processing del payment intent failed {PaymentIntentId}",
+                    paymentIntent.Id);
             }
         }
 
@@ -817,127 +642,107 @@ namespace BackEnd.Controllers
             var subscription = stripeEvent.Data.Object as Subscription;
             if (subscription == null) return;
 
-            _logger.LogInformation($"Subscription created: {subscription.Id}, Stripe status: {subscription.Status}");
+            _logger.LogInformation("Subscription created: {SubscriptionId}, Stripe status: {Status}",
+                subscription.Id, subscription.Status);
 
             try
             {
-                // Status DB: solo "active" dà accesso; incomplete/pending non dà accesso finché non arriva invoice.paid
                 var dbStatus = MapStripeSubscriptionStatusToDb(subscription.Status);
-
-                // Estrai metadata
                 var email = subscription.Metadata.GetValueOrDefault("email", "");
                 var plan = subscription.Metadata.GetValueOrDefault("plan", "");
 
                 if (string.IsNullOrEmpty(email))
                 {
-                    _logger.LogWarning($"Email mancante per Subscription {subscription.Id}");
+                    _logger.LogWarning("Email mancante per Subscription {SubscriptionId}", subscription.Id);
                     return;
                 }
 
-                // Cerca l'utente
                 var user = await _userManager.FindByEmailAsync(email);
                 if (user == null)
                 {
-                    _logger.LogWarning($"Utente non trovato per email {email} nella subscription {subscription.Id}");
+                    _logger.LogWarning("Utente non trovato per email {Email} nella subscription {SubscriptionId}",
+                        email, subscription.Id);
                     return;
                 }
 
-                // Cerca il piano
                 var plans = await _subscriptionPlanServices.GetAllAsync();
-                var subscriptionPlan = plans.FirstOrDefault(p => 
+                var subscriptionPlan = plans.FirstOrDefault(p =>
                     p.Name.Equals(plan, StringComparison.OrdinalIgnoreCase));
 
                 if (subscriptionPlan == null)
                 {
-                    _logger.LogWarning($"Piano '{plan}' non trovato per subscription {subscription.Id}");
+                    _logger.LogWarning("Piano '{Plan}' non trovato per subscription {SubscriptionId}", plan, subscription.Id);
                     return;
                 }
 
-                // Verifica se esiste già un abbonamento attivo (usa AdminId per coerenza con il resto dell'app)
                 var existingSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(user.Id, user.AdminId);
-                
+
                 if (existingSubscription == null)
                 {
-                    // Crea nuovo abbonamento con status mappato da Stripe (non hardcoded "active")
-                    var endDateCreated = GetEndDateFromBillingPeriod(DateTime.UtcNow, subscriptionPlan.BillingPeriod);
-                    var subscriptionModel = new UserSubscriptionCreateModel
+                    var endDate = GetEndDateFromBillingPeriod(DateTime.UtcNow, subscriptionPlan.BillingPeriod);
+                    await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                     {
                         UserId = user.Id,
                         SubscriptionPlanId = subscriptionPlan.Id,
                         StartDate = DateTime.UtcNow,
-                        EndDate = endDateCreated,
+                        EndDate = endDate,
                         Status = dbStatus,
                         AutoRenew = true,
                         StripeSubscriptionId = subscription.Id,
                         StripeCustomerId = subscription.CustomerId
-                    };
-
-                    await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                    _logger.LogInformation($"Abbonamento creato per subscription Stripe {subscription.Id} - Utente: {email}, Piano: {plan}, Status: {dbStatus}");
+                    });
+                    _logger.LogInformation(
+                        "Abbonamento creato per subscription Stripe {SubscriptionId} - Utente: {Email}, Piano: {Plan}, Status: {Status}",
+                        subscription.Id, email, plan, dbStatus);
                 }
                 else
                 {
-                    // Se esiste già un abbonamento con una Stripe Subscription diversa, 
-                    // significa che è un upgrade/rinnovo con pagamento ricorrente
-                    // In questo caso, elimina il vecchio abbonamento e crea uno nuovo
-                    if (!string.IsNullOrEmpty(existingSubscription.StripeSubscriptionId) && 
+                    // Hoist isOldPlanFree to avoid duplicate computation in both branches below
+                    var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
+
+                    if (!string.IsNullOrEmpty(existingSubscription.StripeSubscriptionId) &&
                         existingSubscription.StripeSubscriptionId != subscription.Id)
                     {
+                        // Upgrade/rinnovo con nuova Stripe subscription: crea il nuovo abbonamento in pending.
+                        // Il vecchio viene cancellato solo dopo invoice.paid per non lasciare l'utente senza piano.
                         var today = DateTime.UtcNow;
                         var isExpired = !existingSubscription.EndDate.HasValue || existingSubscription.EndDate.Value <= today;
-                        
-                        // Verifica se è un upgrade confrontando i prezzi dei piani
                         var oldPlanPrice = existingSubscription.SubscriptionPlan?.Price ?? 0;
                         var newPlanPrice = subscriptionPlan.Price;
                         bool isUpgrade = newPlanPrice > oldPlanPrice;
                         bool isSamePlan = existingSubscription.SubscriptionPlanId == subscriptionPlan.Id;
-                        
+
                         _logger.LogInformation(
                             "Upgrade/rinnovo con pagamento ricorrente rilevato per {Email}. " +
                             "Vecchia Subscription Stripe: {OldSubscriptionId}, Nuova Subscription Stripe: {NewSubscriptionId}. " +
                             "Piano vecchio: {OldPlan} (€{OldPrice}), Piano nuovo: {NewPlan} (€{NewPrice}), " +
                             "IsUpgrade: {IsUpgrade}, IsSamePlan: {IsSamePlan}, IsExpired: {IsExpired}. " +
-                            "Creando nuovo abbonamento in pending; il vecchio verrà cancellato solo dopo invoice.paid (pagamento effettuato).",
+                            "Creando nuovo abbonamento in pending; il vecchio verrà cancellato solo dopo invoice.paid.",
                             email, existingSubscription.StripeSubscriptionId, subscription.Id,
                             existingSubscription.SubscriptionPlan?.Name ?? "N/A", oldPlanPrice,
                             plan, newPlanPrice, isUpgrade, isSamePlan, isExpired);
 
-                        // NON cancellare qui il vecchio abbonamento: per i ricorrenti il vecchio va cancellato
-                        // solo dopo che il primo pagamento è andato a buon fine (HandleInvoicePaid).
-                        // Altrimenti se l'utente abbandona prima di pagare resterebbe senza abbonamento attivo.
-
-                        // Crea nuovo abbonamento con la nuova Stripe Subscription (status pending finché non arriva invoice.paid)
-                        // Preserviamo i giorni solo se il piano precedente era a pagamento. Free (trial) non conta: nuovo ciclo da oggi.
-                        DateTime newStartDate;
-                        DateTime newEndDate;
-                        var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
-                        
+                        DateTime newStartDate, newEndDate;
                         if (!isExpired && existingSubscription.EndDate.HasValue && !isOldPlanFree)
                         {
-                            // UPGRADE/RINNOVO da piano a pagamento: mantieni i giorni rimanenti e aggiungi il nuovo periodo
+                            // Mantieni i giorni rimanenti dell'abbonamento corrente
                             newStartDate = existingSubscription.StartDate;
                             newEndDate = GetEndDateFromBillingPeriod(existingSubscription.EndDate.Value, subscriptionPlan.BillingPeriod);
-                            
                             _logger.LogInformation(
-                                "Preservando giorni rimanenti per {Email}. " +
-                                "Vecchia EndDate: {OldEndDate}, Nuova EndDate: {NewEndDate}, " +
-                                "Giorni rimanenti preservati: {DaysRemaining}",
+                                "Preservando giorni rimanenti per {Email}. Vecchia EndDate: {OldEndDate}, Nuova EndDate: {NewEndDate}, Giorni rimasti: {DaysRemaining}",
                                 email, existingSubscription.EndDate.Value, newEndDate,
                                 (existingSubscription.EndDate.Value - today).TotalDays);
                         }
                         else
                         {
-                            // Piano Free (trial), scaduto o senza EndDate: nuovo ciclo parte da oggi
                             newStartDate = today;
                             newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-                            
                             _logger.LogInformation(
-                                "Nuovo ciclo per abbonamento scaduto per {Email}. " +
-                                "StartDate: {StartDate}, EndDate: {EndDate}",
+                                "Nuovo ciclo per abbonamento scaduto per {Email}. StartDate: {StartDate}, EndDate: {EndDate}",
                                 email, newStartDate, newEndDate);
                         }
 
-                        var newSubscriptionModel = new UserSubscriptionCreateModel
+                        await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                         {
                             UserId = user.Id,
                             SubscriptionPlanId = subscriptionPlan.Id,
@@ -947,28 +752,20 @@ namespace BackEnd.Controllers
                             AutoRenew = true,
                             StripeSubscriptionId = subscription.Id,
                             StripeCustomerId = subscription.CustomerId
-                        };
-
-                        await _userSubscriptionServices.CreateAsync(newSubscriptionModel);
+                        });
                         _logger.LogInformation(
-                            "Nuovo abbonamento creato per subscription Stripe {SubscriptionId} - Utente: {Email}, Piano: {Plan}, " +
-                            "StartDate: {StartDate}, EndDate: {EndDate}, Status: {Status}",
+                            "Nuovo abbonamento creato per subscription Stripe {SubscriptionId} - Utente: {Email}, Piano: {Plan}, StartDate: {Start}, EndDate: {End}, Status: {Status}",
                             subscription.Id, email, plan, newStartDate, newEndDate, dbStatus);
                     }
                     else
                     {
-                        // Caso: non aveva Stripe Subscription (es. piano Free/trial) oppure stessa subscription
-                        var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
-                        
                         if (isOldPlanFree)
                         {
-                            // Da Free (trial) a piano a pagamento: annulla il trial e crea nuovo abbonamento da oggi.
-                            // I giorni del trial non contano: nuovo ciclo con durata piena.
+                            // Da Free (trial) a piano a pagamento: annulla il trial e crea nuovo ciclo pieno
                             await _userSubscriptionServices.CancelSubscriptionAsync(existingSubscription.Id);
-                            
                             var today = DateTime.UtcNow;
                             var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-                            var newSubscriptionModel = new UserSubscriptionCreateModel
+                            await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                             {
                                 UserId = user.Id,
                                 SubscriptionPlanId = subscriptionPlan.Id,
@@ -978,17 +775,15 @@ namespace BackEnd.Controllers
                                 AutoRenew = true,
                                 StripeSubscriptionId = subscription.Id,
                                 StripeCustomerId = subscription.CustomerId
-                            };
-                            await _userSubscriptionServices.CreateAsync(newSubscriptionModel);
+                            });
                             _logger.LogInformation(
-                                "Upgrade da Free (trial) a piano a pagamento per {Email}. " +
-                                "Nuovo abbonamento creato: Piano {Plan}, StartDate: {Start}, EndDate: {End}",
+                                "Upgrade da Free (trial) a piano a pagamento per {Email}. Piano {Plan}, StartDate: {Start}, EndDate: {End}",
                                 email, plan, today, newEndDate);
                         }
                         else
                         {
-                            // Aggiorna abbonamento esistente (stessa Stripe subscription, es. primo pagamento)
-                            var updateModel = new UserSubscriptionUpdateModel
+                            // Aggiorna abbonamento esistente con la nuova Stripe subscription
+                            await _userSubscriptionServices.UpdateAsync(new UserSubscriptionUpdateModel
                             {
                                 Id = existingSubscription.Id,
                                 UserId = user.Id,
@@ -999,16 +794,18 @@ namespace BackEnd.Controllers
                                 AutoRenew = true,
                                 StripeSubscriptionId = subscription.Id,
                                 StripeCustomerId = subscription.CustomerId
-                            };
-                            await _userSubscriptionServices.UpdateAsync(updateModel);
-                            _logger.LogInformation($"Abbonamento aggiornato con StripeSubscriptionId {subscription.Id} - Utente: {email}, Status: {dbStatus}");
+                            });
+                            _logger.LogInformation(
+                                "Abbonamento aggiornato con StripeSubscriptionId {SubscriptionId} - Utente: {Email}, Status: {Status}",
+                                subscription.Id, email, dbStatus);
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing della subscription created {subscription.Id}");
+                _logger.LogError(ex, "Errore durante il processing della subscription created {SubscriptionId}",
+                    subscription.Id);
             }
         }
 
@@ -1017,47 +814,36 @@ namespace BackEnd.Controllers
             var subscription = stripeEvent.Data.Object as Subscription;
             if (subscription == null) return;
 
-            _logger.LogInformation($"Subscription updated: {subscription.Id}");
-            
+            _logger.LogInformation("Subscription updated: {SubscriptionId}", subscription.Id);
+
             try
             {
                 var userSubscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscription.Id);
-                if (userSubscription != null)
+                if (userSubscription == null) return;
+
+                var newStatus = MapStripeSubscriptionStatusToDb(subscription.Status);
+
+                // Non passare mai a "active" se non c'è ancora almeno un Payment:
+                // invoice.paid può arrivare dopo subscription.updated e solo lì viene creato il Payment.
+                if (newStatus == "active" && !userSubscription.LastPaymentId.HasValue)
                 {
-                    // Aggiorna lo stato in base allo stato Stripe (stessa mappatura di HandleSubscriptionCreated)
-                    var newStatus = MapStripeSubscriptionStatusToDb(subscription.Status);
+                    _logger.LogInformation(
+                        "Subscription updated {SubscriptionId}: Stripe status active ma nessun Payment ancora (LastPaymentId null). Mantengo status {Status}.",
+                        subscription.Id, userSubscription.Status);
+                    newStatus = userSubscription.Status;
+                }
 
-                    // Non passare mai a "active" da subscription.updated se non c'è ancora almeno un Payment:
-                    // invoice.paid può arrivare dopo subscription.updated; solo invoice.paid crea il Payment.
-                    // Così eviti "abbonamento attivo senza Payment" quando il primo pagamento non è andato a buon fine.
-                    if (newStatus == "active" && !userSubscription.LastPaymentId.HasValue)
-                    {
-                        _logger.LogInformation($"Subscription updated {subscription.Id}: Stripe status active ma nessun Payment ancora (LastPaymentId null). Mantengo status {userSubscription.Status}.");
-                        newStatus = userSubscription.Status; // mantieni pending (o altro) finché non arriva invoice.paid
-                    }
-
-                    if (newStatus != userSubscription.Status)
-                    {
-                        var updateModel = new UserSubscriptionUpdateModel
-                        {
-                            Id = userSubscription.Id,
-                            UserId = userSubscription.UserId,
-                            SubscriptionPlanId = userSubscription.SubscriptionPlanId,
-                            StartDate = userSubscription.StartDate,
-                            EndDate = userSubscription.EndDate,
-                            Status = newStatus,
-                            AutoRenew = userSubscription.AutoRenew,
-                            StripeSubscriptionId = userSubscription.StripeSubscriptionId,
-                            StripeCustomerId = userSubscription.StripeCustomerId
-                        };
-
-                        await _userSubscriptionServices.UpdateAsync(updateModel);
-                    }
+                if (newStatus != userSubscription.Status)
+                {
+                    await _userSubscriptionServices.UpdateAsync(BuildSubscriptionUpdateModel(
+                        userSubscription, newStatus, userSubscription.EndDate, userSubscription.AutoRenew,
+                        userSubscription.LastPaymentId));
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing della subscription updated {subscription.Id}");
+                _logger.LogError(ex, "Errore durante il processing della subscription updated {SubscriptionId}",
+                    subscription.Id);
             }
         }
 
@@ -1066,19 +852,18 @@ namespace BackEnd.Controllers
             var subscription = stripeEvent.Data.Object as Subscription;
             if (subscription == null) return;
 
-            _logger.LogInformation($"Subscription deleted: {subscription.Id}");
+            _logger.LogInformation("Subscription deleted: {SubscriptionId}", subscription.Id);
 
             try
             {
                 var userSubscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscription.Id);
                 if (userSubscription != null)
-                {
                     await _userSubscriptionServices.CancelSubscriptionAsync(userSubscription.Id);
-                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing della subscription deleted {subscription.Id}");
+                _logger.LogError(ex, "Errore durante il processing della subscription deleted {SubscriptionId}",
+                    subscription.Id);
             }
         }
 
@@ -1090,7 +875,9 @@ namespace BackEnd.Controllers
         {
             if (!string.IsNullOrEmpty(invoice.SubscriptionId))
                 return invoice.SubscriptionId;
+
             if (string.IsNullOrEmpty(rawEventJson)) return null;
+
             try
             {
                 using var doc = JsonDocument.Parse(rawEventJson);
@@ -1108,6 +895,7 @@ namespace BackEnd.Controllers
                 }
             }
             catch { /* ignora parse errors */ }
+
             return null;
         }
 
@@ -1116,175 +904,174 @@ namespace BackEnd.Controllers
             var invoice = stripeEvent.Data.Object as Invoice;
             if (invoice == null) return;
 
-            _logger.LogInformation($"Invoice paid: {invoice.Id}");
+            _logger.LogInformation("Invoice paid: {InvoiceId}", invoice.Id);
 
             var subscriptionId = GetSubscriptionIdFromInvoice(invoice, rawEventJson);
 
             try
             {
-                // Se l'invoice ha una subscription, gestisci il pagamento ricorrente
-                if (!string.IsNullOrEmpty(subscriptionId))
-                {
-                    var subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
+                if (string.IsNullOrEmpty(subscriptionId)) return;
 
-                    // invoice.paid può arrivare prima di customer.subscription.created: crea UserSubscription da Stripe
-                    if (subscription == null)
+                var subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
+
+                // invoice.paid può arrivare prima di customer.subscription.created: crea UserSubscription da Stripe
+                if (subscription == null)
+                {
+                    try
                     {
-                        try
+                        var stripeSubscription = await _stripeService.GetSubscriptionAsync(subscriptionId);
+                        var email = stripeSubscription.Metadata.GetValueOrDefault("email", "");
+                        var plan = stripeSubscription.Metadata.GetValueOrDefault("plan", "");
+
+                        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(plan))
                         {
-                            var stripeSubscription = await _stripeService.GetSubscriptionAsync(subscriptionId);
-                            var email = stripeSubscription.Metadata.GetValueOrDefault("email", "");
-                            var plan = stripeSubscription.Metadata.GetValueOrDefault("plan", "");
-                            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(plan))
+                            _logger.LogWarning(
+                                "Invoice paid {InvoiceId}: metadata email/plan mancanti su subscription {SubscriptionId}",
+                                invoice.Id, subscriptionId);
+                        }
+                        else
+                        {
+                            var user = await _userManager.FindByEmailAsync(email);
+                            if (user == null)
                             {
-                                _logger.LogWarning($"Invoice paid {invoice.Id}: metadata email/plan mancanti su subscription {subscriptionId}");
+                                _logger.LogWarning(
+                                    "Invoice paid {InvoiceId}: utente non trovato per email {Email}",
+                                    invoice.Id, email);
                             }
                             else
                             {
-                                var user = await _userManager.FindByEmailAsync(email);
-                                if (user == null)
+                                var plans = await _subscriptionPlanServices.GetAllAsync();
+                                var subscriptionPlan = plans.FirstOrDefault(p =>
+                                    p.Name.Equals(plan, StringComparison.OrdinalIgnoreCase));
+
+                                if (subscriptionPlan == null)
                                 {
-                                    _logger.LogWarning($"Invoice paid {invoice.Id}: utente non trovato per email {email}");
+                                    _logger.LogWarning(
+                                        "Invoice paid {InvoiceId}: piano '{Plan}' non trovato", invoice.Id, plan);
                                 }
                                 else
                                 {
-                                    var plans = await _subscriptionPlanServices.GetAllAsync();
-                                    var subscriptionPlan = plans.FirstOrDefault(p => p.Name.Equals(plan, StringComparison.OrdinalIgnoreCase));
-                                    if (subscriptionPlan == null)
+                                    var endDate = GetEndDateFromBillingPeriod(DateTime.UtcNow, subscriptionPlan.BillingPeriod);
+                                    await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                                     {
-                                        _logger.LogWarning($"Invoice paid {invoice.Id}: piano '{plan}' non trovato");
-                                    }
-                                    else
-                                    {
-                                        var endDateInvoice = GetEndDateFromBillingPeriod(DateTime.UtcNow, subscriptionPlan.BillingPeriod);
-                                        var subscriptionModel = new UserSubscriptionCreateModel
-                                        {
-                                            UserId = user.Id,
-                                            SubscriptionPlanId = subscriptionPlan.Id,
-                                            StartDate = DateTime.UtcNow,
-                                            EndDate = endDateInvoice,
-                                            Status = "active",
-                                            AutoRenew = true,
+                                        UserId = user.Id,
+                                        SubscriptionPlanId = subscriptionPlan.Id,
+                                        StartDate = DateTime.UtcNow,
+                                        EndDate = endDate,
+                                        Status = "active",
+                                        AutoRenew = true,
                                         StripeSubscriptionId = subscriptionId,
                                         StripeCustomerId = stripeSubscription.CustomerId
-                                        };
-                                        await _userSubscriptionServices.CreateAsync(subscriptionModel);
-                                        _logger.LogInformation($"UserSubscription creata da invoice.paid per subscription {subscriptionId} - Utente: {email}");
-                                        subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
-                                    }
+                                    });
+                                    _logger.LogInformation(
+                                        "UserSubscription creata da invoice.paid per subscription {SubscriptionId} - Utente: {Email}",
+                                        subscriptionId, email);
+                                    subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
                                 }
                             }
-                        }
-                        catch (Exception exFallback)
-                        {
-                            _logger.LogError(exFallback, $"Fallback creazione subscription da invoice.paid {invoice.Id} fallito");
                         }
                     }
-
-                    if (subscription != null)
+                    catch (Exception exFallback)
                     {
-                        // Non creare Payment a importo zero né estendere l'abbonamento per fatture a zero (es. trial)
-                        var amountPaid = invoice.AmountPaid;
-                        if (amountPaid <= 0)
+                        _logger.LogError(exFallback,
+                            "Fallback creazione subscription da invoice.paid {InvoiceId} fallito", invoice.Id);
+                    }
+                }
+
+                if (subscription == null) return;
+
+                // Non creare Payment a importo zero né estendere il periodo (es. trial)
+                if (invoice.AmountPaid <= 0)
+                {
+                    _logger.LogInformation(
+                        "Invoice paid {InvoiceId} ignorata per subscription {SubscriptionId}: importo zero. Nessun Payment creato.",
+                        invoice.Id, subscriptionId);
+                    return;
+                }
+
+                // Idempotenza: evita duplicati se invoice.paid arriva più volte
+                var existingPayment = await _paymentServices.GetByTransactionIdAsync(invoice.Id);
+                PaymentSelectModel? payment;
+                if (existingPayment != null)
+                {
+                    payment = existingPayment;
+                    _logger.LogInformation("Payment già esistente per invoice {InvoiceId}, aggiorno solo UserSubscription",
+                        invoice.Id);
+                }
+                else
+                {
+                    payment = await _paymentServices.CreateAsync(new PaymentCreateModel
+                    {
+                        UserId = subscription.UserId,
+                        SubscriptionId = subscription.Id,
+                        Amount = invoice.AmountPaid / 100m,
+                        Currency = invoice.Currency.ToUpper(),
+                        PaymentMethod = "stripe",
+                        Status = "completed",
+                        StripePaymentIntentId = invoice.PaymentIntentId,
+                        TransactionId = invoice.Id,
+                        PaymentDate = DateTime.UtcNow,
+                        Notes = string.IsNullOrEmpty(invoice.BillingReason) || invoice.BillingReason == "subscription_cycle"
+                            ? $"Rinnovo automatico - Invoice: {invoice.Id}"
+                            : $"Primo pagamento subscription - Invoice: {invoice.Id}"
+                    });
+                }
+
+                // Al RINNOVO estendi dalla scadenza corrente; al PRIMO PAGAMENTO mantieni l'EndDate già impostata
+                var today = DateTime.UtcNow;
+                bool isRenewal = invoice.BillingReason == "subscription_cycle";
+                DateTime newEndDate;
+                if (isRenewal && subscription.EndDate.HasValue && subscription.EndDate.Value >= today)
+                    newEndDate = GetEndDateFromBillingPeriod(subscription.EndDate.Value, subscription.SubscriptionPlan?.BillingPeriod);
+                else
+                    newEndDate = subscription.EndDate.HasValue && subscription.EndDate.Value >= today
+                        ? subscription.EndDate.Value
+                        : GetEndDateFromBillingPeriod(today, subscription.SubscriptionPlan?.BillingPeriod);
+
+                await _userSubscriptionServices.UpdateAsync(
+                    BuildSubscriptionUpdateModel(subscription, "active", newEndDate, subscription.AutoRenew, payment?.Id));
+
+                _logger.LogInformation(
+                    "Pagamento ricorrente processato per subscription {SubscriptionId} - Invoice: {InvoiceId}",
+                    subscriptionId, invoice.Id);
+
+                // Primo pagamento: cancella ora il vecchio abbonamento rimasto attivo
+                // (per i ricorrenti la cancellazione avviene qui, non in customer.subscription.created)
+                if (!isRenewal)
+                {
+                    var allUserSubs = await _userSubscriptionServices.GetUserSubscriptionsAsync(subscription.UserId);
+                    var othersActive = allUserSubs
+                        .Where(s => string.Equals(s.Status, "active", StringComparison.OrdinalIgnoreCase)
+                                 && !string.IsNullOrEmpty(s.StripeSubscriptionId)
+                                 && s.StripeSubscriptionId != subscriptionId)
+                        .ToList();
+
+                    foreach (var oldSub in othersActive)
+                    {
+                        try
                         {
-                            _logger.LogInformation($"Invoice paid {invoice.Id} ignorata per subscription {subscriptionId}: importo zero (AmountPaid: {amountPaid}). Nessun Payment creato né estensione periodo.");
-                            return;
+                            await _stripeService.CancelSubscriptionAsync(oldSub.StripeSubscriptionId!);
+                            _logger.LogInformation(
+                                "Vecchia subscription Stripe {StripeSubId} cancellata su Stripe dopo attivazione nuovo abbonamento.",
+                                oldSub.StripeSubscriptionId);
+                        }
+                        catch (Exception exStripe)
+                        {
+                            _logger.LogWarning(exStripe,
+                                "Errore cancellazione subscription Stripe {StripeSubId}. Procedo con cancellazione in DB.",
+                                oldSub.StripeSubscriptionId);
                         }
 
-                        // Idempotenza: evita duplicati se invoice.paid arriva più volte
-                        var existingPayment = await _paymentServices.GetByTransactionIdAsync(invoice.Id);
-                        PaymentSelectModel? payment;
-                        if (existingPayment != null)
-                        {
-                            payment = existingPayment;
-                            _logger.LogInformation($"Payment già esistente per invoice {invoice.Id}, aggiorno solo UserSubscription");
-                        }
-                        else
-                        {
-                            var paymentModel = new PaymentCreateModel
-                            {
-                                UserId = subscription.UserId,
-                                SubscriptionId = subscription.Id,
-                                Amount = invoice.AmountPaid / 100m,
-                                Currency = invoice.Currency.ToUpper(),
-                                PaymentMethod = "stripe",
-                                Status = "completed",
-                                StripePaymentIntentId = invoice.PaymentIntentId,
-                                TransactionId = invoice.Id,
-                                PaymentDate = DateTime.UtcNow,
-                                Notes = string.IsNullOrEmpty(invoice.BillingReason) || invoice.BillingReason == "subscription_cycle"
-                                    ? $"Rinnovo automatico - Invoice: {invoice.Id}"
-                                    : $"Primo pagamento subscription - Invoice: {invoice.Id}"
-                            };
-                            payment = await _paymentServices.CreateAsync(paymentModel);
-                        }
-
-                        // Aggiorna la data di scadenza: al RINNOVO estendi dalla scadenza corrente; al PRIMO PAGAMENTO
-                        // non aggiungere un secondo periodo (la subscription è già stata creata con EndDate corretta in customer.subscription.created).
-                        var today = DateTime.UtcNow;
-                        bool isRenewal = invoice.BillingReason == "subscription_cycle";
-                        DateTime newEndDate;
-                        if (isRenewal && subscription.EndDate.HasValue && subscription.EndDate.Value >= today)
-                        {
-                            newEndDate = GetEndDateFromBillingPeriod(subscription.EndDate.Value, subscription.SubscriptionPlan?.BillingPeriod);
-                        }
-                        else
-                        {
-                            // Primo pagamento: mantieni la EndDate già impostata alla creazione, oppure calcola da oggi se mancante
-                            newEndDate = subscription.EndDate.HasValue && subscription.EndDate.Value >= today
-                                ? subscription.EndDate.Value
-                                : GetEndDateFromBillingPeriod(today, subscription.SubscriptionPlan?.BillingPeriod);
-                        }
-
-                        var updateModel = new UserSubscriptionUpdateModel
-                        {
-                            Id = subscription.Id,
-                            UserId = subscription.UserId,
-                            SubscriptionPlanId = subscription.SubscriptionPlanId,
-                            StartDate = subscription.StartDate,
-                            EndDate = newEndDate,
-                            Status = "active",
-                            AutoRenew = subscription.AutoRenew,
-                            LastPaymentId = payment?.Id,
-                            StripeSubscriptionId = subscription.StripeSubscriptionId,
-                            StripeCustomerId = subscription.StripeCustomerId
-                        };
-
-                        await _userSubscriptionServices.UpdateAsync(updateModel);
-                        _logger.LogInformation($"Pagamento ricorrente processato per subscription {subscriptionId} - Invoice: {invoice.Id}");
-
-                        // Primo pagamento (upgrade da piano ricorrente): cancella ora il vecchio abbonamento
-                        // che era rimasto attivo; per i ricorrenti non si cancella in customer.subscription.created
-                        // per evitare di lasciare l'utente senza piano se abbandona prima di pagare.
-                        if (!isRenewal)
-                        {
-                            var allUserSubs = await _userSubscriptionServices.GetUserSubscriptionsAsync(subscription.UserId);
-                            var othersActive = allUserSubs
-                                .Where(s => string.Equals(s.Status, "active", StringComparison.OrdinalIgnoreCase)
-                                    && !string.IsNullOrEmpty(s.StripeSubscriptionId)
-                                    && s.StripeSubscriptionId != subscriptionId)
-                                .ToList();
-                            foreach (var oldSub in othersActive)
-                            {
-                                try
-                                {
-                                    await _stripeService.CancelSubscriptionAsync(oldSub.StripeSubscriptionId!);
-                                    _logger.LogInformation("Vecchia subscription Stripe {StripeSubId} cancellata su Stripe dopo attivazione nuovo abbonamento (invoice.paid).", oldSub.StripeSubscriptionId);
-                                }
-                                catch (Exception exStripe)
-                                {
-                                    _logger.LogWarning(exStripe, "Errore cancellazione subscription Stripe {StripeSubId}. Procedo con cancellazione in DB.", oldSub.StripeSubscriptionId);
-                                }
-                                await _userSubscriptionServices.CancelSubscriptionAsync(oldSub.Id);
-                                _logger.LogInformation("Vecchio abbonamento DB Id {SubscriptionId} (Stripe {StripeSubId}) cancellato dopo primo pagamento nuovo abbonamento.", oldSub.Id, oldSub.StripeSubscriptionId);
-                            }
-                        }
+                        await _userSubscriptionServices.CancelSubscriptionAsync(oldSub.Id);
+                        _logger.LogInformation(
+                            "Vecchio abbonamento DB Id {SubscriptionId} (Stripe {StripeSubId}) cancellato dopo primo pagamento.",
+                            oldSub.Id, oldSub.StripeSubscriptionId);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing dell'invoice paid {invoice.Id}");
+                _logger.LogError(ex, "Errore durante il processing dell'invoice paid {InvoiceId}", invoice.Id);
             }
         }
 
@@ -1293,87 +1080,112 @@ namespace BackEnd.Controllers
             var invoice = stripeEvent.Data.Object as Invoice;
             if (invoice == null) return;
 
-            _logger.LogWarning($"Invoice payment failed: {invoice.Id}");
+            _logger.LogWarning("Invoice payment failed: {InvoiceId}", invoice.Id);
 
             var subscriptionId = GetSubscriptionIdFromInvoice(invoice, rawEventJson);
 
             try
             {
-                if (!string.IsNullOrEmpty(subscriptionId))
+                if (string.IsNullOrEmpty(subscriptionId)) return;
+
+                var subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
+                if (subscription == null) return;
+
+                await _paymentServices.CreateAsync(new PaymentCreateModel
                 {
-                    var subscription = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscriptionId);
-                    if (subscription != null)
-                    {
-                        // Crea record di pagamento fallito
-                        var paymentModel = new PaymentCreateModel
-                        {
-                            UserId = subscription.UserId,
-                            SubscriptionId = subscription.Id,
-                            Amount = invoice.AmountDue / 100m,
-                            Currency = invoice.Currency.ToUpper(),
-                            PaymentMethod = "stripe",
-                            Status = "failed",
-                            TransactionId = invoice.Id,
-                            PaymentDate = DateTime.UtcNow,
-                            Notes = $"Pagamento ricorrente fallito - Invoice: {invoice.Id}, Tentativi rimasti: {invoice.AttemptCount}"
-                        };
+                    UserId = subscription.UserId,
+                    SubscriptionId = subscription.Id,
+                    Amount = invoice.AmountDue / 100m,
+                    Currency = invoice.Currency.ToUpper(),
+                    PaymentMethod = "stripe",
+                    Status = "failed",
+                    TransactionId = invoice.Id,
+                    PaymentDate = DateTime.UtcNow,
+                    Notes = $"Pagamento ricorrente fallito - Invoice: {invoice.Id}, Tentativi rimasti: {invoice.AttemptCount}"
+                });
 
-                        await _paymentServices.CreateAsync(paymentModel);
-
-                        // Se è l'ultimo tentativo, marca l'abbonamento come scaduto
-                        if (invoice.AttemptCount >= 3)
-                        {
-                            var updateModel = new UserSubscriptionUpdateModel
-                            {
-                                Id = subscription.Id,
-                                UserId = subscription.UserId,
-                                SubscriptionPlanId = subscription.SubscriptionPlanId,
-                                StartDate = subscription.StartDate,
-                                EndDate = subscription.EndDate,
-                                Status = "expired",
-                                AutoRenew = false,
-                                StripeSubscriptionId = subscription.StripeSubscriptionId,
-                                StripeCustomerId = subscription.StripeCustomerId
-                            };
-
-                            await _userSubscriptionServices.UpdateAsync(updateModel);
-                            _logger.LogWarning($"Abbonamento {subscriptionId} scaduto dopo {invoice.AttemptCount} tentativi falliti");
-                        }
-                    }
+                // Dopo 3 tentativi falliti l'abbonamento viene marcato come scaduto
+                if (invoice.AttemptCount >= 3)
+                {
+                    await _userSubscriptionServices.UpdateAsync(
+                        BuildSubscriptionUpdateModel(subscription, "expired", subscription.EndDate, false,
+                            subscription.LastPaymentId));
+                    _logger.LogWarning(
+                        "Abbonamento {SubscriptionId} scaduto dopo {AttemptCount} tentativi falliti",
+                        subscriptionId, invoice.AttemptCount);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Errore durante il processing dell'invoice payment failed {invoice.Id}");
+                _logger.LogError(ex, "Errore durante il processing dell'invoice payment failed {InvoiceId}",
+                    invoice.Id);
             }
         }
 
-        /// <summary>
-        /// Calcola il numero di mesi in base al BillingPeriod
-        /// </summary>
         private static int GetMonthsFromBillingPeriod(string? billingPeriod)
         {
-            if (string.IsNullOrEmpty(billingPeriod))
-                return 1; // Default a 1 mese
-
-            return billingPeriod.ToLower() switch
+            return billingPeriod?.ToLower() switch
             {
                 "monthly" => 1,
                 "quarterly" => 3,
                 "semiannual" => 6,
                 "annual" => 12,
-                "yearly" => 12, // Manteniamo compatibilità con il vecchio valore
-                _ => 1 // Default a 1 mese se non riconosciuto
+                "yearly" => 12,
+                _ => 1
+            };
+        }
+
+        private static DateTime GetEndDateFromBillingPeriod(DateTime fromDate, string? billingPeriod)
+        {
+            return fromDate.AddMonths(GetMonthsFromBillingPeriod(billingPeriod));
+        }
+
+        /// <summary>
+        /// Costruisce un UserSubscriptionUpdateModel preservando tutti i campi dell'abbonamento esistente
+        /// e sostituendo solo quelli esplicitamente passati.
+        /// </summary>
+        private static UserSubscriptionUpdateModel BuildSubscriptionUpdateModel(
+            UserSubscriptionSelectModel subscription,
+            string status,
+            DateTime? endDate,
+            bool autoRenew,
+            int? lastPaymentId = null)
+        {
+            return new UserSubscriptionUpdateModel
+            {
+                Id = subscription.Id,
+                UserId = subscription.UserId,
+                SubscriptionPlanId = subscription.SubscriptionPlanId,
+                StartDate = subscription.StartDate,
+                EndDate = endDate,
+                Status = status,
+                AutoRenew = autoRenew,
+                LastPaymentId = lastPaymentId,
+                StripeSubscriptionId = subscription.StripeSubscriptionId,
+                StripeCustomerId = subscription.StripeCustomerId
             };
         }
 
         /// <summary>
-        /// Calcola la data di scadenza in base al BillingPeriod.
+        /// Cancella l'abbonamento su Stripe (se non è un trial) e nel database.
         /// </summary>
-        private static DateTime GetEndDateFromBillingPeriod(DateTime fromDate, string? billingPeriod)
+        private async Task CancelOldSubscriptionAsync(UserSubscriptionSelectModel subscription, bool isTrial)
         {
-            var months = GetMonthsFromBillingPeriod(billingPeriod);
-            return fromDate.AddMonths(months);
+            if (!isTrial && !string.IsNullOrEmpty(subscription.StripeSubscriptionId))
+            {
+                try
+                {
+                    await _stripeService.CancelSubscriptionAsync(subscription.StripeSubscriptionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Errore durante la cancellazione della subscription Stripe {StripeSubId}.",
+                        subscription.StripeSubscriptionId);
+                }
+            }
+
+            await _userSubscriptionServices.CancelSubscriptionAsync(subscription.Id);
         }
     }
 
