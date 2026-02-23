@@ -897,27 +897,16 @@ namespace BackEnd.Controllers
                             "Vecchia Subscription Stripe: {OldSubscriptionId}, Nuova Subscription Stripe: {NewSubscriptionId}. " +
                             "Piano vecchio: {OldPlan} (€{OldPrice}), Piano nuovo: {NewPlan} (€{NewPrice}), " +
                             "IsUpgrade: {IsUpgrade}, IsSamePlan: {IsSamePlan}, IsExpired: {IsExpired}. " +
-                            "Eliminando vecchio abbonamento e creando nuovo.",
+                            "Creando nuovo abbonamento in pending; il vecchio verrà cancellato solo dopo invoice.paid (pagamento effettuato).",
                             email, existingSubscription.StripeSubscriptionId, subscription.Id,
                             existingSubscription.SubscriptionPlan?.Name ?? "N/A", oldPlanPrice,
                             plan, newPlanPrice, isUpgrade, isSamePlan, isExpired);
 
-                        // Cancella la vecchia subscription su Stripe
-                        try
-                        {
-                            await _stripeService.CancelSubscriptionAsync(existingSubscription.StripeSubscriptionId);
-                            _logger.LogInformation($"Vecchia subscription Stripe {existingSubscription.StripeSubscriptionId} cancellata su Stripe");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, $"Errore durante la cancellazione della vecchia subscription Stripe {existingSubscription.StripeSubscriptionId}. Procedo comunque con l'eliminazione dal database.");
-                        }
+                        // NON cancellare qui il vecchio abbonamento: per i ricorrenti il vecchio va cancellato
+                        // solo dopo che il primo pagamento è andato a buon fine (HandleInvoicePaid).
+                        // Altrimenti se l'utente abbandona prima di pagare resterebbe senza abbonamento attivo.
 
-                        // Cancella il vecchio abbonamento dal database
-                        await _userSubscriptionServices.CancelSubscriptionAsync(existingSubscription.Id);
-                        _logger.LogInformation($"Vecchio abbonamento {existingSubscription.Id} eliminato dal database");
-
-                        // Crea nuovo abbonamento con la nuova Stripe Subscription
+                        // Crea nuovo abbonamento con la nuova Stripe Subscription (status pending finché non arriva invoice.paid)
                         // Preserviamo i giorni solo se il piano precedente era a pagamento. Free (trial) non conta: nuovo ciclo da oggi.
                         DateTime newStartDate;
                         DateTime newEndDate;
@@ -1263,6 +1252,33 @@ namespace BackEnd.Controllers
 
                         await _userSubscriptionServices.UpdateAsync(updateModel);
                         _logger.LogInformation($"Pagamento ricorrente processato per subscription {subscriptionId} - Invoice: {invoice.Id}");
+
+                        // Primo pagamento (upgrade da piano ricorrente): cancella ora il vecchio abbonamento
+                        // che era rimasto attivo; per i ricorrenti non si cancella in customer.subscription.created
+                        // per evitare di lasciare l'utente senza piano se abbandona prima di pagare.
+                        if (!isRenewal)
+                        {
+                            var allUserSubs = await _userSubscriptionServices.GetUserSubscriptionsAsync(subscription.UserId);
+                            var othersActive = allUserSubs
+                                .Where(s => string.Equals(s.Status, "active", StringComparison.OrdinalIgnoreCase)
+                                    && !string.IsNullOrEmpty(s.StripeSubscriptionId)
+                                    && s.StripeSubscriptionId != subscriptionId)
+                                .ToList();
+                            foreach (var oldSub in othersActive)
+                            {
+                                try
+                                {
+                                    await _stripeService.CancelSubscriptionAsync(oldSub.StripeSubscriptionId!);
+                                    _logger.LogInformation("Vecchia subscription Stripe {StripeSubId} cancellata su Stripe dopo attivazione nuovo abbonamento (invoice.paid).", oldSub.StripeSubscriptionId);
+                                }
+                                catch (Exception exStripe)
+                                {
+                                    _logger.LogWarning(exStripe, "Errore cancellazione subscription Stripe {StripeSubId}. Procedo con cancellazione in DB.", oldSub.StripeSubscriptionId);
+                                }
+                                await _userSubscriptionServices.CancelSubscriptionAsync(oldSub.Id);
+                                _logger.LogInformation("Vecchio abbonamento DB Id {SubscriptionId} (Stripe {StripeSubId}) cancellato dopo primo pagamento nuovo abbonamento.", oldSub.Id, oldSub.StripeSubscriptionId);
+                            }
+                        }
                     }
                 }
             }
