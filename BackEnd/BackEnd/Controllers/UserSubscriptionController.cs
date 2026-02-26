@@ -16,12 +16,14 @@ namespace BackEnd.Controllers
         private readonly IUserSubscriptionServices _userSubscriptionServices;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IStripeService _stripeService;
+        private readonly IConfiguration _configuration;
 
-        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices, UserManager<ApplicationUser> userManager, IStripeService stripeService)
+        public UserSubscriptionController(IUserSubscriptionServices userSubscriptionServices, UserManager<ApplicationUser> userManager, IStripeService stripeService, IConfiguration configuration)
         {
             _userSubscriptionServices = userSubscriptionServices;
             _userManager = userManager;
             _stripeService = stripeService;
+            _configuration = configuration;
         }
 
         [HttpGet("{id}")]
@@ -68,6 +70,16 @@ namespace BackEnd.Controllers
                 var subscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(userId, user.AdminId);
                 if (subscription == null)
                     return NotFound($"Nessun abbonamento attivo trovato per l'utente {userId}");
+
+                var now = DateTime.UtcNow;
+                if (subscription.Status.Equals("past_due", StringComparison.OrdinalIgnoreCase) && subscription.AutoRenew
+                    && subscription.EndDate.HasValue && subscription.EndDate.Value.AddDays(3) >= now)
+                {
+                    subscription.IsInGracePeriod = true;
+                    subscription.GracePeriodEndsAt = subscription.EndDate.Value.AddDays(3);
+                    subscription.SupportEmail = _configuration["AppSettings:SupportEmail"]
+                        ?? _configuration["MailOptions:Mail"] ?? "info@miraihome.it";
+                }
 
                 return Ok(subscription);
             }
