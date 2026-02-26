@@ -31,50 +31,53 @@ namespace BackEnd.Services.Repositories
 
         public async Task<UserSubscription?> GetActiveUserSubscriptionAsync(string userId, string? agencyId = null)
         {
-            // 1. Cerca prima l'abbonamento diretto dell'utente
-            var directSubscription = await _context.Set<UserSubscription>()
-                .Include(us => us.SubscriptionPlan)
-                    .ThenInclude(sp => sp.Features)
-                .Include(us => us.LastPayment)
-                .Where(us => us.UserId == userId && us.Status.ToLower() == "active")
-                .OrderByDescending(us => us.CreationDate)
-                .FirstOrDefaultAsync();
+            var now = DateTime.UtcNow;
 
-            // Se ha un abbonamento diretto, lo restituisce
+            // Include past_due + AutoRenew se entro grazia (EndDate + 3 giorni)
+            bool IsValidForAccess(UserSubscription us) =>
+                us.Status.Equals("active", StringComparison.OrdinalIgnoreCase) ||
+                (us.Status.Equals("past_due", StringComparison.OrdinalIgnoreCase) && us.AutoRenew &&
+                 us.EndDate.HasValue && us.EndDate.Value.AddDays(3) >= now);
+
+            // 1. Cerca prima l'abbonamento diretto dell'utente
+            var directSubs = await _context.Set<UserSubscription>()
+                .Include(us => us.SubscriptionPlan).ThenInclude(sp => sp.Features)
+                .Include(us => us.LastPayment)
+                .Where(us => us.UserId == userId && (us.Status.ToLower() == "active" || us.Status.ToLower() == "past_due"))
+                .OrderByDescending(us => us.CreationDate)
+                .ToListAsync();
+
+            var directSubscription = directSubs.FirstOrDefault(us => IsValidForAccess(us));
             if (directSubscription != null)
                 return directSubscription;
 
-            // 2. Se non ha abbonamento diretto ma ha AgencyId, cerca l'abbonamento dell'agenzia parent (prima risalita)
+            // 2. Se non ha abbonamento diretto ma ha AgencyId, cerca l'abbonamento dell'agenzia parent
             if (!string.IsNullOrEmpty(agencyId))
             {
-                var agencySubscription = await _context.Set<UserSubscription>()
-                    .Include(us => us.SubscriptionPlan)
-                        .ThenInclude(sp => sp.Features)
+                var agencySubs = await _context.Set<UserSubscription>()
+                    .Include(us => us.SubscriptionPlan).ThenInclude(sp => sp.Features)
                     .Include(us => us.LastPayment)
-                    .Where(us => us.UserId == agencyId && us.Status.ToLower() == "active")
+                    .Where(us => us.UserId == agencyId && (us.Status.ToLower() == "active" || us.Status.ToLower() == "past_due"))
                     .OrderByDescending(us => us.CreationDate)
-                    .FirstOrDefaultAsync();
+                    .ToListAsync();
 
-                // Se l'Agency ha un abbonamento, lo restituisce
+                var agencySubscription = agencySubs.FirstOrDefault(us => IsValidForAccess(us));
                 if (agencySubscription != null)
                     return agencySubscription;
 
-                // 3. Se l'Agency non ha abbonamento, verifica se ha un proprio AgencyId (seconda risalita fino all'Admin)
                 var agencyUser = await _context.Set<ApplicationUser>()
                     .FirstOrDefaultAsync(u => u.Id == agencyId);
 
                 if (agencyUser != null && !string.IsNullOrEmpty(agencyUser.AdminId))
                 {
-                    // Risali fino all'Admin cercando l'abbonamento dell'Admin
-                    var adminSubscription = await _context.Set<UserSubscription>()
-                        .Include(us => us.SubscriptionPlan)
-                            .ThenInclude(sp => sp.Features)
+                    var adminSubs = await _context.Set<UserSubscription>()
+                        .Include(us => us.SubscriptionPlan).ThenInclude(sp => sp.Features)
                         .Include(us => us.LastPayment)
-                        .Where(us => us.UserId == agencyUser.AdminId && us.Status.ToLower() == "active")
+                        .Where(us => us.UserId == agencyUser.AdminId && (us.Status.ToLower() == "active" || us.Status.ToLower() == "past_due"))
                         .OrderByDescending(us => us.CreationDate)
-                        .FirstOrDefaultAsync();
+                        .ToListAsync();
 
-                    return adminSubscription;
+                    return adminSubs.FirstOrDefault(us => IsValidForAccess(us));
                 }
             }
 

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using BackEnd.Entities;
+using Npgsql;
 using Stripe;
 using System.Text.Json;
 
@@ -246,21 +247,27 @@ namespace BackEnd.Controllers
 
                 _logger.LogInformation("Webhook ricevuto: {EventType}", stripeEvent.Type);
 
-                var isProcessed = await _stripeWebhookEventServices.IsEventProcessedAsync(stripeEvent.Id);
-                if (isProcessed)
+                var existingEvent = await _stripeWebhookEventServices.GetByEventIdAsync(stripeEvent.Id);
+                if (existingEvent != null && existingEvent.Processed)
                 {
                     _logger.LogInformation("Evento {EventId} già processato", stripeEvent.Id);
                     return Ok();
                 }
-
-                await _stripeWebhookEventServices.CreateAsync(new StripeWebhookEventCreateModel
+                if (existingEvent == null)
                 {
-                    EventId = stripeEvent.Id,
-                    Type = stripeEvent.Type,
-                    Data = json,
-                    Processed = false,
-                    ReceivedAt = DateTime.UtcNow
-                });
+                    await _stripeWebhookEventServices.CreateAsync(new StripeWebhookEventCreateModel
+                    {
+                        EventId = stripeEvent.Id,
+                        Type = stripeEvent.Type,
+                        Data = json,
+                        Processed = false,
+                        ReceivedAt = DateTime.UtcNow
+                    });
+                }
+                else
+                {
+                    _logger.LogInformation("Evento {EventId} già presente, skip Create e continua processing", stripeEvent.Id);
+                }
 
                 switch (stripeEvent.Type)
                 {
@@ -759,6 +766,17 @@ namespace BackEnd.Controllers
                     }
                     else
                     {
+                        // Evita duplicati: invoice.paid può arrivare PRIMA di customer.subscription.created
+                        // e creare già la UserSubscription con status "active". In quel caso non creare un duplicato.
+                        var existingByStripeId = await _userSubscriptionServices.GetByStripeSubscriptionIdAsync(subscription.Id);
+                        if (existingByStripeId != null)
+                        {
+                            _logger.LogInformation(
+                                "Subscription Stripe {SubscriptionId} già presente nel DB (probabilmente da invoice.paid arrivato prima). Skip creazione duplicato per {Email}.",
+                                subscription.Id, email);
+                            return;
+                        }
+
                         // Se il pagamento non è ancora confermato (es. "pending"/"incomplete"), non toccare
                         // l'abbonamento esistente: creiamo solo il nuovo in pending e attendiamo invoice.paid.
                         // La cancellazione del vecchio avverrà solo dopo il primo pagamento riuscito.
@@ -1132,7 +1150,6 @@ namespace BackEnd.Controllers
                     Notes = $"Pagamento ricorrente fallito - Invoice: {invoice.Id}, Tentativi rimasti: {invoice.AttemptCount}"
                 });
 
-                // Dopo 3 tentativi falliti l'abbonamento viene marcato come scaduto
                 if (invoice.AttemptCount >= 3)
                 {
                     await _userSubscriptionServices.UpdateAsync(
@@ -1141,6 +1158,15 @@ namespace BackEnd.Controllers
                     _logger.LogWarning(
                         "Abbonamento {SubscriptionId} scaduto dopo {AttemptCount} tentativi falliti",
                         subscriptionId, invoice.AttemptCount);
+                }
+                else if (subscription.AutoRenew && invoice.AttemptCount == 1)
+                {
+                    await _userSubscriptionServices.UpdateAsync(
+                        BuildSubscriptionUpdateModel(subscription, "past_due", subscription.EndDate, true,
+                            subscription.LastPaymentId));
+                    _logger.LogWarning(
+                        "Abbonamento {SubscriptionId} in grazia (past_due) - primo tentativo fallito, AutoRenew attivo. Stripe riproverà nei prossimi 3 giorni.",
+                        subscriptionId);
                 }
             }
             catch (Exception ex)

@@ -74,6 +74,13 @@ namespace BackEnd.Controllers
                     {
                         currentSubscription = await _userSubscriptionServices.GetActiveUserSubscriptionAsync(emailUser.Id, emailUser.AdminId);
 
+                        if (currentSubscription != null && currentSubscription.Status.Equals("past_due", StringComparison.OrdinalIgnoreCase)
+                            && currentSubscription.AutoRenew && currentSubscription.EndDate.HasValue
+                            && currentSubscription.EndDate.Value.AddDays(3) >= DateTime.UtcNow)
+                        {
+                            return BadRequest("Hai un pagamento in sospeso. Per cambiare metodo di pagamento contatta l'assistenza. Non è possibile procedere con un nuovo acquisto durante il periodo di grazia.");
+                        }
+
                         if (currentSubscription?.SubscriptionPlan != null)
                         {
                             allPlans = await _subscriptionPlanServices.GetActivePlansAsync();
