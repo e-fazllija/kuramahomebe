@@ -704,7 +704,6 @@ namespace BackEnd.Controllers
                 }
                 else
                 {
-                    // Hoist isOldPlanFree to avoid duplicate computation in both branches below
                     var isOldPlanFree = existingSubscription.SubscriptionPlan?.Name?.Equals("Free", StringComparison.OrdinalIgnoreCase) == true;
 
                     if (!string.IsNullOrEmpty(existingSubscription.StripeSubscriptionId) &&
@@ -729,25 +728,13 @@ namespace BackEnd.Controllers
                             existingSubscription.SubscriptionPlan?.Name ?? "N/A", oldPlanPrice,
                             plan, newPlanPrice, isUpgrade, isSamePlan, isExpired);
 
-                        DateTime newStartDate, newEndDate;
-                        if (!isExpired && existingSubscription.EndDate.HasValue && !isOldPlanFree)
-                        {
-                            // Mantieni i giorni rimanenti dell'abbonamento corrente
-                            newStartDate = existingSubscription.StartDate;
-                            newEndDate = GetEndDateFromBillingPeriod(existingSubscription.EndDate.Value, subscriptionPlan.BillingPeriod);
-                            _logger.LogInformation(
-                                "Preservando giorni rimanenti per {Email}. Vecchia EndDate: {OldEndDate}, Nuova EndDate: {NewEndDate}, Giorni rimasti: {DaysRemaining}",
-                                email, existingSubscription.EndDate.Value, newEndDate,
-                                (existingSubscription.EndDate.Value - today).TotalDays);
-                        }
-                        else
-                        {
-                            newStartDate = today;
-                            newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
-                            _logger.LogInformation(
-                                "Nuovo ciclo per abbonamento scaduto per {Email}. StartDate: {StartDate}, EndDate: {EndDate}",
-                                email, newStartDate, newEndDate);
-                        }
+                        // Regola unica per upgrade: giorni non goduti → credito (riduce l'importo), nuova scadenza da oggi.
+                        // Non si preservano i giorni: stesso comportamento per ricorrenti e non ricorrenti.
+                        var newStartDate = today;
+                        var newEndDate = GetEndDateFromBillingPeriod(today, subscriptionPlan.BillingPeriod);
+                        _logger.LogInformation(
+                            "Upgrade/cambio piano per {Email}. StartDate: {StartDate}, EndDate: {EndDate} (giorni residui convertiti in credito)",
+                            email, newStartDate, newEndDate);
 
                         await _userSubscriptionServices.CreateAsync(new UserSubscriptionCreateModel
                         {
